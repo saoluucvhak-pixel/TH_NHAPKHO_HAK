@@ -1,0 +1,1539 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quản Lý Tồn Kho Dăm - HAK Group</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600;8..60,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <!-- SheetJS - dùng để xuất Báo Cáo ra file Excel (.xlsx) từ các bảng HTML
+       đang hiển thị trên trang, xem hàm exportReportToExcel() bên dưới. -->
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.min.js"></script>
+  <style>
+    :root{
+      --paper:#FAF7F1;
+      --paper-2:#F1ECE2;
+      --ink:#232A20;
+      --ink-soft:#5B6355;
+      --line:#E1D9C8;
+      --forest:#1F3327;
+      --forest-2:#2C4636;
+      --moss:#3D6B4F;
+      --moss-light:#DCE9DF;
+      --timber:#B5702F;
+      --timber-light:#F3E3CD;
+      --danger:#B3432B;
+      --danger-light:#F5DFD6;
+      --white:#FFFFFF;
+      --radius:10px;
+      --shadow:0 1px 2px rgba(35,42,32,.06), 0 4px 14px rgba(35,42,32,.05);
+    }
+    *{box-sizing:border-box;}
+    html,body{margin:0;padding:0;height:100%;}
+    body{font-family:'Inter',sans-serif;background:var(--paper);color:var(--ink);display:flex;min-height:100vh;}
+    ::selection{background:var(--moss-light);}
+    h1,h2,h3,.serif{font-family:'Source Serif 4',serif;}
+    .mono{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;}
+    a{color:inherit;}
+    button{font-family:inherit;}
+
+    .sidebar{width:236px;flex:0 0 236px;background:var(--forest);color:#EFE9DC;display:flex;flex-direction:column;padding:22px 14px;position:sticky;top:0;height:100vh;}
+    .brand{display:flex;align-items:center;gap:10px;padding:4px 10px 20px 10px;border-bottom:1px solid rgba(239,233,220,.14);margin-bottom:14px;}
+    .brand .mark{width:34px;height:34px;border-radius:8px;background:linear-gradient(155deg,var(--timber),#8C511F);display:flex;align-items:center;justify-content:center;font-family:'Source Serif 4',serif;font-weight:700;color:#fff;font-size:16px;flex:0 0 auto;}
+    .brand .name{font-family:'Source Serif 4',serif;font-size:15.5px;font-weight:600;line-height:1.25;}
+    .brand .sub{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:#B9C2AF;margin-top:1px;}
+
+    nav{display:flex;flex-direction:column;gap:2px;flex:1;}
+    .nav-item{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:8px;cursor:pointer;font-size:13.5px;font-weight:500;color:#D7DCCC;transition:background .15s ease,color .15s ease;user-select:none;}
+    .nav-item .ic{width:18px;text-align:center;font-size:15px;opacity:.9;}
+    .nav-item:hover{background:rgba(239,233,220,.08);color:#fff;}
+    .nav-item.active{background:var(--forest-2);color:#fff;}
+    .nav-item.active .ic{opacity:1;}
+    .nav-badge{margin-left:auto;background:var(--timber);color:#fff;font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:20px;min-width:18px;text-align:center;}
+    .nav-sep{height:1px;background:rgba(239,233,220,.12);margin:10px 4px;}
+    .sidebar-footer{font-size:10.5px;color:#8C9483;padding:10px 10px 2px 10px;border-top:1px solid rgba(239,233,220,.12);margin-top:10px;}
+
+    .main{flex:1;min-width:0;display:flex;flex-direction:column;}
+    .topbar{display:flex;align-items:center;justify-content:space-between;padding:20px 34px;border-bottom:1px solid var(--line);background:var(--paper);position:sticky;top:0;z-index:5;}
+    .topbar h1{font-size:21px;margin:0;font-weight:600;color:var(--forest);}
+    .topbar .desc{font-size:12.5px;color:var(--ink-soft);margin-top:2px;}
+    .topbar .actions{display:flex;gap:8px;}
+    .content{padding:26px 34px 60px 34px;flex:1;}
+
+    .card{background:var(--white);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px;margin-bottom:18px;}
+    .card h3{margin:0 0 14px 0;font-size:15px;font-weight:600;color:var(--forest);}
+    .card h3 .sub{font-size:11.5px;font-weight:500;color:var(--ink-soft);margin-left:8px;}
+    .grid{display:grid;gap:16px;}
+    .grid.cols-2{grid-template-columns:1fr 1fr;}
+    .grid.cols-3{grid-template-columns:repeat(3,1fr);}
+    .grid.cols-4{grid-template-columns:repeat(4,1fr);}
+    @media(max-width:900px){.grid.cols-2,.grid.cols-3,.grid.cols-4{grid-template-columns:1fr 1fr;}}
+    @media(max-width:640px){
+      body{flex-direction:column;}
+      .sidebar{width:100%;flex:0 0 auto;height:auto;position:relative;padding:14px;}
+      nav{flex-direction:row;flex-wrap:wrap;}
+      .nav-item{flex:0 0 auto;}
+      .sidebar-footer{display:none;}
+      .topbar,.content{padding-left:16px;padding-right:16px;}
+      .grid.cols-2,.grid.cols-3,.grid.cols-4{grid-template-columns:1fr;}
+    }
+
+    .stat{background:var(--white);border:1px solid var(--line);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow);}
+    .stat .label{font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);font-weight:600;}
+    .stat .value{font-family:'IBM Plex Mono',monospace;font-size:26px;font-weight:600;color:var(--forest);margin-top:6px;}
+    .stat .value.timber{color:var(--timber);}
+    .stat .value.danger{color:var(--danger);}
+    .stat .hint{font-size:11.5px;color:var(--ink-soft);margin-top:4px;}
+
+    .unit-card{background:var(--white);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow);}
+    .unit-card .uname{font-weight:600;color:var(--forest);font-size:14px;}
+    .unit-card .urow{display:flex;justify-content:space-between;font-size:12.5px;color:var(--ink-soft);margin-top:8px;}
+    .unit-card .urow b{color:var(--ink);font-family:'IBM Plex Mono',monospace;}
+
+    label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:5px;}
+    input[type=text],input[type=date],input[type=number],select,textarea{
+      width:100%;border:1px solid var(--line);border-radius:7px;padding:9px 11px;font-size:13.5px;font-family:inherit;color:var(--ink);background:var(--paper);transition:border-color .15s ease,box-shadow .15s ease;
+    }
+    input:focus,select:focus,textarea:focus{outline:none;border-color:var(--moss);box-shadow:0 0 0 3px var(--moss-light);background:#fff;}
+    .field{margin-bottom:14px;}
+    .hint-text{font-size:11.5px;color:var(--ink-soft);margin-top:4px;}
+
+    .btn{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--white);color:var(--ink);padding:9px 15px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:transform .04s ease,background .15s ease,border-color .15s ease;}
+    .btn:hover{background:var(--paper-2);}
+    .btn:active{transform:translateY(1px);}
+    .btn.primary{background:var(--forest);border-color:var(--forest);color:#fff;}
+    .btn.primary:hover{background:var(--forest-2);}
+    .btn.accent{background:var(--timber);border-color:var(--timber);color:#fff;}
+    .btn.accent:hover{background:#9C5F28;}
+    .btn.danger{background:var(--white);border-color:var(--danger);color:var(--danger);}
+    .btn.danger:hover{background:var(--danger-light);}
+    .btn.ghost{background:transparent;border-color:transparent;}
+    .btn.ghost:hover{background:var(--paper-2);}
+    .btn.sm{padding:5px 10px;font-size:12px;}
+    .btn:disabled{opacity:.45;cursor:not-allowed;}
+
+    table{width:100%;border-collapse:collapse;font-size:13px;}
+    thead th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);font-weight:700;padding:9px 10px;border-bottom:1px solid var(--line);white-space:nowrap;}
+    tbody td{padding:11px 10px;border-bottom:1px solid var(--paper-2);vertical-align:middle;}
+    tbody tr:hover{background:var(--paper-2);}
+    tbody tr:last-child td{border-bottom:none;}
+    td.num,th.num{text-align:right;font-family:'IBM Plex Mono',monospace;}
+    tfoot td{font-weight:700;padding:10px;border-top:2px solid var(--line);}
+
+    .badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;}
+    .badge.ready{background:var(--moss-light);color:var(--moss);}
+    .badge.pending{background:var(--timber-light);color:var(--timber);}
+    .badge.dot::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;}
+
+    .empty{text-align:center;padding:50px 20px;color:var(--ink-soft);}
+    .empty .ic{font-size:34px;margin-bottom:10px;}
+    .empty h4{margin:0 0 5px 0;color:var(--ink);font-family:'Source Serif 4',serif;font-size:17px;}
+
+    .stepper{display:flex;gap:0;margin-bottom:22px;}
+    .step{flex:1;text-align:center;padding:11px 6px;font-size:12.5px;font-weight:600;color:var(--ink-soft);border-bottom:3px solid var(--line);position:relative;}
+    .step.active{color:var(--forest);border-color:var(--timber);}
+    .step .n{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--line);color:var(--white);font-size:11px;margin-right:6px;}
+    .step.active .n{background:var(--timber);}
+
+    #toast-wrap{position:fixed;bottom:22px;right:26px;z-index:999;display:flex;flex-direction:column;gap:8px;}
+    .toast{background:var(--forest);color:#fff;padding:12px 16px;border-radius:9px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.18);max-width:380px;display:flex;gap:10px;align-items:flex-start;animation:slidein .18s ease;}
+    .toast.err{background:#7A2A18;}
+    .toast.warn{background:#8C5A1E;}
+    @keyframes slidein{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+
+    #loading-overlay{position:fixed;inset:0;background:rgba(250,247,241,.72);z-index:998;display:none;align-items:center;justify-content:center;flex-direction:column;gap:10px;}
+    #loading-overlay.show{display:flex;}
+    .spinner{width:34px;height:34px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--timber);animation:spin .7s linear infinite;}
+    @keyframes spin{to{transform:rotate(360deg);}}
+    #loading-overlay .msg{font-size:12.5px;color:var(--ink-soft);font-weight:600;}
+
+    .modal-bg{position:fixed;inset:0;background:rgba(35,42,32,.45);z-index:900;display:none;align-items:flex-start;justify-content:center;padding:5vh 20px;overflow:auto;}
+    .modal-bg.show{display:flex;}
+    .modal{background:#fff;border-radius:12px;width:100%;max-width:600px;box-shadow:0 20px 60px rgba(0,0,0,.25);animation:pop .15s ease;}
+    @keyframes pop{from{opacity:0;transform:translateY(8px) scale(.98);}to{opacity:1;transform:none;}}
+    .modal-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--line);}
+    .modal-head h3{margin:0;font-size:16px;}
+    .modal-head .x{cursor:pointer;font-size:18px;color:var(--ink-soft);background:none;border:none;}
+    .modal-body{padding:20px;max-height:65vh;overflow:auto;}
+    .modal-foot{padding:14px 20px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px;}
+
+    .kv{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px dashed var(--line);font-size:13px;}
+    .kv:last-child{border-bottom:none;}
+    .kv .k{color:var(--ink-soft);}
+    .kv .v{font-weight:600;}
+
+    .checkbox-row{display:flex;align-items:center;gap:8px;}
+    input[type=checkbox]{width:16px;height:16px;accent-color:var(--moss);cursor:pointer;}
+
+    .sticky-actionbar{position:sticky;bottom:0;background:var(--white);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 18px;display:flex;align-items:center;justify-content:space-between;margin-top:4px;}
+
+    .section-title{font-size:12.5px;font-weight:700;color:var(--timber);text-transform:uppercase;letter-spacing:.04em;margin:18px 0 10px 0;padding-top:14px;border-top:1px dashed var(--line);}
+    .section-title:first-child{margin-top:0;padding-top:0;border-top:none;}
+
+    .child-tabbar{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:20px;border-bottom:1px solid var(--line);}
+    .child-tab{display:flex;align-items:center;gap:6px;padding:10px 16px;font-size:13px;font-weight:600;color:var(--ink-soft);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .15s ease,border-color .15s ease;user-select:none;}
+    .child-tab:hover{color:var(--ink);}
+    .child-tab.active{color:var(--forest);border-color:var(--timber);}
+    .child-tab .dot{width:6px;height:6px;border-radius:50%;background:var(--moss);opacity:0;transition:opacity .15s ease;}
+    .child-tab.has-data .dot{opacity:1;}
+    .ctab-pane{display:none;}
+    .ctab-pane.active{display:block;}
+
+    .muted{color:var(--ink-soft);}
+    .hidden{display:none !important;}
+    .bar-wrap{background:var(--paper-2);border-radius:6px;height:8px;overflow:hidden;margin-top:6px;}
+    .bar-fill{height:100%;background:var(--moss);border-radius:6px;}
+
+    /* THEO YÊU CẦU MỚI (v2026.8.11): xuất PDF cho trang Báo Cáo bằng cách
+     * in (window.print) chỉ phần bảng kết quả - ẩn sidebar/topbar/bộ lọc/
+     * nút bấm, chỉ giữ lại nội dung có class "print-target" đang hiển thị
+     * (tab nào đang active thì in tab đó, vì tab còn lại đã có class
+     * "hidden" từ trước). */
+    body.printing-report > .sidebar,
+    body.printing-report > main.main > .topbar,
+    body.printing-report #loading-overlay,
+    body.printing-report #toast-wrap,
+    body.printing-report .modal-bg,
+    body.printing-report .no-print { display:none !important; }
+    body.printing-report main.main{ width:100%; }
+    body.printing-report .content{ padding:0; }
+    @media print{
+      body.printing-report > .sidebar,
+      body.printing-report > main.main > .topbar,
+      body.printing-report .no-print { display:none !important; }
+      body.printing-report .content{ padding:0; }
+      body.printing-report .card{ box-shadow:none; border:1px solid #ccc; }
+    }
+  </style>
+</head>
+<body>
+
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="mark">🌲</div>
+      <div>
+        <div class="name">HAK Group</div>
+        <div class="sub">Tồn kho dăm</div>
+      </div>
+    </div>
+    <nav id="nav">
+      <div class="nav-item" data-page="dashboard"><span class="ic">🏠</span> Trang chủ</div>
+      <div class="nav-sep"></div>
+      <div class="nav-item" data-page="create"><span class="ic">➕</span> Nhập Tồn Kho</div>
+      <div class="nav-item" data-page="history"><span class="ic">📋</span> Lịch Sử</div>
+      <div class="nav-item" data-page="report"><span class="ic">📊</span> Báo Cáo Tổng Hợp</div>
+      <div class="nav-sep"></div>
+      <div class="nav-item admin-only hidden" data-page="audit"><span class="ic">🛡️</span> Nhật Ký (Audit)</div>
+    </nav>
+    <div class="sidebar-footer">Quản Lý Tồn Kho Dăm · v2026.8</div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <h1 id="page-title">Trang chủ</h1>
+        <div class="desc" id="page-desc">Tổng quan tồn kho dăm các đơn vị</div>
+      </div>
+      <div class="actions" id="topbar-actions"></div>
+    </div>
+    <div class="content" id="content"></div>
+  </main>
+
+  <div id="loading-overlay"><div class="spinner"></div><div class="msg" id="loading-msg">Đang xử lý...</div></div>
+  <div id="toast-wrap"></div>
+  <div class="modal-bg" id="modal-bg"><div class="modal" id="modal"></div></div>
+
+<script>
+/* ============================================================
+ * STATE & HELPERS
+ * ============================================================ */
+const state = {
+  page: 'dashboard',
+  isAdmin: false,
+  units: [],
+  createData: null,
+  createChildTab: 'nhamay',
+  historyFilters: { donVi:'', fromDate:'', toDate:'' },
+  historyList: [],
+  reportRows: null,
+  reportTab: 'period',
+  tonkhoDamgoDate: '',
+  tonkhoDamgoReport: null,
+  // "actual" (Theo thực tế, mặc định) hoặc "full" (Đầy đủ số liệu) - mục L
+  tonkhoDamgoMode: 'actual'
+};
+
+function resetCreateData(){
+  state.createData = {
+    donVi:'', ngayTonKho:todayISO_(), tonDauNgay:'',
+    hoaNhonMT:'', hoaNhonBDMT:'', queSonMT:'', queSonBDMT:'',
+    daiHiepMT:'', daiHiepBDMT:'', hakqnMT:'', hakqnBDMT:'',
+    dieuChinh:'', muonTra:'', nhapGo:'', tienSaMT:'', tienSaBDMT:'',
+    dungQuatMT:'', dungQuatBDMT:'',
+    kiemKeVetBai:false, thoiDiemVetBai:'', klUocTinhConLai:'', chenhLechVetBai:'',
+    candoiCo:false, candoiKho:'', candoiDoAm:'', candoiMTThucTe:'',
+    isEditingExisting:false
+  };
+  // Reset dấu vết "khóa (Đơn vị+Ngày) đã kiểm tra lần trước" - dùng để
+  // phát hiện đổi sang 1 khóa NHẬP MỚI khác (không riêng gì lúc rời chế
+  // độ Sửa) nhằm xóa sạch số liệu cũ, tránh nộp nhầm (mục bugfix).
+  state._lastCreateCheckKey = null;
+}
+resetCreateData();
+
+/** Ngày hiện hành (ISO yyyy-mm-dd) - dùng làm giá trị mặc định cho các ô
+ * chọn ngày (Ngày nhập tồn kho, bộ lọc Từ ngày/Đến ngày...) - THEO YÊU
+ * CẦU MỚI (v2026.8.11). */
+function todayISO_(){ return new Date().toISOString().slice(0,10); }
+
+function fmtNum(n){ return (Number(n)||0).toLocaleString('vi-VN', {maximumFractionDigits:2}); }
+function fmtPct(n){ return ((Number(n)||0)*100).toLocaleString('vi-VN', {maximumFractionDigits:1}) + '%'; }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+/* ============================================================
+ * FORMAT SỐ CÓ PHÂN CÁCH HÀNG NGHÌN CHO Ô NHẬP SỐ LƯỢNG (MT/BDMT...)
+ * ------------------------------------------------------------
+ * THEO YÊU CẦU MỚI (v2026.8.10): số gõ vào ô input trước đây không có
+ * dấu phân cách hàng nghìn nên rất khó đọc/dễ gõ nhầm (VD 46943.15 dễ
+ * đọc/đếm nhầm số 0). Áp dụng cách làm phổ biến "format khi RỜI ô
+ * (blur), bỏ format khi BẤM VÀO ô (focus)" - vừa dễ đọc khi không gõ,
+ * vừa không bị nhảy con trỏ khó chịu khi đang gõ dở (nếu format ngay
+ * lúc gõ từng phím sẽ rất dễ vỡ trải nghiệm nhập liệu). Định dạng khi
+ * hiển thị khớp đúng kiểu fmtNum() đang dùng ở Lịch Sử/Báo Cáo (vi-VN:
+ * dấu chấm phân cách nghìn, dấu phẩy thập phân), LUÔN hiện đủ 2 số
+ * thập phân theo đúng yêu cầu.
+ * Áp dụng cho các input có class "num-fmt" (type="text" thay vì
+ * type="number", vì input number của trình duyệt KHÔNG cho phép hiển
+ * thị dấu phân cách hàng nghìn).
+ * ============================================================ */
+function parseFormattedNumber_(str){
+  if (str === null || str === undefined) return NaN;
+  str = String(str).trim();
+  if (str === '') return NaN;
+  let cleaned;
+  if (str.indexOf(',') !== -1) {
+    // Có dấu phẩy -> đang ở dạng ĐÃ FORMAT vi-VN (chấm=phân cách nghìn,
+    // phẩy=thập phân) - bỏ hết dấu chấm rồi đổi phẩy thành chấm chuẩn.
+    cleaned = str.replace(/\./g, '').replace(',', '.');
+  } else {
+    // Không có dấu phẩy -> số thô đang gõ dở (dấu chấm nếu có là thập
+    // phân bình thường) - giữ nguyên.
+    cleaned = str;
+  }
+  cleaned = cleaned.replace(/[^0-9.\-]/g, '');
+  const n = parseFloat(cleaned);
+  return isNaN(n) ? NaN : n;
+}
+function formatNumberInputValue_(raw){
+  const n = parseFormattedNumber_(raw);
+  if (isNaN(n)) return '';
+  return n.toLocaleString('vi-VN', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+/** Gắn listener focus/blur cho mọi input.num-fmt trong `root` (mặc định
+ * toàn trang) và format lại giá trị đang có (nếu ô đó không phải đang
+ * được gõ dở - tránh format đè lên ô người dùng đang focus). Gọi lại
+ * hàm này an toàn nhiều lần (không gắn trùng listener nhờ dataset flag). */
+function attachNumberFormatting_(root){
+  (root || document).querySelectorAll('input.num-fmt').forEach(el => {
+    if (el.value !== '' && document.activeElement !== el) el.value = formatNumberInputValue_(el.value);
+    if (el.dataset.fmtBound) return;
+    el.dataset.fmtBound = '1';
+    el.addEventListener('focus', () => {
+      const n = parseFormattedNumber_(el.value);
+      el.value = isNaN(n) ? '' : String(n);
+      el.select();
+    });
+    el.addEventListener('blur', () => {
+      el.value = formatNumberInputValue_(el.value);
+    });
+  });
+}
+/** Đọc giá trị SỐ SẠCH (không dấu phân cách, dùng dấu chấm thập phân
+ * chuẩn) từ 1 ô input.num-fmt theo id - dùng khi gom dữ liệu gửi lên
+ * server (thay cho việc đọc .value trực tiếp), để server (utils.parseNum
+ * ở Code.gs, không đổi gì) luôn nhận đúng định dạng số nó hiểu được. */
+function getNumFieldValue_(id){
+  const el = document.getElementById(id);
+  if (!el) return '';
+  const n = parseFormattedNumber_(el.value);
+  return isNaN(n) ? '' : String(n);
+}
+
+function showLoading(msg){
+  document.getElementById('loading-msg').textContent = msg || 'Đang xử lý...';
+  document.getElementById('loading-overlay').classList.add('show');
+}
+function hideLoading(){ document.getElementById('loading-overlay').classList.remove('show'); }
+
+function toast(message, type){
+  const wrap = document.getElementById('toast-wrap');
+  const el = document.createElement('div');
+  el.className = 'toast' + (type==='err' ? ' err' : type==='warn' ? ' warn' : '');
+  el.textContent = message;
+  wrap.appendChild(el);
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .3s'; setTimeout(()=>el.remove(), 300); }, 4200);
+}
+
+function handleResult(res, onSuccess){
+  let ok, msg;
+  if (res && typeof res === 'object' && 'success' in res) { ok = !!res.success; msg = res.message || (ok?'Thành công.':'Có lỗi xảy ra.'); }
+  else { ok = false; msg = 'Không có phản hồi từ máy chủ.'; }
+  toast(msg, ok ? (msg.indexOf('⚠️')>=0 ? 'warn' : null) : 'err');
+  if (ok && onSuccess) onSuccess(res);
+  return ok;
+}
+
+function call(fnName, args, loadingMsg){
+  return new Promise((resolve, reject) => {
+    if (loadingMsg !== null) showLoading(loadingMsg);
+    google.script.run
+      .withSuccessHandler(res => { hideLoading(); resolve(res); })
+      .withFailureHandler(err => { hideLoading(); toast('❌ Lỗi hệ thống: ' + (err.message||err), 'err'); reject(err); })
+      [fnName](...(args||[]));
+  });
+}
+
+function openModal(html){ document.getElementById('modal').innerHTML = html; document.getElementById('modal-bg').classList.add('show'); }
+function closeModal(){ document.getElementById('modal-bg').classList.remove('show'); }
+document.getElementById('modal-bg').addEventListener('click', e => { if(e.target.id==='modal-bg') closeModal(); });
+
+/* ============================================================
+ * NAVIGATION
+ * ============================================================ */
+const PAGES = {
+  dashboard: {title:'Trang chủ', desc:'Tổng quan tồn kho dăm các đơn vị', render: renderDashboard},
+  create:    {title:'Nhập Tồn Kho Hàng Ngày', desc:'Báo cáo tồn kho dăm cho 1 đơn vị / 1 ngày', render: renderCreate},
+  history:   {title:'Lịch Sử Nhập Kho', desc:'Tra cứu, xem chi tiết, sửa/xóa (Admin) các báo cáo đã nộp', render: renderHistory},
+  report:    {title:'Báo Cáo Tổng Hợp', desc:'Tổng hợp tồn kho theo đơn vị trong khoảng thời gian', render: renderReport},
+  audit:     {title:'Nhật Ký (Audit)', desc:'Lịch sử các lần bị từ chối / ghi đè bởi Admin', render: renderAudit}
+};
+
+document.getElementById('nav').addEventListener('click', e => {
+  const item = e.target.closest('.nav-item');
+  if (!item) return;
+  goTo(item.dataset.page);
+});
+
+function goTo(page){
+  state.page = page;
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.page===page));
+  const meta = PAGES[page];
+  document.getElementById('page-title').textContent = meta.title;
+  document.getElementById('page-desc').textContent = meta.desc;
+  document.getElementById('topbar-actions').innerHTML = '';
+  meta.render();
+}
+
+function applyAdminUI(){
+  document.querySelectorAll('.admin-only').forEach(el => el.classList.toggle('hidden', !state.isAdmin));
+}
+
+/* ============================================================
+ * DASHBOARD
+ * ============================================================ */
+function renderDashboard(){
+  const c = document.getElementById('content');
+  c.innerHTML = `
+  <div class="stat" style="margin-bottom:16px">
+    <div class="label">🪵 Tổng lượng gỗ keo nhập trong ngày (ngày gần nhất mỗi đơn vị)</div>
+    <div class="value timber" id="s-nhapgo">–</div>
+    <div class="hint">MT (tấn tươi) - cộng dồn bản ghi gần nhất của cả 4 đơn vị</div>
+  </div>
+  <div class="grid cols-4" id="dash-stats">
+    <div class="stat"><div class="label">Tổng tồn kho cuối (4 đơn vị)</div><div class="value" id="s-total">–</div><div class="hint">MT (tấn tươi)</div></div>
+    <div class="stat"><div class="label">Đơn vị chưa báo cáo hôm nay</div><div class="value danger" id="s-missing">–</div><div class="hint">/ ${state.units.length || 4} đơn vị</div></div>
+    <div class="stat"><div class="label">Số ngày đã ghi nhận (Chitiettonkho)</div><div class="value timber" id="s-count">–</div><div class="hint" id="s-count-hint">đơn vị × ngày, đã lọc trùng</div></div>
+    <div class="stat"><div class="label">Vai trò của bạn</div><div class="value" id="s-role" style="font-size:16px">–</div><div class="hint">${esc((window.SCRIPT_EMAIL||''))}</div></div>
+  </div>
+  <div class="section-title">Tình trạng theo đơn vị</div>
+  <div class="grid cols-4" id="dash-units"><div class="empty"><div class="ic">⏳</div>Đang tải...</div></div>
+
+  <div class="card" style="margin-top:18px">
+    <h3>Kho Nhà máy <span class="sub">bản ghi mới nhất mỗi đơn vị, theo từng nguồn MT/BDMT</span></h3>
+    <div style="overflow-x:auto" id="dash-nhamay-wrap"><div class="empty"><div class="ic">⏳</div>Đang tải...</div></div>
+  </div>
+  <div class="card">
+    <h3>Kho Xuất Hàng <span class="sub">bản ghi mới nhất mỗi đơn vị - Kho Tiên Sa + Kho Dung Quất</span></h3>
+    <div style="overflow-x:auto" id="dash-xuathang-wrap"><div class="empty"><div class="ic">⏳</div>Đang tải...</div></div>
+  </div>
+
+  <div class="card" style="margin-top:18px">
+    <h3>Bắt đầu nhanh</h3>
+    <div class="grid cols-2">
+      <button class="btn primary" onclick="goTo('create')">➕ Nhập báo cáo tồn kho hôm nay</button>
+      <button class="btn" onclick="goTo('report')">📊 Xem báo cáo tổng hợp</button>
+    </div>
+  </div>
+  <div class="card admin-only hidden" id="dash-admin-card">
+    <h3>Công cụ Admin</h3>
+    <p class="hint-text">Chitiettonkho là bảng dữ liệu đã lọc trùng (mỗi Đơn vị+Ngày chỉ 1 dòng, tự động lấy lần nộp mới nhất) - dùng nút này nếu nghi ngờ Chitiettonkho bị lệch so với Form Responses 1, hoặc để lấp đầy dữ liệu lịch sử ngay sau khi triển khai lần đầu.</p>
+    <button class="btn accent" onclick="doRebuildChitiet()">🔄 Đồng bộ lại Chitiettonkho từ đầu</button>
+    <p class="hint-text" style="margin-top:12px">Bot Telegram tự động gửi 1 ảnh tóm tắt (giống hệt Trang chủ này) vào lúc 16h hàng ngày (trừ Chủ nhật). Dùng nút dưới đây để gửi thử/gửi gấp ngoài lịch.</p>
+    <button class="btn accent" onclick="guiBaoCaoTelegramDotXuat()">📨 Gửi báo cáo Telegram</button>
+  </div>`;
+
+  call('getDashboardStats', [], 'Đang tải dữ liệu...').then(s => {
+    state.isAdmin = s.isAdmin;
+    applyAdminUI();
+    document.getElementById('s-total').textContent = fmtNum(s.tongTonCK);
+    document.getElementById('s-nhapgo').textContent = fmtNum(s.tongNhapGo) + ' MT';
+    document.getElementById('s-missing').textContent = s.soDonViChuaBaoCaoHomNay;
+    document.getElementById('s-count').textContent = s.tongSoDongChitiet;
+    document.getElementById('s-count-hint').textContent = `đã lọc trùng · ${s.tongSoDongFormRaw} lượt nộp thô ở Form`;
+    document.getElementById('s-role').textContent = s.isAdmin ? '🔑 Admin' : '👤 Nhân viên';
+    if (s.isAdmin) document.getElementById('dash-admin-card').classList.remove('hidden');
+
+    const wrap = document.getElementById('dash-units');
+    if (!s.units.length) { wrap.innerHTML = '<div class="empty"><div class="ic">📭</div>Chưa có dữ liệu đơn vị nào.</div>'; return; }
+    wrap.innerHTML = s.units.map(u => `
+      <div class="unit-card">
+        <div class="uname">${esc(u.donVi)}</div>
+        <div class="urow"><span>Trạng thái</span>${u.daBaoCaoHomNay
+          ? '<span class="badge ready dot">Đã báo cáo hôm nay</span>'
+          : '<span class="badge pending dot">Chưa báo cáo hôm nay</span>'}</div>
+        <div class="urow"><span>Ngày gần nhất</span><b>${esc(u.ngayGanNhat)||'–'}</b></div>
+        <div class="urow"><span>Tồn kho cuối (MT)</span><b>${fmtNum(u.tonCK)}</b></div>
+        <div class="urow"><span>Nhập gỗ keo (ngày gần nhất)</span><b>${fmtNum(u.nhapGo)} MT</b></div>
+        <div class="urow"><span>Độ ẩm</span><b>${fmtPct(u.doAm)}</b></div>
+      </div>`).join('');
+
+    // Kho Nhà máy / Kho Xuất Hàng (bản ghi mới nhất mỗi đơn vị) - THEO
+    // YÊU CẦU MỚI (v2026.8.7): bổ sung breakdown theo từng kho ngay ở
+    // Trang chủ, cùng cách làm với Báo Cáo Tổng Hợp.
+    const factoryCols = [
+      {key:'hoaNhonMT',label:'Hòa Nhơn MT'},{key:'hoaNhonBDMT',label:'Hòa Nhơn BDMT'},
+      {key:'queSonMT',label:'Quế Sơn MT'},{key:'queSonBDMT',label:'Quế Sơn BDMT'},
+      {key:'daiHiepMT',label:'Đại Hiệp MT'},{key:'daiHiepBDMT',label:'Đại Hiệp BDMT'},
+      {key:'hakqnMT',label:'HAKQN MT'},{key:'hakqnBDMT',label:'HAKQN BDMT'},
+      {key:'congMT',label:'Cộng MT'},{key:'congBDMT',label:'Cộng BDMT'}
+    ];
+    const warehouseCols = [
+      {key:'tienSaMT',label:'Kho Tiên Sa MT'},{key:'tienSaBDMT',label:'Kho Tiên Sa BDMT'},
+      {key:'dungQuatMT',label:'Kho Dung Quất MT'},{key:'dungQuatBDMT',label:'Kho Dung Quất BDMT'}
+    ];
+    const mkDashTable = cols => `<table><thead><tr><th>Đơn vị</th>${cols.map(c=>`<th class="num">${esc(c.label)}</th>`).join('')}</tr></thead><tbody>
+      ${s.units.map(u => `<tr><td>${esc(u.donVi)}</td>${cols.map(c=>`<td class="num">${fmtNum(u[c.key])}</td>`).join('')}</tr>`).join('')}
+      <tr style="font-weight:700;background:var(--moss-light)"><td>Tổng cộng</td>${cols.map(c=>`<td class="num">${fmtNum(s.khoTotal[c.key])}</td>`).join('')}</tr>
+      </tbody></table>`;
+
+    document.getElementById('dash-nhamay-wrap').innerHTML = s.units.length ? mkDashTable(factoryCols) : '<div class="empty"><div class="ic">📭</div>Chưa có dữ liệu.</div>';
+    document.getElementById('dash-xuathang-wrap').innerHTML = s.units.length ? mkDashTable(warehouseCols) : '<div class="empty"><div class="ic">📭</div>Chưa có dữ liệu.</div>';
+  });
+}
+
+function doRebuildChitiet(){
+  if (!confirm('Đồng bộ lại TOÀN BỘ Chitiettonkho từ Form Responses 1?\nSẽ ghi đè dữ liệu hiện có trong Chitiettonkho (không ảnh hưởng Form Responses 1).')) return;
+  call('rebuildAllChitietTonKho', [], 'Đang đồng bộ lại Chitiettonkho...').then(res => {
+    handleResult(res, () => renderDashboard());
+  });
+}
+
+/* ============================================================
+ * NHẬP TỒN KHO
+ * ============================================================ */
+// Định nghĩa các tab CON (nhóm dữ liệu) của màn "Nhập Tồn Kho" - tab MẸ
+// là card "Thông tin chung" (Đơn vị + Ngày + banner Sửa/Mới, luôn hiện cố
+// định phía trên vì đây là khóa xác định bản ghi, không thuộc riêng 1
+// nhóm dữ liệu nào). Khai báo tập trung ở đây để vừa build tabbar, vừa
+// tính "đã có dữ liệu" (chấm xanh) cho từng tab từ CÙNG 1 nguồn.
+const CREATE_CHILD_TABS = [
+  { key:'nhamay', label:'🏭 Nhà máy (MT/BDMT)', fieldIds:['f-hoaNhonMT','f-hoaNhonBDMT','f-queSonMT','f-queSonBDMT','f-daiHiepMT','f-daiHiepBDMT','f-hakqnMT','f-hakqnBDMT'] },
+  { key:'tiensa', label:'📦 Kho Tiên Sa & Dung Quất', fieldIds:['f-tienSaMT','f-tienSaBDMT','f-dungQuatMT','f-dungQuatBDMT'] },
+  { key:'dieuchinh', label:'⚖️ Điều chỉnh & Nhập gỗ', fieldIds:['f-dieuChinh','f-muonTra','f-nhapGo'] },
+  { key:'vetbai', label:'🔍 Kiểm kê vét bãi', fieldIds:['f-thoiDiem','f-klUocTinh','f-chenhLech'] },
+  // THEO YÊU CẦU MỚI (v2026.8.13, mục K): tab tùy chọn tất toán chênh
+  // lệch kho xuất hàng (Tiên Sa/Dung Quất) sau mỗi đơn hàng xuất bán -
+  // chỉ cần nhập Kho + "Độ ẩm cân đối" + "Khối lượng thực tế MT", Web
+  // App TỰ TÍNH toàn bộ chuỗi công thức còn lại (Điều chỉnh MT/BDMT +
+  // diễn giải Nhập/Xuất bổ sung) ở server SAU KHI lưu (vì cần "Độ khô TB
+  // Kho Nhà máy" - công thức Sheet chỉ có sau khi dòng đã được lưu +
+  // tính công thức xong), rồi hiện kết quả qua popup + ghi 1 dòng log
+  // riêng ở sheet "CanDoiBDMT" (KHÔNG đụng tới cột A..AO/Chitiettonkho -
+  // xem computeCanDoiBDMT_/logCanDoiBDMT_ ở Code.gs).
+  { key:'candoibdmt', label:'⚖️ Cân đối BDMT xuất hàng', fieldIds:['f-candoiKho','f-candoiDoAm','f-candoiMTThucTe'] }
+];
+
+function renderCreate(){
+  const c = document.getElementById('content');
+  const d = state.createData;
+  const unitOptions = (state.units.length?state.units:['HAK (Bà Nà)','CNHAK (QS)','Đại Hiệp (Đại Lộc)','HAKQN (QS Trung)']);
+  if (!CREATE_CHILD_TABS.some(t => t.key === state.createChildTab)) state.createChildTab = 'nhamay';
+
+  c.innerHTML = `
+    <div class="card" id="create-parent-card">
+      <div class="section-title">Thông tin chung (Đơn vị + Ngày - dùng để xác định đây là báo cáo nào)</div>
+      <div class="grid cols-2">
+        <div class="field"><label>Đơn vị *</label>
+          <select id="f-donVi">
+            <option value="">-- Chọn đơn vị --</option>
+            ${unitOptions.map(u=>`<option value="${esc(u)}" ${u===d.donVi?'selected':''}>${esc(u)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field"><label>Ngày nhập tồn kho *</label><input type="date" id="f-ngayTonKho" value="${esc(d.ngayTonKho)}"></div>
+      </div>
+      <div id="create-mode-banner"></div>
+      <div class="field" style="max-width:280px"><label>Tồn kho đầu ngày (MT)</label><input type="text" inputmode="decimal" class="num-fmt" id="f-tonDauNgay" value="${esc(d.tonDauNgay)}"></div>
+    </div>
+
+    <div class="card">
+      <div class="child-tabbar" id="create-child-tabbar">
+        ${CREATE_CHILD_TABS.map(t => `<div class="child-tab" data-ctab="${t.key}"><span>${t.label}</span><span class="dot" title="Nhóm này đã có dữ liệu"></span></div>`).join('')}
+      </div>
+
+      <div class="ctab-pane" data-cpane="nhamay">
+        <div class="hint-text" style="margin-bottom:12px">MT = tấn tươi, BDMT = tấn khô quy đổi.</div>
+        <div class="grid cols-4">
+          <div class="field"><label>Hòa Nhơn - MT</label><input type="text" inputmode="decimal" class="num-fmt" id="f-hoaNhonMT" value="${esc(d.hoaNhonMT)}"></div>
+          <div class="field"><label>Hòa Nhơn - BDMT</label><input type="text" inputmode="decimal" class="num-fmt" id="f-hoaNhonBDMT" value="${esc(d.hoaNhonBDMT)}"></div>
+          <div class="field"><label>Quế Sơn - MT</label><input type="text" inputmode="decimal" class="num-fmt" id="f-queSonMT" value="${esc(d.queSonMT)}"></div>
+          <div class="field"><label>Quế Sơn - BDMT</label><input type="text" inputmode="decimal" class="num-fmt" id="f-queSonBDMT" value="${esc(d.queSonBDMT)}"></div>
+          <div class="field"><label>Đại Hiệp - MT</label><input type="text" inputmode="decimal" class="num-fmt" id="f-daiHiepMT" value="${esc(d.daiHiepMT)}"></div>
+          <div class="field"><label>Đại Hiệp - BDMT</label><input type="text" inputmode="decimal" class="num-fmt" id="f-daiHiepBDMT" value="${esc(d.daiHiepBDMT)}"></div>
+          <div class="field"><label>HAKQN - MT</label><input type="text" inputmode="decimal" class="num-fmt" id="f-hakqnMT" value="${esc(d.hakqnMT)}"></div>
+          <div class="field"><label>HAKQN - BDMT</label><input type="text" inputmode="decimal" class="num-fmt" id="f-hakqnBDMT" value="${esc(d.hakqnBDMT)}"></div>
+        </div>
+      </div>
+
+      <div class="ctab-pane" data-cpane="tiensa">
+        <div class="section-title" style="margin-top:0;padding-top:0;border-top:none">Kho Tiên Sa</div>
+        <div class="grid cols-2">
+          <div class="field"><label>Kho Tiên Sa - MT</label><input type="text" inputmode="decimal" class="num-fmt" id="f-tienSaMT" value="${esc(d.tienSaMT)}"></div>
+          <div class="field"><label>Kho Tiên Sa - BDMT</label><input type="text" inputmode="decimal" class="num-fmt" id="f-tienSaBDMT" value="${esc(d.tienSaBDMT)}"></div>
+        </div>
+        <div class="section-title">Kho Dung Quất</div>
+        <div class="grid cols-2">
+          <div class="field"><label>Kho Dung Quất - MT</label><input type="text" inputmode="decimal" class="num-fmt" id="f-dungQuatMT" value="${esc(d.dungQuatMT)}"></div>
+          <div class="field"><label>Kho Dung Quất - BDMT</label><input type="text" inputmode="decimal" class="num-fmt" id="f-dungQuatBDMT" value="${esc(d.dungQuatBDMT)}"></div>
+        </div>
+      </div>
+
+      <div class="ctab-pane" data-cpane="dieuchinh">
+        <div class="grid cols-3">
+          <div class="field"><label>Điều chỉnh KL (chênh lệch độ ẩm)</label><input type="text" inputmode="decimal" class="num-fmt" id="f-dieuChinh" value="${esc(d.dieuChinh)}"></div>
+          <div class="field"><label>Mượn / trả</label><input type="text" inputmode="decimal" class="num-fmt" id="f-muonTra" value="${esc(d.muonTra)}"></div>
+          <div class="field"><label>Nhập gỗ keo trong ngày</label><input type="text" inputmode="decimal" class="num-fmt" id="f-nhapGo" value="${esc(d.nhapGo)}"></div>
+        </div>
+      </div>
+
+      <div class="ctab-pane" data-cpane="vetbai">
+        <div class="checkbox-row" style="margin-bottom:12px">
+          <input type="checkbox" id="f-kiemKe" ${d.kiemKeVetBai?'checked':''}>
+          <label style="margin:0" for="f-kiemKe">Có thực hiện kiểm kê vét bãi hôm nay</label>
+        </div>
+        <div id="kiemke-fields" class="grid cols-3 ${d.kiemKeVetBai?'':'hidden'}">
+          <div class="field"><label>Thời điểm vét bãi</label><input type="date" id="f-thoiDiem" value="${esc(d.thoiDiemVetBai)}"></div>
+          <div class="field"><label>KL ước tính còn lại ở kho</label><input type="text" inputmode="decimal" class="num-fmt" id="f-klUocTinh" value="${esc(d.klUocTinhConLai)}"></div>
+          <div class="field"><label>Chênh lệch sau vét bãi</label><input type="text" inputmode="decimal" class="num-fmt" id="f-chenhLech" value="${esc(d.chenhLechVetBai)}"></div>
+        </div>
+      </div>
+
+      <div class="ctab-pane" data-cpane="candoibdmt">
+        <div class="checkbox-row" style="margin-bottom:12px">
+          <input type="checkbox" id="f-candoiCo" ${d.candoiCo?'checked':''}>
+          <label style="margin:0" for="f-candoiCo">Có tất toán cân đối BDMT xuất hàng sau đơn hàng xuất bán này</label>
+        </div>
+        <div id="candoi-fields" class="${d.candoiCo?'':'hidden'}">
+          <div class="grid cols-4">
+            <div class="field"><label>Kho xuất hàng cần cân đối</label>
+              <select id="f-candoiKho">
+                <option value="">-- Chọn kho --</option>
+                <option value="Kho Tiên Sa" ${d.candoiKho==='Kho Tiên Sa'?'selected':''}>Kho Tiên Sa</option>
+                <option value="Kho Dung Quất" ${d.candoiKho==='Kho Dung Quất'?'selected':''}>Kho Dung Quất</option>
+              </select>
+            </div>
+            <div class="field"><label>MT kho <span class="muted" style="font-weight:400">(lấy từ tab Tiên Sa/Dung Quất)</span></label><input type="text" id="f-candoiMTKhoPreview" readonly disabled style="background:var(--paper-2)"></div>
+            <div class="field"><label>BDMT kho <span class="muted" style="font-weight:400">(lấy từ tab Tiên Sa/Dung Quất)</span></label><input type="text" id="f-candoiBDMTKhoPreview" readonly disabled style="background:var(--paper-2)"></div>
+            <div class="field"><label>Độ khô kho (%) <span class="muted" style="font-weight:400">= BDMT kho/MT kho</span></label><input type="text" id="f-candoiDoKhoKhoPreview" readonly disabled style="background:var(--paper-2)"></div>
+          </div>
+          <div class="hint-text" style="margin:2px 0 12px 0">"MT kho"/"BDMT kho" ở trên tự lấy từ số liệu bạn đã nhập cho đúng Kho ở tab "Kho Tiên Sa & Dung Quất" - hãy nhập tab đó trước. Bên dưới là 2 số liệu cần nhập tay để hệ thống <b>tự tính ra Điều chỉnh MT/BDMT</b> (không cần tự tính tay nữa) - kết quả + diễn giải Nhập/Xuất bổ sung sẽ hiện ra ngay sau khi lưu.</div>
+          <div class="grid cols-4">
+            <div class="field"><label>Độ ẩm cân đối (%) <span class="muted" style="font-weight:400">- gõ tay</span></label><input type="text" inputmode="decimal" class="num-fmt" id="f-candoiDoAm" value="${esc(d.candoiDoAm)}"></div>
+            <div class="field"><label>Độ khô cân đối (%) <span class="muted" style="font-weight:400">= 100% - Độ ẩm cân đối</span></label><input type="text" id="f-candoiDoKho" readonly disabled style="background:var(--paper-2)"></div>
+            <div class="field"><label>Khối lượng thực tế MT <span class="muted" style="font-weight:400">- gõ tay</span></label><input type="text" inputmode="decimal" class="num-fmt" id="f-candoiMTThucTe" value="${esc(d.candoiMTThucTe)}"></div>
+            <div class="field"><label>Khối lượng thực tế BDMT <span class="muted" style="font-weight:400">= MT thực tế × Độ khô cân đối</span></label><input type="text" id="f-candoiBDMTThucTePreview" readonly disabled style="background:var(--paper-2)"></div>
+          </div>
+          <div class="hint-text" style="margin-top:8px">"Độ khô TB Kho Nhà máy" (dùng để quy đổi Điều chỉnh MT) chỉ tính được SAU khi lưu (lấy đúng công thức thật trong Sheet cho đơn vị/ngày này) - đảm bảo đã nhập đủ số liệu ở tab "Nhà máy (MT/BDMT)" trước khi tất toán.</div>
+        </div>
+
+        <details style="margin-top:18px;border:1px solid var(--line);border-radius:8px;padding:10px 14px;background:var(--paper-2)">
+          <summary style="cursor:pointer;font-weight:700;color:var(--timber)">⚙️ Điều chỉnh cân đối kho (sau mỗi đơn hàng xuất bán) - hướng dẫn quy trình 2 bước</summary>
+          <div style="margin-top:10px;font-size:13px;line-height:1.6">
+            <p>Sau khi 1 đơn hàng xuất bán đã cân xong toàn bộ xe (Import xong Xuất kho theo phiếu cân), số liệu tại kho xuất bán thường KHÔNG khớp tuyệt đối ngay - vì hàng được trung chuyển từ nhiều kho khác nhau vào kho xuất bán ở nhiều thời điểm khác nhau, còn việc cân xuất thực tế lại diễn ra theo tiến độ xe ra cảng. Bước dưới đây giúp <b>tất toán chênh lệch</b> đó sau khi đơn hàng hoàn tất, theo đúng 2 bước theo thứ tự bắt buộc.</p>
+            <p style="font-weight:700;color:var(--danger);margin-bottom:2px">BƯỚC 1 · ĐIỀU CHỈNH KHÔ (BDMT) - LÀM TRƯỚC</p>
+            <p><b>Nội dung điều chỉnh:</b> So sánh tổng dăm khô đã trung chuyển VÀO kho xuất bán với tổng dăm khô đã xuất bán thực tế RA, trong đúng khoảng thời gian của đơn hàng.</p>
+            <ul style="margin:4px 0 8px 20px;padding:0">
+              <li><b>Chênh lệch dương</b> (xuất bán ra nhiều hơn số đã trung chuyển vào) → tạo phiếu <b>Xuất trung chuyển</b>: Kho Nhập = kho xuất bán, Kho Xuất = kho đã trung chuyển vào kho xuất bán nhiều nhất trong kỳ (coi như "bù" thêm hàng vào kho xuất bán cho khớp số đã xuất ra).</li>
+              <li><b>Chênh lệch âm</b> (đã trung chuyển vào nhiều hơn số thực xuất bán ra) → tạo phiếu <b>Xuất trung chuyển</b> theo chiều ngược lại: Kho Xuất = kho xuất bán, Kho Nhập = kho nguồn (trả bớt phần hàng dư về đúng kho đã gửi đến).</li>
+            </ul>
+            <p><b>Lý do phải làm bước này:</b> Số liệu khô (BDMT) là số liệu GỐC để tính giá trị hàng hóa thật (không đổi theo thời gian/độ ẩm). Nếu không tất toán, tồn kho khô tại kho xuất bán sẽ dần lệch so với thực tế trung chuyển + xuất bán cộng dồn qua nhiều đơn hàng, làm sai lệch báo cáo tồn kho và giá trị hạch toán.</p>
+            <p style="font-weight:700;color:var(--danger);margin:14px 0 2px 0">BƯỚC 2 · ĐIỀU CHỈNH TƯƠI (MT) - CHỈ LÀM SAU KHI BƯỚC 1 ĐÃ CÂN BẰNG</p>
+            <p><b>Nội dung điều chỉnh:</b> Sau khi số Khô đã khớp (Bước 1 = 0), đối chiếu tiếp phần tấn tươi (MT) - vì khối lượng tươi bị hao hụt dần theo thời gian do bay hơi độ ẩm tự nhiên trong lúc lưu kho/vận chuyển, dù khối lượng khô (giá trị thật) không đổi.</p>
+            <ul style="margin:4px 0 8px 20px;padding:0">
+              <li><b>Dư tươi</b> (tồn kho tươi tính ra nhiều hơn thực tế, do bay hơi ít hơn dự kiến) → tạo phiếu <b>Xuất khác (ĐC)</b> tại kho xuất bán, không có kho nhập.</li>
+              <li><b>Thiếu tươi</b> (hao hụt bay hơi nhiều hơn dự kiến) → tạo phiếu <b>Nhập khác (ĐC)</b> tại kho xuất bán, không có kho xuất.</li>
+            </ul>
+            <p>Cả 2 trường hợp đều dùng <b>Độ khô = 0%</b> - vì đây là điều chỉnh THUẦN TÚY phần tươi do bay hơi, không liên quan đến số Khô đã được tất toán xong ở Bước 1 (nếu tính Độ khô khác 0, phiếu điều chỉnh sẽ vô tình làm lệch lại số Khô vừa mới cân bằng).</p>
+            <div class="hint-text" style="background:var(--timber-light);color:#8C511F;padding:10px 12px;border-radius:8px;margin-top:10px">
+              ⚠️ <b>Vì sao phải làm ĐÚNG THỨ TỰ Khô trước, Tươi sau:</b> Độ ẩm (và do đó phần tươi hao hụt) chỉ có ý nghĩa xác định SAU KHI số Khô đã đúng - nếu làm Tươi trước khi Khô còn lệch, con số "hao hụt do bay hơi" tính ra sẽ bị trộn lẫn với phần chênh lệch do trung chuyển chưa tất toán, dẫn đến điều chỉnh sai. Vì vậy luôn phải hoàn thành xong Bước 1 (Khô) rồi mới làm Bước 2 (Tươi).
+            </div>
+          </div>
+        </details>
+      </div>
+    </div>
+    <div class="sticky-actionbar">
+      <span class="muted" style="font-size:12.5px" id="create-actionbar-hint">Chọn Đơn vị + Ngày tồn kho để hệ thống kiểm tra: chưa có dữ liệu thì nhập mới, đã có thì tự chuyển sang sửa.</span>
+      <button class="btn accent" id="btn-submit-create" onclick="submitCreate()">💾 Lưu báo cáo mới</button>
+    </div>`;
+
+  document.getElementById('f-kiemKe').addEventListener('change', e => {
+    document.getElementById('kiemke-fields').classList.toggle('hidden', !e.target.checked);
+    updateCreateChildTabIndicators_();
+  });
+  document.getElementById('f-candoiCo').addEventListener('change', e => {
+    document.getElementById('candoi-fields').classList.toggle('hidden', !e.target.checked);
+    updateCreateChildTabIndicators_();
+  });
+  document.getElementById('f-candoiKho').addEventListener('change', updateCanDoiKhoPreview_);
+  document.getElementById('f-candoiDoAm').addEventListener('input', () => { updateCanDoiDoKho_(); updateCanDoiBDMTThucTePreview_(); });
+  document.getElementById('f-candoiMTThucTe').addEventListener('input', updateCanDoiBDMTThucTePreview_);
+  updateCanDoiDoKho_();
+  updateCanDoiKhoPreview_();
+  updateCanDoiBDMTThucTePreview_();
+  document.getElementById('f-donVi').addEventListener('change', checkExistingForCreate);
+  document.getElementById('f-ngayTonKho').addEventListener('change', checkExistingForCreate);
+  document.getElementById('create-child-tabbar').addEventListener('click', e => {
+    const el = e.target.closest('.child-tab');
+    if (el) switchCreateChildTab(el.dataset.ctab);
+  });
+  // Cập nhật chấm xanh "đã có dữ liệu" mỗi khi người dùng gõ số ở bất kỳ
+  // ô nào trong 2 card Nhập Tồn Kho (dùng event delegation, không cần
+  // gắn listener riêng cho từng ô) - đồng thời cập nhật luôn 2 ô xem
+  // trước "MT kho/BDMT kho" mỗi khi người dùng gõ lại số liệu Tiên
+  // Sa/Dung Quất (vì "MT kho"/"BDMT kho" của tab Cân đối BDMT lấy trực
+  // tiếp từ đó, xem updateCanDoiKhoPreview_).
+  document.querySelectorAll('#create-parent-card, .child-tabbar').forEach(() => {});
+  c.addEventListener('input', () => { updateCreateChildTabIndicators_(); updateCanDoiKhoPreview_(); });
+
+  attachNumberFormatting_(c);
+  switchCreateChildTab(state.createChildTab);
+  updateCreateChildTabIndicators_();
+
+  if (!state.units.length) {
+    call('getUnitList', [], null).then(list => { state.units = list; if (state.page==='create') renderCreate(); });
+  }
+
+  // Nếu vừa quay lại trang này mà đã từng xác định là đang Sửa (ví dụ
+  // do đổi trang rồi quay lại), khôi phục lại banner/nút cho đúng.
+  if (d.donVi && d.ngayTonKho) checkExistingForCreate();
+}
+
+function switchCreateChildTab(key){
+  state.createChildTab = key;
+  document.querySelectorAll('#create-child-tabbar .child-tab').forEach(el => el.classList.toggle('active', el.dataset.ctab===key));
+  document.querySelectorAll('.ctab-pane').forEach(el => el.classList.toggle('active', el.dataset.cpane===key));
+}
+
+/** Chấm xanh trên mỗi tab con báo hiệu nhóm đó đã có ít nhất 1 giá trị
+ * khác 0 - giúp người dùng biết đã điền nhóm nào, chưa điền nhóm nào mà
+ * không cần bấm qua từng tab để xem. */
+function updateCreateChildTabIndicators_(){
+  CREATE_CHILD_TABS.forEach(t => {
+    const hasData = t.fieldIds.some(id => {
+      const el = document.getElementById(id);
+      if (!el) return false;
+      if (el.type === 'checkbox') return el.checked;
+      return el.value !== '' && Number(el.value) !== 0;
+    });
+    const tabEl = document.querySelector(`.child-tab[data-ctab="${t.key}"]`);
+    if (tabEl) tabEl.classList.toggle('has-data', hasData);
+  });
+}
+
+/** Tự tính "Độ khô cân đối (%)" = 100 - "Độ ẩm cân đối (%)" ngay khi
+ * đang gõ ở tab "Cân đối BDMT xuất hàng" (mục K) - đọc giá trị thô qua
+ * parseFormattedNumber_ vì lúc đang gõ dở ô num-fmt chưa được format lại
+ * (chỉ format khi blur, xem attachNumberFormatting_). Đây chỉ là hiển
+ * thị tham khảo phía client - giá trị thật gửi lên server vẫn chỉ có
+ * "Độ ẩm cân đối", Code.gs tự tính lại "Độ khô cân đối" độc lập. */
+function updateCanDoiDoKho_(){
+  const el = document.getElementById('f-candoiDoAm');
+  const out = document.getElementById('f-candoiDoKho');
+  if (!el || !out) return;
+  const n = parseFormattedNumber_(el.value);
+  out.value = isNaN(n) ? '' : (100 - n).toLocaleString('vi-VN', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+
+/** "MT kho"/"BDMT kho"/"Độ khô kho" ở tab "Cân đối BDMT xuất hàng" (mục
+ * K) không phải số nhập tay - lấy TRỰC TIẾP từ 2 ô Kho Tiên Sa/Kho Dung
+ * Quất đã nhập ở tab "Kho Tiên Sa & Dung Quất" của CHÍNH form đang mở
+ * (tùy Kho nào đang chọn ở dropdown), chỉ để xem trước cho người dùng
+ * yên tâm số liệu đúng - giá trị thật gửi lên server vẫn là toàn bộ
+ * payload Tiên Sa/Dung Quất, Code.gs tự lấy lại y hệt logic này khi
+ * tính (xem submitInventoryEntry). "Độ khô kho" = BDMT kho/MT kho tính
+ * đơn thuần bằng phép chia nên an toàn tính trước ở client (không phụ
+ * thuộc công thức Sheet chưa biết trước như "Độ khô TB Kho Nhà máy"). */
+function updateCanDoiKhoPreview_(){
+  const khoEl = document.getElementById('f-candoiKho');
+  const mtOut = document.getElementById('f-candoiMTKhoPreview');
+  const bdmtOut = document.getElementById('f-candoiBDMTKhoPreview');
+  const doKhoOut = document.getElementById('f-candoiDoKhoKhoPreview');
+  if (!khoEl || !mtOut || !bdmtOut || !doKhoOut) return;
+  const kho = khoEl.value;
+  const ids = kho === 'Kho Tiên Sa' ? ['f-tienSaMT','f-tienSaBDMT']
+    : kho === 'Kho Dung Quất' ? ['f-dungQuatMT','f-dungQuatBDMT'] : null;
+  if (!ids) { mtOut.value = ''; bdmtOut.value = ''; doKhoOut.value = ''; return; }
+  const mtEl = document.getElementById(ids[0]), bdmtEl = document.getElementById(ids[1]);
+  const mtVal = mtEl ? parseFormattedNumber_(mtEl.value) : NaN;
+  const bdmtVal = bdmtEl ? parseFormattedNumber_(bdmtEl.value) : NaN;
+  const fmt2 = n => isNaN(n) ? '' : n.toLocaleString('vi-VN', {minimumFractionDigits:2, maximumFractionDigits:2});
+  mtOut.value = fmt2(mtVal);
+  bdmtOut.value = fmt2(bdmtVal);
+  doKhoOut.value = (!isNaN(mtVal) && mtVal !== 0 && !isNaN(bdmtVal)) ? fmt2(bdmtVal / mtVal * 100) : '';
+}
+
+/** "Khối lượng thực tế BDMT" = "Khối lượng thực tế MT" (gõ tay) × "Độ
+ * khô cân đối" (suy ra từ "Độ ẩm cân đối" gõ tay) - phép nhân đơn thuần
+ * nên an toàn tính trước ở client, hiển thị tham khảo (mục K). */
+function updateCanDoiBDMTThucTePreview_(){
+  const mtEl = document.getElementById('f-candoiMTThucTe');
+  const doAmEl = document.getElementById('f-candoiDoAm');
+  const out = document.getElementById('f-candoiBDMTThucTePreview');
+  if (!mtEl || !doAmEl || !out) return;
+  const mt = parseFormattedNumber_(mtEl.value);
+  const doAm = parseFormattedNumber_(doAmEl.value);
+  if (isNaN(mt) || isNaN(doAm)) { out.value = ''; return; }
+  const doKhoFrac = (100 - doAm) / 100;
+  out.value = (mt * doKhoFrac).toLocaleString('vi-VN', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+
+/**
+ * Khi đã chọn đủ Đơn vị + Ngày tồn kho: kiểm tra Chitiettonkho xem đã
+ * có dữ liệu chưa (mục F). Có -> điền sẵn giá trị cũ, chuyển form sang
+ * chế độ SỬA (không cho tạo dòng mới trùng). Chưa có -> giữ nguyên chế
+ * độ NHẬP MỚI, xóa banner.
+ */
+function checkExistingForCreate(){
+  const donVi = (document.getElementById('f-donVi')||{}).value || '';
+  const ngayISO = (document.getElementById('f-ngayTonKho')||{}).value || '';
+  const banner = document.getElementById('create-mode-banner');
+  const btn = document.getElementById('btn-submit-create');
+  const hint = document.getElementById('create-actionbar-hint');
+  if (!banner || !btn) return;
+
+  if (!donVi || !ngayISO) {
+    banner.innerHTML = '';
+    state.createData.isEditingExisting = false;
+    btn.textContent = '💾 Lưu báo cáo mới';
+    if (hint) hint.textContent = 'Chọn Đơn vị + Ngày tồn kho để hệ thống kiểm tra: chưa có dữ liệu thì nhập mới, đã có thì tự chuyển sang sửa.';
+    return;
+  }
+
+  call('getExistingEntryForKey', [donVi, ngayISO], null).then(existing => {
+    // Người dùng có thể đã đổi Đơn vị/Ngày khác trong lúc chờ phản hồi -
+    // chỉ áp dụng kết quả nếu vẫn còn khớp lựa chọn hiện tại.
+    const curDonVi = (document.getElementById('f-donVi')||{}).value || '';
+    const curNgay = (document.getElementById('f-ngayTonKho')||{}).value || '';
+    if (curDonVi !== donVi || curNgay !== ngayISO) return;
+
+    const key = donVi + '||' + ngayISO;
+    const prevKey = state._lastCreateCheckKey;
+    state._lastCreateCheckKey = key;
+
+    if (existing) {
+      state.createData.isEditingExisting = true;
+      banner.innerHTML = `<div class="hint-text" style="background:var(--timber-light);color:#8C511F;padding:10px 12px;border-radius:8px;margin:4px 0 14px 0">
+        ⚠️ Đơn vị "${esc(donVi)}" đã có báo cáo cho ngày ${esc(existing.ngayTonKho)} (nộp lúc ${esc(existing.timestamp)} bởi ${esc(existing.email)}).
+        Các trường bên dưới đã được điền sẵn dữ liệu hiện có - chỉnh sửa rồi bấm Cập nhật.</div>`;
+      btn.textContent = '💾 Cập nhật báo cáo';
+      if (hint) hint.textContent = 'Đang SỬA báo cáo đã có cho Đơn vị + Ngày này - sẽ ghi đè thành dữ liệu chính thức mới nhất.';
+      fillCreateFormFromExisting_(existing);
+    } else {
+      const wasEditing = state.createData.isEditingExisting;
+      state.createData.isEditingExisting = false;
+      btn.textContent = '💾 Lưu báo cáo mới';
+      if (hint) hint.textContent = 'Đang NHẬP MỚI cho Đơn vị + Ngày này.';
+      // Xóa sạch số liệu cũ nếu: (a) vừa mới ở chế độ Sửa (đã điền sẵn số
+      // liệu của khóa khác), HOẶC (b) vừa đổi sang 1 khóa NHẬP MỚI khác
+      // với khóa NHẬP MỚI đã kiểm tra trước đó - cả 2 trường hợp đều
+      // tránh nộp nhầm số của (Đơn vị+Ngày) khác thành báo cáo "mới" này.
+      const keyChanged = prevKey !== null && prevKey !== key;
+      if (wasEditing || keyChanged) clearCreateFormNumericFields_();
+
+      banner.innerHTML = `<div class="hint-text" style="background:var(--moss-light);color:var(--moss);padding:10px 12px;border-radius:8px;margin:4px 0 14px 0">
+        ✅ Chưa có báo cáo nào cho Đơn vị + Ngày này - đây sẽ là báo cáo MỚI.</div>`;
+
+      // THEO YÊU CẦU MỚI (v2026.8.8): tự điền "Tồn kho đầu ngày (MT)" =
+      // "Cộng MT" của ngày gần nhất TRƯỚC đó (cùng đơn vị) - vẫn cho sửa
+      // tay sau khi điền, không khóa cứng ô này.
+      call('getPreviousDayCongMT', [donVi, ngayISO], null).then(prev => {
+        const curDonVi2 = (document.getElementById('f-donVi')||{}).value || '';
+        const curNgay2 = (document.getElementById('f-ngayTonKho')||{}).value || '';
+        if (curDonVi2 !== donVi || curNgay2 !== ngayISO) return; // đã đổi lựa chọn trong lúc chờ
+        const tonDauEl = document.getElementById('f-tonDauNgay');
+        if (prev && tonDauEl) {
+          tonDauEl.value = prev.congMT;
+          attachNumberFormatting_();
+          updateCreateChildTabIndicators_();
+          banner.innerHTML += `<div class="hint-text" style="background:var(--moss-light);color:var(--moss);padding:10px 12px;border-radius:8px;margin:0 0 14px 0">
+            🔄 Đã tự điền "Tồn kho đầu ngày" = Cộng MT ngày ${esc(prev.ngayDisplay)} (ngày gần nhất trước đó) = <b>${fmtNum(prev.congMT)}</b> MT. Có thể sửa lại nếu cần.</div>`;
+        } else {
+          banner.innerHTML += `<div class="hint-text" style="background:var(--timber-light);color:#8C511F;padding:10px 12px;border-radius:8px;margin:0 0 14px 0">
+            ⚠️ Chưa có dữ liệu ngày nào trước đó cho đơn vị này - vui lòng tự nhập "Tồn kho đầu ngày".</div>`;
+        }
+      });
+    }
+  });
+}
+
+function clearCreateFormNumericFields_(){
+  ['f-tonDauNgay','f-hoaNhonMT','f-hoaNhonBDMT','f-queSonMT','f-queSonBDMT',
+   'f-daiHiepMT','f-daiHiepBDMT','f-hakqnMT','f-hakqnBDMT','f-dieuChinh','f-muonTra','f-nhapGo',
+   'f-tienSaMT','f-tienSaBDMT','f-dungQuatMT','f-dungQuatBDMT','f-thoiDiem','f-klUocTinh','f-chenhLech',
+   'f-candoiKho','f-candoiDoAm','f-candoiMTThucTe'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  const chk = document.getElementById('f-kiemKe');
+  if (chk) { chk.checked = false; document.getElementById('kiemke-fields').classList.add('hidden'); }
+  // "Cân đối BDMT xuất hàng" là dữ liệu log RIÊNG (sheet CanDoiBDMT,
+  // không thuộc báo cáo ngày) - luôn xóa sạch mỗi khi form được reset,
+  // không có khái niệm "khôi phục lại giá trị cũ" cho tab này (mục K).
+  const candoiChk = document.getElementById('f-candoiCo');
+  if (candoiChk) { candoiChk.checked = false; document.getElementById('candoi-fields').classList.add('hidden'); }
+  updateCanDoiDoKho_();
+  updateCanDoiKhoPreview_();
+  updateCanDoiBDMTThucTePreview_();
+  updateCreateChildTabIndicators_();
+  attachNumberFormatting_();
+}
+
+function fillCreateFormFromExisting_(existing){
+  const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = (val === 0 ? 0 : (val || '')); };
+  setVal('f-tonDauNgay', existing.tonDauNgay);
+  setVal('f-hoaNhonMT', existing.hoaNhonMT); setVal('f-hoaNhonBDMT', existing.hoaNhonBDMT);
+  setVal('f-queSonMT', existing.queSonMT); setVal('f-queSonBDMT', existing.queSonBDMT);
+  setVal('f-daiHiepMT', existing.daiHiepMT); setVal('f-daiHiepBDMT', existing.daiHiepBDMT);
+  setVal('f-hakqnMT', existing.hakqnMT); setVal('f-hakqnBDMT', existing.hakqnBDMT);
+  setVal('f-dieuChinh', existing.dieuChinh); setVal('f-muonTra', existing.muonTra); setVal('f-nhapGo', existing.nhapGo);
+  setVal('f-tienSaMT', existing.tienSaMT); setVal('f-tienSaBDMT', existing.tienSaBDMT);
+  setVal('f-dungQuatMT', existing.dungQuatMT); setVal('f-dungQuatBDMT', existing.dungQuatBDMT);
+  const hasKiemKe = existing.kiemKeVetBai === 'Có';
+  const chk = document.getElementById('f-kiemKe');
+  if (chk) {
+    chk.checked = hasKiemKe;
+    document.getElementById('kiemke-fields').classList.toggle('hidden', !hasKiemKe);
+  }
+  if (hasKiemKe) {
+    setVal('f-thoiDiem', existing.thoiDiemVetBaiISO);
+    setVal('f-klUocTinh', existing.klUocTinhConLai);
+    setVal('f-chenhLech', existing.chenhLechVetBai);
+  }
+  // "Cân đối BDMT xuất hàng" không nằm trong báo cáo ngày (existing) nên
+  // không có gì để điền lại - luôn xóa sạch khi chuyển sang chế độ Sửa,
+  // tránh lỡ tay gửi kèm dữ liệu cân đối của lượt nhập trước đó (mục K).
+  ['f-candoiKho','f-candoiDoAm','f-candoiMTThucTe'].forEach(id => { const el = document.getElementById(id); if (el) el.value=''; });
+  const candoiChk = document.getElementById('f-candoiCo');
+  if (candoiChk) { candoiChk.checked = false; document.getElementById('candoi-fields').classList.add('hidden'); }
+  updateCanDoiDoKho_();
+  updateCanDoiKhoPreview_();
+  updateCanDoiBDMTThucTePreview_();
+  updateCreateChildTabIndicators_();
+  attachNumberFormatting_();
+}
+
+function collectCreateForm_(){
+  const g = id => { const el = document.getElementById(id); return el ? el.value : ''; };
+  const n = getNumFieldValue_;
+  return {
+    donVi: g('f-donVi'), ngayTonKho: g('f-ngayTonKho'), tonDauNgay: n('f-tonDauNgay'),
+    hoaNhonMT: n('f-hoaNhonMT'), hoaNhonBDMT: n('f-hoaNhonBDMT'),
+    queSonMT: n('f-queSonMT'), queSonBDMT: n('f-queSonBDMT'),
+    daiHiepMT: n('f-daiHiepMT'), daiHiepBDMT: n('f-daiHiepBDMT'),
+    hakqnMT: n('f-hakqnMT'), hakqnBDMT: n('f-hakqnBDMT'),
+    dieuChinh: n('f-dieuChinh'), muonTra: n('f-muonTra'), nhapGo: n('f-nhapGo'),
+    tienSaMT: n('f-tienSaMT'), tienSaBDMT: n('f-tienSaBDMT'),
+    dungQuatMT: n('f-dungQuatMT'), dungQuatBDMT: n('f-dungQuatBDMT'),
+    kiemKeVetBai: document.getElementById('f-kiemKe').checked,
+    thoiDiemVetBai: g('f-thoiDiem'), klUocTinhConLai: n('f-klUocTinh'), chenhLechVetBai: n('f-chenhLech'),
+    candoiCo: document.getElementById('f-candoiCo').checked,
+    candoiKho: g('f-candoiKho'), candoiDoAm: n('f-candoiDoAm'), candoiMTThucTe: n('f-candoiMTThucTe')
+  };
+}
+
+function submitCreate(){
+  const payload = collectCreateForm_();
+  if (!payload.donVi) { toast('Vui lòng chọn Đơn vị.', 'warn'); return; }
+  if (!payload.ngayTonKho) { toast('Vui lòng chọn Ngày nhập tồn kho.', 'warn'); return; }
+  if (payload.candoiCo && !payload.candoiKho) { toast('Vui lòng chọn Kho cần cân đối ở tab "Cân đối BDMT xuất hàng" (hoặc bỏ tick nếu không có).', 'warn'); return; }
+  if (payload.candoiCo && payload.candoiDoAm === '') { toast('Vui lòng nhập "Độ ẩm cân đối" ở tab "Cân đối BDMT xuất hàng" (hoặc bỏ tick nếu không có) - để trống sẽ bị tính nhầm thành 0%.', 'warn'); return; }
+  if (payload.candoiCo && payload.candoiMTThucTe === '') { toast('Vui lòng nhập "Khối lượng thực tế MT" ở tab "Cân đối BDMT xuất hàng" (hoặc bỏ tick nếu không có).', 'warn'); return; }
+  const loadingMsg = state.createData.isEditingExisting ? 'Đang cập nhật báo cáo...' : 'Đang lưu báo cáo mới...';
+  call('submitInventoryEntry', [payload], loadingMsg).then(res => {
+    handleResult(res, r => {
+      if (r && r.candoiResult) { showCanDoiBDMTResult_(r.candoiResult); }
+      else { resetCreateData(); goTo('dashboard'); }
+    });
+  });
+}
+
+/** Hiện popup kết quả tất toán "Cân đối BDMT xuất hàng" ngay sau khi lưu
+ * báo cáo thành công (mục K) - vì phép tính thật (đặc biệt "Độ khô TB
+ * Kho Nhà máy") chỉ có được SAU KHI Sheet đã tính công thức cho dòng vừa
+ * lưu, Code.gs tính xong mới trả kết quả về đây để hiển thị, KHÔNG tính
+ * trước ở client. Đóng popup mới thực sự reset form + chuyển trang, để
+ * người dùng có đủ thời gian đọc/chụp lại kết quả trước khi form bị xóa. */
+function showCanDoiBDMTResult_(r){
+  const closeAndGo = "closeModal(); resetCreateData(); goTo('dashboard');";
+  if (r.error) {
+    openModal(`
+      <div class="modal-head"><h3>⚠️ Chưa tất toán được Cân đối BDMT</h3><button class="x" onclick="${closeAndGo}">&times;</button></div>
+      <div class="modal-body">
+        <div class="hint-text" style="background:var(--danger-light);color:var(--danger);padding:10px 12px;border-radius:8px">${esc(r.error)}</div>
+        <div class="hint-text" style="margin-top:10px">Báo cáo tồn kho vẫn đã được lưu bình thường - chỉ riêng phần "Cân đối BDMT xuất hàng" chưa ghi được. Vào Lịch Sử bổ sung số liệu còn thiếu rồi sửa lại báo cáo, tick lại tab "Cân đối BDMT xuất hàng" để nộp lại.</div>
+      </div>
+      <div class="modal-foot"><button class="btn primary" onclick="${closeAndGo}">Đã hiểu</button></div>
+    `);
+    return;
+  }
+  const kv = (label, val, unit) => `<div class="kv"><div class="k">${esc(label)}</div><div class="v">${fmtNum(val)}${unit||''}</div></div>`;
+  openModal(`
+    <div class="modal-head"><h3>✅ Kết quả tất toán Cân đối BDMT xuất hàng</h3><button class="x" onclick="${closeAndGo}">&times;</button></div>
+    <div class="modal-body">
+      <div class="hint-text" style="margin-bottom:10px">${esc(r.kho)} · ngày ${esc(r.ngayCanDoi)} · đơn vị ${esc(r.donVi)}</div>
+      ${kv('MT kho', r.mtKho)}
+      ${kv('BDMT kho', r.bdmtKho)}
+      ${kv('Độ khô kho', r.doKhoKhoPct, '%')}
+      ${kv('Độ ẩm kho', r.doAmKhoPct, '%')}
+      ${kv('Độ ẩm cân đối (đã nhập)', r.doAmCanDoi, '%')}
+      ${kv('Độ khô cân đối', r.doKhoCanDoi, '%')}
+      ${kv('Khối lượng thực tế MT (đã nhập)', r.mtThucTe)}
+      ${kv('Khối lượng thực tế BDMT', r.klThucTeBDMT)}
+      ${kv('Độ khô TB Kho Nhà máy', r.doKhoTBNhaMayPct, '%')}
+      <div class="section-title">Kết quả</div>
+      <div class="kv"><div class="k">Điều chỉnh BDMT</div><div class="v" style="font-weight:700">${fmtNum(r.dieuChinhBDMT)}</div></div>
+      <div class="hint-text" style="margin:2px 0 10px 0">${esc(r.dienGiaiBDMT)}</div>
+      <div class="kv"><div class="k">Điều chỉnh MT</div><div class="v" style="font-weight:700">${fmtNum(r.dieuChinhMT)}</div></div>
+      <div class="hint-text" style="margin:2px 0 0 0">${esc(r.dienGiaiMT)}</div>
+      <div class="hint-text" style="margin-top:12px;background:var(--moss-light);color:var(--moss);padding:10px 12px;border-radius:8px">Đã ghi dòng cân đối này vào sheet "CanDoiBDMT".</div>
+    </div>
+    <div class="modal-foot"><button class="btn primary" onclick="${closeAndGo}">Đóng</button></div>
+  `);
+}
+
+/* ============================================================
+ * LỊCH SỬ
+ * ============================================================ */
+function renderHistory(){
+  document.getElementById('topbar-actions').innerHTML = `<button class="btn" onclick="loadHistory()">↻ Làm mới</button>`;
+  const unitOptions = state.units.length ? state.units : [];
+  const c = document.getElementById('content');
+  c.innerHTML = `
+    <div class="card">
+      <div class="grid cols-4">
+        <div class="field"><label>Đơn vị</label>
+          <select id="h-donVi"><option value="">-- Tất cả --</option>${unitOptions.map(u=>`<option value="${esc(u)}">${esc(u)}</option>`).join('')}</select>
+        </div>
+        <div class="field"><label>Từ ngày</label><input type="date" id="h-from" value="${todayISO_()}"></div>
+        <div class="field"><label>Đến ngày</label><input type="date" id="h-to" value="${todayISO_()}"></div>
+        <div class="field" style="display:flex;align-items:flex-end"><button class="btn primary" onclick="loadHistory()">🔍 Lọc</button></div>
+      </div>
+    </div>
+    <div class="card" id="history-wrap"><div class="empty"><div class="ic">⏳</div>Đang tải...</div></div>`;
+
+  if (!state.units.length) call('getUnitList', [], null).then(list => { state.units = list; });
+  loadHistory();
+}
+
+function loadHistory(){
+  const filters = {
+    donVi: (document.getElementById('h-donVi')||{}).value || '',
+    fromDate: (document.getElementById('h-from')||{}).value || '',
+    toDate: (document.getElementById('h-to')||{}).value || ''
+  };
+  state.historyFilters = filters;
+  call('getHistoryList', [filters], 'Đang tải lịch sử...').then(list => {
+    state.historyList = list;
+    renderHistoryTable();
+  });
+}
+
+function renderHistoryTable(){
+  const wrap = document.getElementById('history-wrap');
+  const list = state.historyList;
+  if (!list.length) { wrap.innerHTML = '<div class="empty"><div class="ic">📭</div>Không có báo cáo nào khớp bộ lọc.</div>'; return; }
+  wrap.innerHTML = `<div class="hint-text" style="margin-bottom:10px">"Đang áp dụng" = bản ghi này hiện đang được dùng làm dữ liệu chính thức trong Chitiettonkho cho (Đơn vị+Ngày) của nó. "Đã bị thay thế" = có 1 lần nộp SAU đó cho cùng Đơn vị+Ngày, nên bản này chỉ còn giá trị tra soát.</div>
+  <table><thead><tr>
+      <th>Ngày tồn kho</th><th>Đơn vị</th><th>Người nộp</th><th>Trạng thái</th>
+      <th class="num">Tồn đầu (MT)</th><th class="num">Cộng MT</th><th class="num">Cộng BDMT</th><th class="num">Tồn CK (MT)</th><th class="num">Độ ẩm</th><th></th>
+    </tr></thead><tbody>
+    ${list.map(r => `<tr>
+      <td>${esc(r.ngayTonKho)}</td><td>${esc(r.donVi)}</td><td>${esc(r.email)}</td>
+      <td>${r.isLatest ? '<span class="badge ready dot">Đang áp dụng</span>' : '<span class="badge pending dot">Đã bị thay thế</span>'}</td>
+      <td class="num">${fmtNum(r.tonDauNgay)}</td><td class="num">${fmtNum(r.congMT)}</td><td class="num">${fmtNum(r.congBDMT)}</td>
+      <td class="num">${fmtNum(r.tonCK)}</td><td class="num">${fmtPct(r.doAm)}</td>
+      <td style="white-space:nowrap">
+        <button class="btn sm ghost" onclick="viewHistoryDetail(${r.rowIndex})">Xem</button>
+        <button class="btn sm ghost admin-only ${state.isAdmin?'':'hidden'}" onclick="editHistoryEntry(${r.rowIndex})">Sửa</button>
+        <button class="btn sm danger admin-only ${state.isAdmin?'':'hidden'}" onclick="confirmDeleteHistory(${r.rowIndex})">Xóa</button>
+      </td>
+    </tr>`).join('')}
+    </tbody></table>`;
+}
+
+function viewHistoryDetail(rowIndex){
+  call('getEntryDetail', [rowIndex], 'Đang tải chi tiết...').then(r => {
+    if (!r) { toast('Không tìm thấy dữ liệu.', 'err'); return; }
+    openModal(`
+      <div class="modal-head"><h3>Chi tiết báo cáo - ${esc(r.donVi)}</h3><button class="x" onclick="closeModal()">&times;</button></div>
+      <div class="modal-body">
+        <div class="kv"><span class="k">Ngày tồn kho</span><span class="v">${esc(r.ngayTonKho)}</span></div>
+        <div class="kv"><span class="k">Người nộp</span><span class="v">${esc(r.email)}</span></div>
+        <div class="kv"><span class="k">Thời gian nộp</span><span class="v">${esc(r.timestamp)}</span></div>
+        <div class="kv"><span class="k">Tồn kho đầu ngày</span><span class="v mono">${fmtNum(r.tonDauNgay)} MT</span></div>
+        <div class="kv"><span class="k">Hòa Nhơn</span><span class="v mono">${fmtNum(r.hoaNhonMT)} MT / ${fmtNum(r.hoaNhonBDMT)} BDMT</span></div>
+        <div class="kv"><span class="k">Quế Sơn</span><span class="v mono">${fmtNum(r.queSonMT)} MT / ${fmtNum(r.queSonBDMT)} BDMT</span></div>
+        <div class="kv"><span class="k">Đại Hiệp</span><span class="v mono">${fmtNum(r.daiHiepMT)} MT / ${fmtNum(r.daiHiepBDMT)} BDMT</span></div>
+        <div class="kv"><span class="k">HAKQN</span><span class="v mono">${fmtNum(r.hakqnMT)} MT / ${fmtNum(r.hakqnBDMT)} BDMT</span></div>
+        <div class="kv"><span class="k">Kho Tiên Sa</span><span class="v mono">${fmtNum(r.tienSaMT)} MT / ${fmtNum(r.tienSaBDMT)} BDMT</span></div>
+        <div class="kv"><span class="k">Kho Dung Quất</span><span class="v mono">${fmtNum(r.dungQuatMT)} MT / ${fmtNum(r.dungQuatBDMT)} BDMT</span></div>
+        <div class="kv"><span class="k">Điều chỉnh</span><span class="v mono">${fmtNum(r.dieuChinh)}</span></div>
+        <div class="kv"><span class="k">Mượn/trả</span><span class="v mono">${fmtNum(r.muonTra)}</span></div>
+        <div class="kv"><span class="k">Nhập gỗ keo trong ngày</span><span class="v mono">${fmtNum(r.nhapGo)}</span></div>
+        <div class="kv"><span class="k">Kiểm kê vét bãi</span><span class="v">${esc(r.kiemKeVetBai)||'Không'}</span></div>
+        <div class="kv"><span class="k">Cộng MT / Cộng BDMT (tự tính)</span><span class="v mono">${fmtNum(r.congMT)} / ${fmtNum(r.congBDMT)}</span></div>
+        <div class="kv"><span class="k">Độ ẩm (tự tính)</span><span class="v mono">${fmtPct(r.doAm)}</span></div>
+        <div class="kv"><span class="k">Tồn kho cuối kỳ (tự tính)</span><span class="v mono">${fmtNum(r.tonCK)} MT</span></div>
+      </div>
+      <div class="modal-foot"><button class="btn ghost" onclick="closeModal()">Đóng</button></div>
+    `);
+  });
+}
+
+function editHistoryEntry(rowIndex){
+  call('getEntryDetail', [rowIndex], 'Đang tải...').then(r => {
+    if (!r) { toast('Không tìm thấy dữ liệu.', 'err'); return; }
+    openModal(`
+      <div class="modal-head"><h3>Sửa báo cáo - ${esc(r.donVi)}</h3><button class="x" onclick="closeModal()">&times;</button></div>
+      <div class="modal-body">
+        <div class="grid cols-2">
+          <div class="field"><label>Đơn vị</label>
+            <select id="e-donVi">${(state.units.length?state.units:[r.donVi]).map(u=>`<option value="${esc(u)}" ${u===r.donVi?'selected':''}>${esc(u)}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label>Ngày tồn kho</label><input type="date" id="e-ngayTonKho" value="${esc(r.ngayTonKhoISO)}"></div>
+        </div>
+        <div class="field"><label>Tồn kho đầu ngày (MT)</label><input type="text" inputmode="decimal" class="num-fmt" id="e-tonDauNgay" value="${esc(r.tonDauNgay)}"></div>
+        <div class="grid cols-4">
+          <div class="field"><label>Hòa Nhơn MT</label><input type="text" inputmode="decimal" class="num-fmt" id="e-hoaNhonMT" value="${esc(r.hoaNhonMT)}"></div>
+          <div class="field"><label>Hòa Nhơn BDMT</label><input type="text" inputmode="decimal" class="num-fmt" id="e-hoaNhonBDMT" value="${esc(r.hoaNhonBDMT)}"></div>
+          <div class="field"><label>Quế Sơn MT</label><input type="text" inputmode="decimal" class="num-fmt" id="e-queSonMT" value="${esc(r.queSonMT)}"></div>
+          <div class="field"><label>Quế Sơn BDMT</label><input type="text" inputmode="decimal" class="num-fmt" id="e-queSonBDMT" value="${esc(r.queSonBDMT)}"></div>
+          <div class="field"><label>Đại Hiệp MT</label><input type="text" inputmode="decimal" class="num-fmt" id="e-daiHiepMT" value="${esc(r.daiHiepMT)}"></div>
+          <div class="field"><label>Đại Hiệp BDMT</label><input type="text" inputmode="decimal" class="num-fmt" id="e-daiHiepBDMT" value="${esc(r.daiHiepBDMT)}"></div>
+          <div class="field"><label>HAKQN MT</label><input type="text" inputmode="decimal" class="num-fmt" id="e-hakqnMT" value="${esc(r.hakqnMT)}"></div>
+          <div class="field"><label>HAKQN BDMT</label><input type="text" inputmode="decimal" class="num-fmt" id="e-hakqnBDMT" value="${esc(r.hakqnBDMT)}"></div>
+        </div>
+        <div class="grid cols-4">
+          <div class="field"><label>Kho Tiên Sa MT</label><input type="text" inputmode="decimal" class="num-fmt" id="e-tienSaMT" value="${esc(r.tienSaMT)}"></div>
+          <div class="field"><label>Kho Tiên Sa BDMT</label><input type="text" inputmode="decimal" class="num-fmt" id="e-tienSaBDMT" value="${esc(r.tienSaBDMT)}"></div>
+          <div class="field"><label>Kho Dung Quất MT</label><input type="text" inputmode="decimal" class="num-fmt" id="e-dungQuatMT" value="${esc(r.dungQuatMT)}"></div>
+          <div class="field"><label>Kho Dung Quất BDMT</label><input type="text" inputmode="decimal" class="num-fmt" id="e-dungQuatBDMT" value="${esc(r.dungQuatBDMT)}"></div>
+        </div>
+        <div class="grid cols-3">
+          <div class="field"><label>Điều chỉnh</label><input type="text" inputmode="decimal" class="num-fmt" id="e-dieuChinh" value="${esc(r.dieuChinh)}"></div>
+          <div class="field"><label>Mượn/trả</label><input type="text" inputmode="decimal" class="num-fmt" id="e-muonTra" value="${esc(r.muonTra)}"></div>
+          <div class="field"><label>Nhập gỗ keo</label><input type="text" inputmode="decimal" class="num-fmt" id="e-nhapGo" value="${esc(r.nhapGo)}"></div>
+        </div>
+        <div class="hint-text">Các cột tính tự động (Cộng MT/BDMT, Độ ẩm, Tồn kho CK) sẽ tự cập nhật lại theo công thức sẵn có trong Sheet sau khi lưu.</div>
+      </div>
+      <div class="modal-foot"><button class="btn ghost" onclick="closeModal()">Hủy</button>
+        <button class="btn primary" onclick="saveHistoryEdit(${rowIndex})">💾 Lưu thay đổi</button></div>
+    `);
+    attachNumberFormatting_();
+  });
+}
+
+function saveHistoryEdit(rowIndex){
+  const g = id => document.getElementById(id).value;
+  const n = getNumFieldValue_;
+  const updates = {
+    donVi: g('e-donVi'), ngayTonKho: g('e-ngayTonKho'), tonDauNgay: n('e-tonDauNgay'),
+    hoaNhonMT: n('e-hoaNhonMT'), hoaNhonBDMT: n('e-hoaNhonBDMT'),
+    queSonMT: n('e-queSonMT'), queSonBDMT: n('e-queSonBDMT'),
+    daiHiepMT: n('e-daiHiepMT'), daiHiepBDMT: n('e-daiHiepBDMT'),
+    hakqnMT: n('e-hakqnMT'), hakqnBDMT: n('e-hakqnBDMT'),
+    tienSaMT: n('e-tienSaMT'), tienSaBDMT: n('e-tienSaBDMT'),
+    dungQuatMT: n('e-dungQuatMT'), dungQuatBDMT: n('e-dungQuatBDMT'),
+    dieuChinh: n('e-dieuChinh'), muonTra: n('e-muonTra'), nhapGo: n('e-nhapGo')
+  };
+  call('updateEntry', [rowIndex, updates], 'Đang lưu...').then(res => {
+    if (handleResult(res)) { closeModal(); loadHistory(); }
+  });
+}
+
+function confirmDeleteHistory(rowIndex){
+  if (!confirm('Xóa báo cáo này khỏi lịch sử? Hành động không thể hoàn tác.')) return;
+  call('deleteEntry', [rowIndex], 'Đang xóa...').then(res => handleResult(res, loadHistory));
+}
+
+/* ============================================================
+ * BÁO CÁO TỔNG HỢP (2 tab: theo khoảng thời gian tự tổng hợp, và theo
+ * đúng mẫu "Tonkho_Damgo" cho 1 ngày cụ thể - mục G ở đầu Code.gs)
+ * ============================================================ */
+function renderReport(){
+  const today = new Date();
+  const toISO = d => d.toISOString().slice(0,10);
+  document.getElementById('topbar-actions').innerHTML = `
+    <button class="btn" onclick="exportReportToExcel()">⬇️ Xuất Excel</button>
+    <button class="btn" onclick="exportReportToPdf()">🖨️ Xuất PDF</button>`;
+  const unitOptions = state.units.length ? state.units : [];
+  // THEO YÊU CẦU MỚI (mục L, v2026.8.17): ngày mặc định của báo cáo
+  // "Theo mẫu Tonkho_Damgo" là HÔM QUA (lùi 1 ngày so với hiện hành) -
+  // vì các đơn vị thường báo cáo cho ngày hôm trước, mặc định "hôm nay"
+  // hay bị trống dữ liệu ngay lần đầu mở báo cáo.
+  if (!state.tonkhoDamgoDate) {
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    state.tonkhoDamgoDate = toISO(yesterday);
+  }
+  if (!state.tonkhoDamgoMode) state.tonkhoDamgoMode = 'actual';
+  const c = document.getElementById('content');
+  c.innerHTML = `
+    <div class="card no-print" style="padding:8px;display:flex;gap:6px">
+      <button class="btn sm report-tab-btn ${state.reportTab==='period'?'primary':''}" data-tab="period" onclick="switchReportTab('period')">📅 Theo khoảng thời gian</button>
+      <button class="btn sm report-tab-btn ${state.reportTab==='tonkhodamgo'?'primary':''}" data-tab="tonkhodamgo" onclick="switchReportTab('tonkhodamgo')">📄 Theo mẫu Tonkho_Damgo</button>
+    </div>
+
+    <div id="report-period-section" class="${state.reportTab==='period'?'':'hidden'}">
+      <div class="card no-print">
+        <div class="grid cols-4">
+          <div class="field"><label>Đơn vị</label>
+            <select id="rp-donVi"><option value="">-- Tất cả --</option>${unitOptions.map(u=>`<option value="${esc(u)}">${esc(u)}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label>Từ ngày</label><input type="date" id="rp-from" value="${toISO(today)}"></div>
+          <div class="field"><label>Đến ngày</label><input type="date" id="rp-to" value="${toISO(today)}"></div>
+          <div class="field" style="display:flex;align-items:flex-end"><button class="btn primary" onclick="loadReport()">🔍 Xem báo cáo</button></div>
+        </div>
+        <div class="hint-text">Dữ liệu lấy từ Chitiettonkho (đã lọc trùng, mỗi Đơn vị+Ngày 1 bản ghi mới nhất). Tồn đầu kỳ lấy từ ngày sớm nhất trong khoảng lọc, Tồn cuối kỳ lấy từ ngày mới nhất trong khoảng lọc.</div>
+      </div>
+      <div class="card" id="report-wrap"><div class="empty"><div class="ic">📊</div>Chọn khoảng ngày rồi bấm "Xem báo cáo".</div></div>
+    </div>
+
+    <div id="report-tonkhodamgo-section" class="${state.reportTab==='tonkhodamgo'?'':'hidden'}">
+      <div class="card no-print">
+        <div class="grid cols-4">
+          <div class="field"><label>Ngày tồn kho báo cáo</label><input type="date" id="tkd-ngay" value="${esc(state.tonkhoDamgoDate)}"></div>
+          <div class="field"><label>Chế độ hiển thị</label>
+            <div style="display:flex;gap:6px">
+              <button class="btn sm tkd-mode-btn ${state.tonkhoDamgoMode==='actual'?'primary':''}" data-mode="actual" onclick="switchTonkhoDamgoMode('actual')">📋 Theo thực tế</button>
+              <button class="btn sm tkd-mode-btn ${state.tonkhoDamgoMode==='full'?'primary':''}" data-mode="full" onclick="switchTonkhoDamgoMode('full')">🧩 Đầy đủ số liệu</button>
+            </div>
+          </div>
+          <div class="field" style="display:flex;align-items:flex-end;gap:6px">
+            <button class="btn primary" onclick="loadTonkhoDamgoReport()">🔍 Xem báo cáo</button>
+            <button class="btn accent admin-only ${state.isAdmin?'':'hidden'}" onclick="guiBaoCaoTonkhoDamgoTelegramDotXuat()">📨 Gửi báo cáo Telegram</button>
+          </div>
+        </div>
+        <div class="hint-text">Dựng lại đúng cấu trúc bảng của sheet "Tonkho_Damgo" (NHÀ MÁY / KHO XUẤT HÀNG / ĐỊNH MỨC SX) cho 1 ngày cụ thể, dữ liệu lấy từ Chitiettonkho. "Theo thực tế" (mặc định) - đơn vị chưa báo cáo đúng ngày này hiển thị 0. "Đầy đủ số liệu" - đơn vị chưa báo cáo đúng ngày này tự lấy tạm số liệu ngày gần nhất trước đó, có ghi chú rõ ràng. Nút "Gửi báo cáo Telegram" (chỉ Admin) gửi ngay báo cáo của đúng ngày + chế độ đang xem vào Telegram (kèm 2 file PDF - Theo thực tế và Đầy đủ số liệu, mẫu cũ) - khác với ảnh tóm tắt Trang chủ (nút riêng ở Trang chủ > Công cụ Admin, chỉ gửi tự động 16h hoặc bấm thủ công ở đó).</div>
+      </div>
+      <div class="card" id="tkd-wrap"><div class="empty"><div class="ic">📄</div>Chọn ngày rồi bấm "Xem báo cáo".</div></div>
+    </div>`;
+
+  if (!state.units.length) call('getUnitList', [], null).then(list => { state.units = list; });
+  if (state.reportTab === 'tonkhodamgo' && document.getElementById('tkd-ngay').value) loadTonkhoDamgoReport();
+}
+
+function switchReportTab(tab){
+  state.reportTab = tab;
+  document.getElementById('report-period-section').classList.toggle('hidden', tab!=='period');
+  document.getElementById('report-tonkhodamgo-section').classList.toggle('hidden', tab!=='tonkhodamgo');
+  document.querySelectorAll('.report-tab-btn').forEach(b => b.classList.toggle('primary', b.dataset.tab===tab));
+  // SỬA LỖI (mục R, v2026.8.17): trước đây CHỈ tải lại báo cáo nếu chưa
+  // từng tải trong phiên làm việc (!state.tonkhoDamgoReport) - nên nếu
+  // người dùng đã xem báo cáo 1 lần, rồi qua Lịch Sử sửa số liệu ngày đó,
+  // rồi bấm lại tab này, vẫn hiện bản CŨ đã cache thay vì lấy lại dữ liệu
+  // mới từ Chitiettonkho. LUÔN tải lại mỗi khi vào tab này để đảm bảo
+  // luôn đúng dữ liệu mới nhất (chi phí gọi lại rất nhẹ - chỉ 1 ngày).
+  if (tab === 'tonkhodamgo') loadTonkhoDamgoReport();
+}
+
+/** Đổi chế độ hiển thị "Theo thực tế" / "Đầy đủ số liệu" cho báo cáo
+ * "Theo mẫu Tonkho_Damgo" (mục L) - tải lại báo cáo ngay theo chế độ mới. */
+function switchTonkhoDamgoMode(mode){
+  state.tonkhoDamgoMode = mode;
+  document.querySelectorAll('.tkd-mode-btn').forEach(b => b.classList.toggle('primary', b.dataset.mode===mode));
+  loadTonkhoDamgoReport();
+}
+
+/** Nút "Gửi báo cáo Telegram" (mục S, ở Trang chủ > Công cụ Admin) - gửi
+ * ĐỘT XUẤT (ngoài lịch 16h tự động) 1 ẢNH tóm tắt Trang chủ (số liệu MỚI
+ * NHẤT mỗi đơn vị, giống hệt đang xem trên màn hình) vào Telegram -
+ * KHÔNG còn cần chọn ngày/chế độ như báo cáo Tonkho_Damgo trước đây. Chỉ
+ * Admin thấy nút này (đã ẩn ở HTML qua class admin-only), nhưng vẫn
+ * kiểm tra lại quyền ở server (guiBaoCaoTelegramTuWebApp) - không tin
+ * riêng vào việc ẩn nút trên giao diện. */
+function guiBaoCaoTelegramDotXuat(){
+  if (!confirm('Gửi ảnh báo cáo tồn kho (giống Trang chủ, số liệu mới nhất mỗi đơn vị) vào Telegram ngay bây giờ?')) return;
+  call('guiBaoCaoTelegramTuWebApp', [], 'Đang gửi báo cáo Telegram...').then(res => handleResult(res));
+}
+
+/** Nút "Gửi báo cáo Telegram" ở trang Báo Cáo > Theo mẫu Tonkho_Damgo
+ * (mục U - KHÔI PHỤC LẠI mẫu gửi CŨ theo yêu cầu người dùng: 1 tin tóm
+ * tắt dạng chữ + 2 file PDF, cho ĐÚNG ngày + chế độ đang xem trên màn
+ * hình) - TÁCH BIỆT với guiBaoCaoTelegramDotXuat() ở Trang chủ (gửi ảnh,
+ * không tham số). Chỉ Admin thấy nút này (class admin-only), nhưng vẫn
+ * kiểm tra lại quyền ở server (guiBaoCaoTonkhoDamgoTelegramTuWebApp) -
+ * không tin riêng vào việc ẩn nút trên giao diện. */
+function guiBaoCaoTonkhoDamgoTelegramDotXuat(){
+  const ngayISO = (document.getElementById('tkd-ngay')||{}).value || '';
+  if (!ngayISO) { toast('Vui lòng chọn ngày báo cáo trước khi gửi.', 'warn'); return; }
+  const mode = state.tonkhoDamgoMode === 'full' ? 'full' : 'actual';
+  if (!confirm('Gửi báo cáo tồn kho ngày ' + ngayISO + ' (chế độ "' + (mode==='full'?'Đầy đủ số liệu':'Theo thực tế') + '", kèm 2 file PDF) vào Telegram ngay bây giờ?')) return;
+  call('guiBaoCaoTonkhoDamgoTelegramTuWebApp', [ngayISO, mode], 'Đang gửi báo cáo Telegram...').then(res => handleResult(res));
+}
+
+function loadReport(){
+  const donVi = document.getElementById('rp-donVi').value;
+  const f = document.getElementById('rp-from').value, t = document.getElementById('rp-to').value;
+  call('getReportSummary', [f, t, donVi], 'Đang tổng hợp báo cáo...').then(res => {
+    state.reportRows = res;
+    renderReportTable();
+  });
+}
+
+function renderReportTable(){
+  const wrap = document.getElementById('report-wrap');
+  const res = state.reportRows;
+  if (!res || !res.rows.length) { wrap.innerHTML = '<div class="empty"><div class="ic">📭</div>Không có dữ liệu trong khoảng ngày này.</div>'; return; }
+  const maxTon = Math.max(...res.rows.map(r=>r.tonCuoiKy), 1);
+
+  // Bảng tổng quan (giữ như cũ, có thêm Cộng MT/BDMT cuối kỳ - THEO YÊU
+  // CẦU MỚI v2026.8.6: trước đây thiếu, nhìn chỉ thấy số chung chung).
+  const overviewHtml = `<table><thead><tr>
+      <th>Đơn vị</th><th class="num">Số ngày đã báo cáo</th><th>Từ ngày</th><th>Đến ngày</th>
+      <th class="num">Tồn đầu kỳ</th><th class="num">Tồn cuối kỳ</th>
+      <th class="num">Cộng MT cuối kỳ</th><th class="num">Cộng BDMT cuối kỳ</th>
+      <th class="num">Độ ẩm cuối kỳ</th>
+      <th class="num">Nhập gỗ trong kỳ</th><th class="num">Mượn/trả trong kỳ</th>
+    </tr></thead><tbody>
+    ${res.rows.map(r => `<tr>
+      <td>${esc(r.donVi)}<div class="bar-wrap"><div class="bar-fill" style="width:${Math.max(2,r.tonCuoiKy/maxTon*100)}%"></div></div></td>
+      <td class="num">${r.soLanBaoCao}</td><td>${esc(r.tuNgay)}</td><td>${esc(r.denNgay)}</td>
+      <td class="num">${fmtNum(r.tonDauKy)}</td><td class="num">${fmtNum(r.tonCuoiKy)}</td>
+      <td class="num">${fmtNum(r.congMTCuoiKy)}</td><td class="num">${fmtNum(r.congBDMTCuoiKy)}</td>
+      <td class="num">${fmtPct(r.doAmCuoiKy)}</td>
+      <td class="num">${fmtNum(r.tongNhapGoTrongKy)}</td><td class="num">${fmtNum(r.tongMuonTraTrongKy)}</td>
+    </tr>`).join('')}
+    </tbody>
+    <tfoot><tr><td colspan="5" style="text-align:right">TỔNG CỘNG</td>
+      <td class="num">${fmtNum(res.tongTonCuoiKy)}</td>
+      <td class="num">${fmtNum(res.total.congMTCuoiKy)}</td><td class="num">${fmtNum(res.total.congBDMTCuoiKy)}</td>
+      <td></td>
+      <td class="num">${fmtNum(res.tongNhapGoTrongKy)}</td><td></td></tr></tfoot>
+    </table>`;
+
+  // Chi tiết KHO NHÀ MÁY và KHO XUẤT HÀNG (Tiên Sa + Dung Quất), cuối
+  // kỳ, đầy đủ MT/BDMT - THEO YÊU CẦU MỚI: báo cáo tổng hợp trước đây
+  // không có 2 bảng này nên "nhìn chỉ thấy chung".
+  const factoryCols = [
+    {key:'hoaNhonMTCuoiKy',label:'Hòa Nhơn MT'},{key:'hoaNhonBDMTCuoiKy',label:'Hòa Nhơn BDMT'},
+    {key:'queSonMTCuoiKy',label:'Quế Sơn MT'},{key:'queSonBDMTCuoiKy',label:'Quế Sơn BDMT'},
+    {key:'daiHiepMTCuoiKy',label:'Đại Hiệp MT'},{key:'daiHiepBDMTCuoiKy',label:'Đại Hiệp BDMT'},
+    {key:'hakqnMTCuoiKy',label:'HAKQN MT'},{key:'hakqnBDMTCuoiKy',label:'HAKQN BDMT'},
+    {key:'congMTCuoiKy',label:'Cộng MT'},{key:'congBDMTCuoiKy',label:'Cộng BDMT'}
+  ];
+  const warehouseCols = [
+    {key:'tienSaMTCuoiKy',label:'Kho Tiên Sa MT'},{key:'tienSaBDMTCuoiKy',label:'Kho Tiên Sa BDMT'},
+    {key:'dungQuatMTCuoiKy',label:'Kho Dung Quất MT'},{key:'dungQuatBDMTCuoiKy',label:'Kho Dung Quất BDMT'}
+  ];
+  const mkDetailTable = cols => `<table><thead><tr><th>Đơn vị</th>${cols.map(c=>`<th class="num">${esc(c.label)}</th>`).join('')}</tr></thead><tbody>
+    ${res.rows.map(r => `<tr><td>${esc(r.donVi)}</td>${cols.map(c=>`<td class="num">${fmtNum(r[c.key])}</td>`).join('')}</tr>`).join('')}
+    <tr style="font-weight:700;background:var(--moss-light)"><td>Tổng cộng</td>${cols.map(c=>`<td class="num">${fmtNum(res.total[c.key])}</td>`).join('')}</tr>
+    </tbody></table>`;
+
+  wrap.innerHTML = `
+    <div style="overflow-x:auto">${overviewHtml}</div>
+    <div class="section-title">Chi tiết Kho Nhà máy (cuối kỳ, theo từng nguồn MT/BDMT)</div>
+    <div style="overflow-x:auto">${mkDetailTable(factoryCols)}</div>
+    <div class="section-title">Chi tiết Kho Xuất Hàng (cuối kỳ - Tiên Sa + Dung Quất, MT/BDMT)</div>
+    <div style="overflow-x:auto">${mkDetailTable(warehouseCols)}</div>`;
+}
+
+/* ------------------------------------------------------------
+ * BÁO CÁO THEO MẪU "Tonkho_Damgo" (mục G ở đầu Code.gs)
+ * ------------------------------------------------------------ */
+function loadTonkhoDamgoReport(){
+  const ngayISO = (document.getElementById('tkd-ngay')||{}).value || '';
+  if (!ngayISO) { toast('Vui lòng chọn ngày báo cáo.', 'warn'); return; }
+  state.tonkhoDamgoDate = ngayISO;
+  const mode = state.tonkhoDamgoMode === 'full' ? 'full' : 'actual';
+  call('getTonkhoDamgoReport', [ngayISO, mode], 'Đang dựng báo cáo...').then(res => {
+    state.tonkhoDamgoReport = res;
+    renderTonkhoDamgoTable();
+  });
+}
+
+function renderTonkhoDamgoTable(){
+  const wrap = document.getElementById('tkd-wrap');
+  const res = state.tonkhoDamgoReport;
+  if (!wrap) return;
+  if (!res || !res.success) { wrap.innerHTML = `<div class="empty"><div class="ic">📭</div>${esc((res&&res.message)||'Không có dữ liệu.')}</div>`; return; }
+
+  const t1cols = [
+    {key:'hoaNhonMT',label:'Hòa Nhơn_MT'},{key:'queSonMT',label:'Quế Sơn_MT'},{key:'daiHiepMT',label:'Đại Hiệp_MT'},{key:'hakqnMT',label:'HAKQN_MT'},{key:'congMT',label:'Cộng MT'},
+    {key:'hoaNhonBDMT',label:'Hòa Nhơn_BDMT'},{key:'queSonBDMT',label:'Quế Sơn_BDMT'},{key:'daiHiepBDMT',label:'Đại Hiệp_BDMT'},{key:'hakqnBDMT',label:'HAKQN_BDMT'},{key:'congBDMT',label:'Cộng BDMT'}
+  ];
+  const t2cols = [
+    {key:'doAmHN',label:'Độ ẩm kho HN',pct:true},{key:'doAmQS',label:'Độ ẩm kho QS',pct:true},{key:'doAmDH',label:'Độ ẩm kho ĐH',pct:true},{key:'doAmQC',label:'Độ ẩm kho QC',pct:true},
+    {key:'doAm',label:'Độ ẩm TB',pct:true},{key:'doKho',label:'Độ khô TB',pct:true}
+  ];
+  const t3cols = [
+    {key:'tienSaMT',label:'Kho Tiên Sa_MT'},{key:'tienSaBDMT',label:'Kho Tiên Sa_BDMT'},{key:'doAmTienSa',label:'Độ ẩm_Tiên Sa',pct:true},{key:'doKhoTienSa',label:'Độ khô Tiên Sa',pct:true}
+  ];
+  const t3bcols = [
+    {key:'dungQuatMT',label:'Kho Dung Quất_MT'},{key:'dungQuatBDMT',label:'Kho Dung Quất_BDMT'},{key:'doAmDungQuat',label:'Độ ẩm_Dung Quất',pct:true},{key:'doKhoDungQuat',label:'Độ khô Dung Quất',pct:true}
+  ];
+  const t4cols = [
+    {key:'tonDauKy',label:'Tồn kho đầu kỳ'},{key:'tonCK',label:'Tồn kho CK'},{key:'muonTra',label:'Mượn/trả'},{key:'clDoAm',label:'CL độ ẩm'},{key:'nhapTrongKy',label:'Nhập trong kỳ MT'},{key:'dinhMuc',label:'Định mức',pct:true}
+  ];
+
+  const fmtCell = (c, v) => c.pct ? fmtPct(v) : fmtNum(v);
+  const mkTable = (cols, rows, total) => `<table><thead><tr><th>Đơn vị</th>${cols.map(c=>`<th class="num">${esc(c.label)}</th>`).join('')}</tr></thead><tbody>
+    ${rows.map(r => `<tr><td>${esc(r.donVi)}</td>${cols.map(c=>`<td class="num">${fmtCell(c, r[c.key])}</td>`).join('')}</tr>`).join('')}
+    <tr style="font-weight:700;background:var(--moss-light)"><td>Grand Total</td>${cols.map(c=>`<td class="num">${fmtCell(c, total[c.key])}</td>`).join('')}</tr>
+    </tbody></table>`;
+
+  // Ghi chú đơn vị chưa báo cáo đúng ngày (mục L) - nội dung khác nhau
+  // tùy chế độ hiển thị: "actual" luôn báo hiển thị 0 (đúng thực trạng),
+  // "full" tách riêng 2 trường hợp - đơn vị lấy được số liệu tạm (ghi rõ
+  // lấy của ngày nào) và đơn vị CHƯA TỪNG có dữ liệu (vẫn phải hiển thị
+  // 0 vì không có gì để lấy tạm).
+  let missingHtml = '';
+  if (res.missingUnits && res.missingUnits.length) {
+    const detail = res.missingUnitsDetail || res.missingUnits.map(u => ({donVi: u, usedDate: null}));
+    if (res.mode === 'full') {
+      const withFallback = detail.filter(d => d.usedDate);
+      const noFallback = detail.filter(d => !d.usedDate);
+      if (withFallback.length) {
+        const list = withFallback.map(d => `${esc(d.donVi)} (đang hiển thị số liệu ngày ${esc(d.usedDate)})`).join(', ');
+        missingHtml += `<div class="hint-text" style="background:var(--timber-light);color:#8C511F;padding:10px 12px;border-radius:8px;margin:0 0 10px 0">⚠️ Chưa có dữ liệu Chitiettonkho cho ngày ${esc(res.ngayDisplay)} ở đơn vị: ${list} - các dòng tương ứng đang hiển thị số liệu của ngày gần nhất trước đó (chế độ "Đầy đủ số liệu").</div>`;
+      }
+      if (noFallback.length) {
+        missingHtml += `<div class="hint-text" style="background:var(--danger-light);color:var(--danger);padding:10px 12px;border-radius:8px;margin:0 0 14px 0">⚠️ Đơn vị: ${noFallback.map(d=>esc(d.donVi)).join(', ')} CHƯA TỪNG có dữ liệu Chitiettonkho trước ngày ${esc(res.ngayDisplay)} - các dòng tương ứng đang hiển thị 0.</div>`;
+      }
+    } else {
+      missingHtml = `<div class="hint-text" style="background:var(--timber-light);color:#8C511F;padding:10px 12px;border-radius:8px;margin:0 0 14px 0">⚠️ Chưa có dữ liệu Chitiettonkho cho ngày ${esc(res.ngayDisplay)} ở đơn vị: ${res.missingUnits.map(esc).join(', ')} - các dòng tương ứng đang hiển thị 0.</div>`;
+    }
+  }
+
+  wrap.innerHTML = `
+    <div style="font-weight:700;font-size:14px;margin-bottom:14px">Ngày ${esc(res.ngayDisplay)}</div>
+    ${missingHtml}
+    <div style="color:var(--danger);font-weight:700;text-transform:uppercase;font-size:13px;margin:4px 0 8px 0">NHÀ MÁY</div>
+    <div style="overflow-x:auto">${mkTable(t1cols, res.table1, res.table1Total)}</div>
+    <div style="overflow-x:auto;margin-top:18px">${mkTable(t2cols, res.table2, res.table2Total)}</div>
+    <div style="color:var(--danger);font-weight:700;text-transform:uppercase;font-size:13px;margin:26px 0 8px 0">KHO XUẤT HÀNG</div>
+    <div style="font-weight:600;font-size:12.5px;color:var(--ink-soft);margin-bottom:6px">Kho Tiên Sa</div>
+    <div style="overflow-x:auto">${mkTable(t3cols, res.table3, res.table3Total)}</div>
+    <div style="font-weight:600;font-size:12.5px;color:var(--ink-soft);margin:18px 0 6px 0">Kho Dung Quất</div>
+    <div style="overflow-x:auto">${mkTable(t3bcols, res.table3b, res.table3bTotal)}</div>
+    <div style="color:var(--danger);font-weight:700;text-transform:uppercase;font-size:13px;margin:26px 0 8px 0">ĐỊNH MỨC SX</div>
+    <div style="overflow-x:auto">${mkTable(t4cols, res.table4, res.table4Total)}</div>
+  `;
+}
+
+/* ------------------------------------------------------------
+ * XUẤT EXCEL / PDF CHO BÁO CÁO TỔNG HỢP
+ * THEO YÊU CẦU MỚI (v2026.8.11): cả 2 tab của trang Báo Cáo (theo khoảng
+ * thời gian + theo mẫu Tonkho_Damgo) đều xuất được ra Excel và PDF, xuất
+ * đúng dữ liệu/bảng đang hiển thị trên màn hình theo bộ lọc hiện tại.
+ * - Excel: dùng thư viện SheetJS (đã nhúng qua thẻ <script> ở cuối
+ *   trang), gom mỗi <table> đang hiển thị thành 1 sheet riêng.
+ * - PDF: không dùng thư viện tạo PDF riêng (jsPDF mặc định không hiển
+ *   thị đúng dấu tiếng Việt nếu không nhúng thêm font) mà tận dụng hộp
+ *   thoại "In" có sẵn của trình duyệt (window.print), ẩn hết
+ *   sidebar/topbar/bộ lọc, chỉ để lại đúng bảng kết quả rồi cho người
+ *   dùng chọn "Lưu dưới dạng PDF" - vừa nhẹ vừa hiển thị tiếng Việt chuẩn.
+ * ------------------------------------------------------------ */
+function exportReportToExcel(){
+  if (typeof XLSX === 'undefined') { toast('Không tải được thư viện xuất Excel (kiểm tra kết nối mạng rồi thử lại).', 'err'); return; }
+  let wrap, sheetNames, fileNamePrefix;
+  if (state.reportTab === 'tonkhodamgo') {
+    wrap = document.getElementById('tkd-wrap');
+    sheetNames = ['Nha may (MT-BDMT)', 'Do am', 'Kho Tien Sa', 'Kho Dung Quat', 'Dinh muc'];
+    const modeSuffix = state.tonkhoDamgoMode === 'full' ? 'DayDuSoLieu' : 'ThucTe';
+    fileNamePrefix = `BaoCao_TonkhoDamgo_${state.tonkhoDamgoDate || ''}_${modeSuffix}`;
+  } else {
+    wrap = document.getElementById('report-wrap');
+    sheetNames = ['Tong quan', 'Kho Nha may', 'Kho Xuat hang'];
+    const f = (document.getElementById('rp-from')||{}).value || '';
+    const t = (document.getElementById('rp-to')||{}).value || '';
+    fileNamePrefix = `BaoCao_TongHop_${f}_${t}`;
+  }
+  const tables = wrap ? wrap.querySelectorAll('table') : [];
+  if (!tables.length) { toast('Chưa có dữ liệu báo cáo để xuất - vui lòng bấm "Xem báo cáo" trước.', 'warn'); return; }
+  const wb = XLSX.utils.book_new();
+  tables.forEach((tbl, i) => {
+    const ws = XLSX.utils.table_to_sheet(tbl);
+    XLSX.utils.book_append_sheet(wb, ws, (sheetNames[i] || `Bang ${i+1}`).slice(0, 31));
+  });
+  XLSX.writeFile(wb, `${fileNamePrefix}.xlsx`);
+}
+
+function exportReportToPdf(){
+  const wrap = document.getElementById(state.reportTab === 'tonkhodamgo' ? 'tkd-wrap' : 'report-wrap');
+  if (!wrap || !wrap.querySelector('table')) { toast('Chưa có dữ liệu báo cáo để xuất - vui lòng bấm "Xem báo cáo" trước.', 'warn'); return; }
+  document.body.classList.add('printing-report');
+  const cleanup = () => document.body.classList.remove('printing-report');
+  window.onafterprint = cleanup;
+  window.print();
+  // Dự phòng cho trình duyệt không bắn sự kiện onafterprint (hiếm gặp) -
+  // để thời gian đủ dài (2 phút) tránh gỡ class khi hộp thoại In vẫn
+  // đang mở (một số trình duyệt cập nhật preview theo thời gian thực).
+  setTimeout(cleanup, 120000);
+}
+
+/* ============================================================
+ * NHẬT KÝ (AUDIT)
+ * ============================================================ */
+function renderAudit(){
+  document.getElementById('topbar-actions').innerHTML = `<button class="btn" onclick="loadAudit()">↻ Làm mới</button>`;
+  const unitOptions = state.units.length ? state.units : [];
+  const c = document.getElementById('content');
+  c.innerHTML = `
+    <div class="card">
+      <div class="grid cols-2">
+        <div class="field"><label>Đơn vị</label>
+          <select id="ad-donVi"><option value="">-- Tất cả --</option>${unitOptions.map(u=>`<option value="${esc(u)}">${esc(u)}</option>`).join('')}</select>
+        </div>
+        <div class="field" style="display:flex;align-items:flex-end"><button class="btn primary" onclick="loadAudit()">🔍 Lọc</button></div>
+      </div>
+    </div>
+    <div class="card" id="audit-wrap"><div class="empty"><div class="ic">⏳</div>Đang tải...</div></div>`;
+  loadAudit();
+}
+
+function loadAudit(){
+  const donVi = (document.getElementById('ad-donVi')||{}).value || '';
+  call('getAuditLog', [{donVi}], 'Đang tải nhật ký...').then(res => {
+    const wrap = document.getElementById('audit-wrap');
+    if (!res.allowed) { wrap.innerHTML = '<div class="empty"><div class="ic">🔒</div>Chỉ Admin mới xem được Nhật ký.</div>'; return; }
+    if (!res.rows.length) { wrap.innerHTML = '<div class="empty"><div class="ic">📭</div>Chưa có bản ghi nào.</div>'; return; }
+    wrap.innerHTML = `<table><thead><tr><th>Thời gian</th><th>Email</th><th>Đơn vị</th><th>Ngày tồn kho</th><th>Lý do</th></tr></thead><tbody>
+      ${res.rows.map(r => `<tr><td>${esc(r.thoiGian)}</td><td>${esc(r.email)}</td><td>${esc(r.donVi)}</td><td>${esc(r.ngayTonKho)}</td><td>${esc(r.lyDo)}</td></tr>`).join('')}
+      </tbody></table>`;
+  });
+}
+
+/* ============================================================
+ * INIT
+ * ============================================================ */
+call('getDashboardStats', [], null).then(s => {
+  state.isAdmin = s.isAdmin;
+  applyAdminUI();
+});
+call('getUnitList', [], null).then(list => { state.units = list; });
+goTo('dashboard');
+</script>
+</body>
+</html>

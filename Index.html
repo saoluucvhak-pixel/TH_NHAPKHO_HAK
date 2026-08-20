@@ -7,9 +7,6 @@
   <title>Quản Lý Tồn Kho Dăm - HAK Group</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600;8..60,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
-  <!-- SheetJS - dùng để xuất Báo Cáo ra file Excel (.xlsx) từ các bảng HTML
-       đang hiển thị trên trang, xem hàm exportReportToExcel() bên dưới. -->
-  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.min.js"></script>
   <style>
     :root{
       --paper:#FAF7F1;
@@ -68,7 +65,8 @@
     .grid.cols-2{grid-template-columns:1fr 1fr;}
     .grid.cols-3{grid-template-columns:repeat(3,1fr);}
     .grid.cols-4{grid-template-columns:repeat(4,1fr);}
-    @media(max-width:900px){.grid.cols-2,.grid.cols-3,.grid.cols-4{grid-template-columns:1fr 1fr;}}
+    .grid.cols-5{grid-template-columns:repeat(5,1fr);}
+    @media(max-width:900px){.grid.cols-2,.grid.cols-3,.grid.cols-4,.grid.cols-5{grid-template-columns:1fr 1fr;}}
     @media(max-width:640px){
       body{flex-direction:column;}
       .sidebar{width:100%;flex:0 0 auto;height:auto;position:relative;padding:14px;}
@@ -76,7 +74,7 @@
       .nav-item{flex:0 0 auto;}
       .sidebar-footer{display:none;}
       .topbar,.content{padding-left:16px;padding-right:16px;}
-      .grid.cols-2,.grid.cols-3,.grid.cols-4{grid-template-columns:1fr;}
+      .grid.cols-2,.grid.cols-3,.grid.cols-4,.grid.cols-5{grid-template-columns:1fr;}
     }
 
     .stat{background:var(--white);border:1px solid var(--line);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow);}
@@ -124,6 +122,7 @@
     .badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;}
     .badge.ready{background:var(--moss-light);color:var(--moss);}
     .badge.pending{background:var(--timber-light);color:var(--timber);}
+    .badge.danger{background:var(--danger-light);color:var(--danger);}
     .badge.dot::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;}
 
     .empty{text-align:center;padding:50px 20px;color:var(--ink-soft);}
@@ -137,7 +136,7 @@
     .step.active .n{background:var(--timber);}
 
     #toast-wrap{position:fixed;bottom:22px;right:26px;z-index:999;display:flex;flex-direction:column;gap:8px;}
-    .toast{background:var(--forest);color:#fff;padding:12px 16px;border-radius:9px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.18);max-width:380px;display:flex;gap:10px;align-items:flex-start;animation:slidein .18s ease;}
+    .toast{background:var(--forest);color:#fff;padding:12px 16px;border-radius:9px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.18);max-width:380px;display:flex;gap:10px;align-items:flex-start;animation:slidein .18s ease;white-space:pre-line;}
     .toast.err{background:#7A2A18;}
     .toast.warn{background:#8C5A1E;}
     @keyframes slidein{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
@@ -204,6 +203,13 @@
       body.printing-report .no-print { display:none !important; }
       body.printing-report .content{ padding:0; }
       body.printing-report .card{ box-shadow:none; border:1px solid #ccc; }
+      /* THEO YÊU CẦU MỚI (v2026.8.17): các báo cáo có nhiều cột (Kho Nhà
+       * máy, Kho Xuất Hàng...) bị tràn/cắt cột khi in khổ dọc mặc định -
+       * đặt khổ NGANG (landscape) làm mặc định cho MỌI lần xuất PDF từ
+       * trang Báo Cáo (chỉ áp dụng lúc in, nhờ đặt trong @media print) -
+       * hầu hết trình duyệt tự đọc @page size và chọn sẵn "Landscape"
+       * trong hộp thoại In, người dùng vẫn có thể tự đổi lại nếu muốn. */
+      @page { size: landscape; margin: 10mm; }
     }
   </style>
 </head>
@@ -221,10 +227,11 @@
       <div class="nav-item" data-page="dashboard"><span class="ic">🏠</span> Trang chủ</div>
       <div class="nav-sep"></div>
       <div class="nav-item" data-page="create"><span class="ic">➕</span> Nhập Tồn Kho</div>
-      <div class="nav-item" data-page="history"><span class="ic">📋</span> Lịch Sử</div>
+      <div class="nav-item" data-page="history"><span class="ic">📋</span> Lịch Sử <span class="nav-badge hidden" id="nav-choduyet-badge">0</span></div>
       <div class="nav-item" data-page="report"><span class="ic">📊</span> Báo Cáo Tổng Hợp</div>
       <div class="nav-sep"></div>
       <div class="nav-item admin-only hidden" data-page="audit"><span class="ic">🛡️</span> Nhật Ký (Audit)</div>
+      <div class="nav-item admin-only hidden" data-page="settings"><span class="ic">⚙️</span> Cài đặt</div>
     </nav>
     <div class="sidebar-footer">Quản Lý Tồn Kho Dăm · v2026.8</div>
   </aside>
@@ -251,6 +258,7 @@
 const state = {
   page: 'dashboard',
   isAdmin: false,
+  myAccess: null, // {isAdmin, donViNhapSua:[], donViXem:[], coQuyenGi} - xem getMyAccess() (mục X)
   units: [],
   createData: null,
   createChildTab: 'nhamay',
@@ -261,8 +269,30 @@ const state = {
   tonkhoDamgoDate: '',
   tonkhoDamgoReport: null,
   // "actual" (Theo thực tế, mặc định) hoặc "full" (Đầy đủ số liệu) - mục L
-  tonkhoDamgoMode: 'actual'
+  tonkhoDamgoMode: 'actual',
+  // --- Cài đặt (mục X) ---
+  settingsTab: 'admin', // 'admin' | 'phanquyen' | 'dieukien'
+  phanQuyenList: [],
+  dieuKienDuyetList: [],
+  // THEO YÊU CẦU MỚI (mục AD, v2026.8.18): Lịch Sử mặc định LUÔN load
+  // sẵn các dòng "Chờ duyệt" (trước đây mặc định TẮT, chỉ Admin thấy
+  // được checkbox này) - áp dụng cho MỌI người dùng, không riêng Admin,
+  // để người nhập cũng thấy ngay báo cáo của mình đang chờ duyệt.
+  historyChiChoDuyet: true,
+  soLuongChoDuyet: 0 // số dòng "Chờ duyệt" (đã lọc theo phạm vi Đơn vị được phép) - hiện badge ở menu Lịch Sử
 };
+
+/** Danh sách Đơn vị hiển thị ở các dropdown lọc/nhập - Admin thấy TẤT CẢ
+ * (như cũ), người dùng thường CHỈ thấy Đơn vị mình có quyền (Nhập/Sửa
+ * hoặc Xem) - THEO YÊU CẦU MỚI (mục X, v2026.8.17). */
+function myUnitOptions(chiNhapSua){
+  if (state.isAdmin) return state.units.length ? state.units : [];
+  const acc = state.myAccess;
+  if (!acc) return [];
+  if (chiNhapSua) return acc.donViNhapSua || [];
+  const set = new Set([...(acc.donViNhapSua||[]), ...(acc.donViXem||[])]);
+  return Array.from(set);
+}
 
 function resetCreateData(){
   state.createData = {
@@ -306,7 +336,38 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, m => ({'&':'&am
  * Áp dụng cho các input có class "num-fmt" (type="text" thay vì
  * type="number", vì input number của trình duyệt KHÔNG cho phép hiển
  * thị dấu phân cách hàng nghìn).
+ * SỬA LẠI (mục AL, v2026.8.18) - THEO PHẢN HỒI người dùng: "format khi
+ * BLUR" ở trên khiến lúc ĐANG GÕ DỞ ô hoàn toàn KHÔNG có dấu phân cách
+ * -> rất dễ gõ nhầm số 0 (VD gõ nhầm 100000 thay vì 10000) vì không đếm
+ * được chữ số bằng mắt. Bổ sung THÊM 1 lớp format NGAY TRONG LÚC GÕ
+ * (listener 'input', xem liveFormatNumberInputValue_/attachNumberFormatting_
+ * bên dưới) - KHÁC bản v2026.8.10 (chỉ né được vấn đề "nhảy con trỏ" bằng
+ * cách bỏ hẳn format lúc gõ): bản này VẪN thêm dấu chấm phân cách nghìn
+ * SAU MỖI PHÍM GÕ nhưng tự tính lại đúng vị trí con trỏ (đếm số ký tự
+ * "có nghĩa" - chữ số/dấu phẩy thập phân/dấu trừ - đứng trước con trỏ ở
+ * giá trị CŨ, rồi đặt lại con trỏ ngay sau đúng số ký tự đó ở giá trị
+ * MỚI đã format) để con trỏ KHÔNG bị nhảy lung tung. Không ép đủ 2 số
+ * thập phân khi đang gõ dở (chỉ ép khi BLUR như cũ) để không cản việc
+ * gõ tiếp phần thập phân.
  * ============================================================ */
+/** Thêm dấu chấm phân cách hàng nghìn vào phần nguyên của 1 chuỗi đang
+ * gõ dở (raw, có thể chưa hợp lệ hoàn toàn) - dùng cho live-format lúc
+ * gõ (KHÁC formatNumberInputValue_ ở dưới: hàm đó dùng lúc BLUR, ép đủ 2
+ * số thập phân qua toLocaleString; hàm này giữ NGUYÊN phần thập phân
+ * người dùng đang gõ, chỉ thêm dấu chấm phân cách cho phần nguyên). */
+function liveFormatNumberInputValue_(raw){
+  if (raw === '' || raw == null) return '';
+  const neg = /^\s*-/.test(raw);
+  // Chỉ giữ chữ số + dấu phẩy (thập phân vi-VN) - bỏ hết dấu chấm cũ
+  // (phân cách nghìn, sẽ tự thêm lại) và ký tự khác.
+  const s = String(raw).replace(/[^0-9,]/g, '');
+  const commaIdx = s.indexOf(',');
+  let intPart, decPart;
+  if (commaIdx === -1) { intPart = s; decPart = null; }
+  else { intPart = s.slice(0, commaIdx); decPart = s.slice(commaIdx + 1).replace(/,/g, ''); }
+  const withSep = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return (neg ? '-' : '') + withSep + (decPart !== null ? ',' + decPart : (commaIdx !== -1 ? ',' : ''));
+}
 function parseFormattedNumber_(str){
   if (str === null || str === undefined) return NaN;
   str = String(str).trim();
@@ -344,6 +405,29 @@ function attachNumberFormatting_(root){
       el.value = isNaN(n) ? '' : String(n);
       el.select();
     });
+    // mục AL (v2026.8.18) - MỚI: live-format NGAY LÚC GÕ (không chỉ lúc
+    // blur như trước) để người dùng nhìn thấy dấu phân cách nghìn ngay
+    // khi đang nhập, tránh gõ nhầm số 0 (VD 100000 thay vì 10000) - GIỮ
+    // ĐÚNG vị trí con trỏ bằng cách đếm số ký tự "có nghĩa" (chữ số/dấu
+    // phẩy/dấu trừ) đứng trước con trỏ ở giá trị CŨ rồi đặt lại con trỏ
+    // ở đúng vị trí tương ứng trong giá trị MỚI đã format.
+    el.addEventListener('input', () => {
+      const oldVal = el.value;
+      const oldPos = el.selectionStart;
+      const isKept = ch => /[0-9,\-]/.test(ch);
+      let keptBefore = 0;
+      for (let i = 0; i < oldPos; i++) { if (isKept(oldVal[i])) keptBefore++; }
+      const newVal = liveFormatNumberInputValue_(oldVal);
+      if (newVal === oldVal) return; // không đổi gì -> khỏi đụng con trỏ
+      el.value = newVal;
+      let count = 0, newPos = newVal.length;
+      for (let i = 0; i < newVal.length; i++) {
+        if (isKept(newVal[i])) count++;
+        if (count >= keptBefore) { newPos = i + 1; break; }
+      }
+      if (keptBefore === 0) newPos = 0;
+      el.setSelectionRange(newPos, newPos);
+    });
     el.addEventListener('blur', () => {
       el.value = formatNumberInputValue_(el.value);
     });
@@ -372,7 +456,11 @@ function toast(message, type){
   el.className = 'toast' + (type==='err' ? ' err' : type==='warn' ? ' warn' : '');
   el.textContent = message;
   wrap.appendChild(el);
-  setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .3s'; setTimeout(()=>el.remove(), 300); }, 4200);
+  // THEO YÊU CẦU MỚI (mục AD, v2026.8.18): thông báo "Chờ duyệt"/lý do
+  // giờ có thể nhiều dòng, dài hơn - cho hiện LÂU HƠN mức mặc định
+  // (4.2s) để người nhập kịp đọc, đặc biệt cảnh báo (warn)/lỗi (err).
+  const ms = (type === 'warn' || type === 'err') ? Math.max(4200, Math.min(14000, message.length * 90)) : 4200;
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .3s'; setTimeout(()=>el.remove(), 300); }, ms);
 }
 
 function handleResult(res, onSuccess){
@@ -406,7 +494,8 @@ const PAGES = {
   create:    {title:'Nhập Tồn Kho Hàng Ngày', desc:'Báo cáo tồn kho dăm cho 1 đơn vị / 1 ngày', render: renderCreate},
   history:   {title:'Lịch Sử Nhập Kho', desc:'Tra cứu, xem chi tiết, sửa/xóa (Admin) các báo cáo đã nộp', render: renderHistory},
   report:    {title:'Báo Cáo Tổng Hợp', desc:'Tổng hợp tồn kho theo đơn vị trong khoảng thời gian', render: renderReport},
-  audit:     {title:'Nhật Ký (Audit)', desc:'Lịch sử các lần bị từ chối / ghi đè bởi Admin', render: renderAudit}
+  audit:     {title:'Nhật Ký (Audit)', desc:'Lịch sử các lần bị từ chối / ghi đè bởi Admin', render: renderAudit},
+  settings:  {title:'Cài đặt', desc:'Công cụ Admin · Phân quyền · Điều kiện kiểm tra duyệt', render: renderSettings}
 };
 
 document.getElementById('nav').addEventListener('click', e => {
@@ -438,16 +527,28 @@ function renderDashboard(){
   <div class="stat" style="margin-bottom:16px">
     <div class="label">🪵 Tổng lượng gỗ keo nhập trong ngày (ngày gần nhất mỗi đơn vị)</div>
     <div class="value timber" id="s-nhapgo">–</div>
-    <div class="hint">MT (tấn tươi) - cộng dồn bản ghi gần nhất của cả 4 đơn vị</div>
+    <div class="hint" id="s-nhapgo-hint">MT (tấn tươi) - cộng dồn bản ghi gần nhất của cả 4 đơn vị</div>
+    <div class="hint" id="s-nhapgo-bdmt-hint">≈ BDMT: – (quy đổi theo Độ khô TB Kho Nhà máy cùng ngày)</div>
   </div>
-  <div class="grid cols-4" id="dash-stats">
-    <div class="stat"><div class="label">Tổng tồn kho cuối (4 đơn vị)</div><div class="value" id="s-total">–</div><div class="hint">MT (tấn tươi)</div></div>
-    <div class="stat"><div class="label">Đơn vị chưa báo cáo hôm nay</div><div class="value danger" id="s-missing">–</div><div class="hint">/ ${state.units.length || 4} đơn vị</div></div>
-    <div class="stat"><div class="label">Số ngày đã ghi nhận (Chitiettonkho)</div><div class="value timber" id="s-count">–</div><div class="hint" id="s-count-hint">đơn vị × ngày, đã lọc trùng</div></div>
+  <div class="grid cols-5" id="dash-stats">
+    <div class="stat"><div class="label" id="s-total-label">Tổng tồn kho cuối (4 đơn vị)</div><div class="value" id="s-total">–</div><div class="hint">MT (tấn tươi)</div><div class="hint" id="s-total-bdmt-hint">≈ BDMT: –</div></div>
+    <div class="stat"><div class="label">Độ ẩm trung bình</div><div class="value" id="s-doam-tb">–</div><div class="hint">theo khối lượng tồn kho (4 đơn vị)</div></div>
+    <div class="stat"><div class="label">Đơn vị chưa báo cáo hôm nay</div><div class="value danger" id="s-missing">–</div><div class="hint" id="s-missing-hint">/ ${state.units.length || 4} đơn vị</div></div>
+    <div class="stat"><div class="label">Số lượng nhà máy vét bãi</div><div class="value timber" id="s-vetbai">–</div><div class="hint" id="s-vetbai-hint">bản ghi gần nhất mỗi đơn vị</div></div>
     <div class="stat"><div class="label">Vai trò của bạn</div><div class="value" id="s-role" style="font-size:16px">–</div><div class="hint">${esc((window.SCRIPT_EMAIL||''))}</div></div>
   </div>
+  <div id="dash-vetbai-detail"></div>
   <div class="section-title">Tình trạng theo đơn vị</div>
   <div class="grid cols-4" id="dash-units"><div class="empty"><div class="ic">⏳</div>Đang tải...</div></div>
+
+  <div class="card" style="margin-top:18px">
+    <h3>Định mức tiêu hao hiện tại áp dụng <span class="sub">Định mức THỰC TẾ tính được từ báo cáo gần nhất mỗi nhà máy</span></h3>
+    <div class="grid cols-3">
+      <div id="dash-dinhmuc-wrap"><div class="empty"><div class="ic">⏳</div>Đang tải...</div></div>
+      <div id="dash-cang-wrap"><div class="empty"><div class="ic">⏳</div>Đang tải...</div></div>
+      <div id="dash-candoi-wrap"><div class="empty"><div class="ic">⏳</div>Đang tải...</div></div>
+    </div>
+  </div>
 
   <div class="card" style="margin-top:18px">
     <h3>Kho Nhà máy <span class="sub">bản ghi mới nhất mỗi đơn vị, theo từng nguồn MT/BDMT</span></h3>
@@ -464,25 +565,45 @@ function renderDashboard(){
       <button class="btn primary" onclick="goTo('create')">➕ Nhập báo cáo tồn kho hôm nay</button>
       <button class="btn" onclick="goTo('report')">📊 Xem báo cáo tổng hợp</button>
     </div>
-  </div>
-  <div class="card admin-only hidden" id="dash-admin-card">
-    <h3>Công cụ Admin</h3>
-    <p class="hint-text">Chitiettonkho là bảng dữ liệu đã lọc trùng (mỗi Đơn vị+Ngày chỉ 1 dòng, tự động lấy lần nộp mới nhất) - dùng nút này nếu nghi ngờ Chitiettonkho bị lệch so với Form Responses 1, hoặc để lấp đầy dữ liệu lịch sử ngay sau khi triển khai lần đầu.</p>
-    <button class="btn accent" onclick="doRebuildChitiet()">🔄 Đồng bộ lại Chitiettonkho từ đầu</button>
-    <p class="hint-text" style="margin-top:12px">Bot Telegram tự động gửi 1 ảnh tóm tắt (giống hệt Trang chủ này) vào lúc 16h hàng ngày (trừ Chủ nhật). Dùng nút dưới đây để gửi thử/gửi gấp ngoài lịch.</p>
-    <button class="btn accent" onclick="guiBaoCaoTelegramDotXuat()">📨 Gửi báo cáo Telegram</button>
   </div>`;
 
   call('getDashboardStats', [], 'Đang tải dữ liệu...').then(s => {
     state.isAdmin = s.isAdmin;
     applyAdminUI();
     document.getElementById('s-total').textContent = fmtNum(s.tongTonCK);
+    // THEO YÊU CẦU MỚI (mục AF, v2026.8.18): thêm BDMT cho "Tổng tồn kho"
+    // + "Nhập gỗ keo trong ngày" + thẻ "Độ ẩm trung bình" (tính theo
+    // trọng số khối lượng tồn kho - xem getDashboardStats server).
+    document.getElementById('s-total-bdmt-hint').textContent = '≈ BDMT: ' + fmtNum(s.tongTonCKBDMT) + ' BDMT';
+    document.getElementById('s-doam-tb').textContent = fmtPct(s.doAmTrungBinh);
     document.getElementById('s-nhapgo').textContent = fmtNum(s.tongNhapGo) + ' MT';
+    document.getElementById('s-nhapgo-bdmt-hint').textContent = '≈ BDMT: ' + fmtNum(s.tongNhapGoBDMT) + ' BDMT (quy đổi theo Độ khô TB Kho Nhà máy cùng ngày)';
     document.getElementById('s-missing').textContent = s.soDonViChuaBaoCaoHomNay;
-    document.getElementById('s-count').textContent = s.tongSoDongChitiet;
-    document.getElementById('s-count-hint').textContent = `đã lọc trùng · ${s.tongSoDongFormRaw} lượt nộp thô ở Form`;
+    // THEO YÊU CẦU MỚI (mục AB, v2026.8.17): mẫu số "/ X đơn vị" phải
+    // khớp đúng số Đơn vị NGƯỜI NÀY được phép xem (s.units - đã lọc ở
+    // server theo Phân quyền), KHÔNG phải tổng số Đơn vị toàn công ty
+    // (state.units - luôn đủ 4, dùng cho dropdown của Admin).
+    document.getElementById('s-missing-hint').textContent = '/ ' + (s.units.length || 0) + ' đơn vị';
+    document.getElementById('s-total-label').textContent = 'Tổng tồn kho cuối (' + (s.units.length || 0) + ' đơn vị)';
+    document.getElementById('s-nhapgo-hint').textContent = 'MT (tấn tươi) - cộng dồn bản ghi gần nhất của ' + (s.units.length || 0) + ' đơn vị';
+    // THEO YÊU CẦU MỚI (mục W, v2026.8.17): thẻ "Số ngày đã ghi nhận" đổi
+    // thành "Số lượng nhà máy vét bãi" + khối chi tiết từng đơn vị đã vét
+    // bãi (thời điểm, KL ước tính còn lại, chênh lệch) ngay dưới hàng KPI.
+    document.getElementById('s-vetbai').textContent = s.soLuongVetBai + ' / ' + s.units.length;
+    document.getElementById('s-vetbai-hint').textContent = s.soLuongVetBai > 0 ? 'xem chi tiết bên dưới' : 'chưa có đơn vị nào vét bãi';
     document.getElementById('s-role').textContent = s.isAdmin ? '🔑 Admin' : '👤 Nhân viên';
-    if (s.isAdmin) document.getElementById('dash-admin-card').classList.remove('hidden');
+
+    const vbWrap = document.getElementById('dash-vetbai-detail');
+    if (s.vetBaiDetail && s.vetBaiDetail.length) {
+      vbWrap.innerHTML = `<div class="card" style="margin-top:0">
+        <h3>🔍 Chi tiết vét bãi <span class="sub">bản ghi gần nhất mỗi đơn vị</span></h3>
+        <table><thead><tr><th>Đơn vị</th><th>Ngày gần nhất</th><th>Thời điểm vét bãi</th><th class="num">KL ước tính còn lại (MT)</th><th class="num">Chênh lệch sau vét bãi (MT)</th></tr></thead><tbody>
+        ${s.vetBaiDetail.map(d => `<tr><td>${esc(d.donVi)}</td><td>${esc(d.ngayGanNhat)}</td><td>${esc(d.thoiDiemVetBai)||'–'}</td><td class="num">${fmtNum(d.klUocTinhConLai)}</td><td class="num">${fmtNum(d.chenhLechVetBai)}</td></tr>`).join('')}
+        </tbody></table>
+      </div>`;
+    } else {
+      vbWrap.innerHTML = '';
+    }
 
     const wrap = document.getElementById('dash-units');
     if (!s.units.length) { wrap.innerHTML = '<div class="empty"><div class="ic">📭</div>Chưa có dữ liệu đơn vị nào.</div>'; return; }
@@ -494,9 +615,78 @@ function renderDashboard(){
           : '<span class="badge pending dot">Chưa báo cáo hôm nay</span>'}</div>
         <div class="urow"><span>Ngày gần nhất</span><b>${esc(u.ngayGanNhat)||'–'}</b></div>
         <div class="urow"><span>Tồn kho cuối (MT)</span><b>${fmtNum(u.tonCK)}</b></div>
-        <div class="urow"><span>Nhập gỗ keo (ngày gần nhất)</span><b>${fmtNum(u.nhapGo)} MT</b></div>
+        <div class="urow"><span>Nhập gỗ keo (ngày gần nhất)</span><b>${fmtNum(u.nhapGo)} MT / ${fmtNum(u.nhapGoBDMT)} BDMT</b></div>
         <div class="urow"><span>Độ ẩm</span><b>${fmtPct(u.doAm)}</b></div>
       </div>`).join('');
+
+    // Mục AG/AJ/AK (v2026.8.18): "Định mức tiêu hao hiện tại áp dụng tại
+    // các nhà máy" (THEO XÁC NHẬN người dùng: dùng Định mức THỰC TẾ tính
+    // được từ báo cáo gần nhất mỗi nhà máy - COL.DINH_MUC, KHÔNG phải
+    // khoảng cấu hình ở "Điều kiện duyệt"). mục AK/AM: THEO YÊU CẦU MỚI,
+    // GỘP LẠI 1 thẻ DUY NHẤT, mỗi đơn vị 1 dòng "urow" (tên đơn vị -
+    // Định mức % với Độ ẩm % (ngày báo cáo)). mục AM (v2026.8.18): xếp
+    // CHUNG 1 hàng "grid cols-3" với "Kho xuất hàng"/"Cân đối kho xuất
+    // hàng" trong CÙNG 1 khối card (bỏ khối "Độ ẩm trung bình nhà máy"
+    // riêng vì trùng lặp với thẻ KPI "Độ ẩm trung bình" đầu Trang chủ) -
+    // bổ sung thêm Độ ẩm (u.doAm) vào cùng dòng Định mức theo yêu cầu.
+    const dmWrap = document.getElementById('dash-dinhmuc-wrap');
+    dmWrap.innerHTML = s.units.length ? `
+      <div class="unit-card">
+        <div class="uname">Định mức tiêu hao hiện tại áp dụng (${s.units.length} đơn vị)</div>
+        ${s.units.map(u => `<div class="urow" style="align-items:flex-start;gap:10px"><span style="white-space:nowrap">${esc(u.donVi)}</span><b>${fmtPct(u.dinhMuc)} với độ ẩm ${fmtPct(u.doAm)} (ngày ${esc(u.ngayGanNhat)||'–'})</b></div>`).join('')}
+      </div>` : '<div class="empty"><div class="ic">📭</div>Chưa có dữ liệu.</div>';
+
+    // mục AH/AI/AJ/AK/AM (v2026.8.18): ĐỔI TÊN "Tồn kho tại Cảng" ->
+    // "Kho xuất hàng" (khớp tên dùng ở BOT Telegram, mục AI) - GỘP LẠI 1
+    // thẻ DUY NHẤT, 2 dòng "urow" (Kho Tiên Sa / Kho Dung Quất), KHÔNG
+    // còn dòng "Tổng cộng" riêng (đã có ở thẻ KPI "Tổng tồn kho" đầu
+    // Trang chủ). mục AM: THEO YÊU CẦU MỚI, BỎ Độ ẩm - chỉ còn % Độ khô
+    // (KHÔNG còn chữ nhãn "Độ khô", chỉ hiện số %) ngay sau BDMT.
+    // Độ khô vẫn là TRUNG BÌNH CỘNG đơn giản trên đơn vị có tồn đúng kho
+    // đó (doKhoTienSaTB/doKhoDungQuatTB, mục AH).
+    const cangRows = [
+      { label: 'Kho Tiên Sa', mt: s.khoTotal.tienSaMT, bdmt: s.khoTotal.tienSaBDMT, doKho: s.doKhoTienSaTB },
+      { label: 'Kho Dung Quất', mt: s.khoTotal.dungQuatMT, bdmt: s.khoTotal.dungQuatBDMT, doKho: s.doKhoDungQuatTB }
+    ];
+    document.getElementById('dash-cang-wrap').innerHTML = `
+      <div class="unit-card">
+        <div class="uname">Kho xuất hàng</div>
+        ${cangRows.map(r => `<div class="urow" style="align-items:flex-start;gap:10px"><span style="white-space:nowrap">${esc(r.label)}</span><b>${fmtNum(r.mt)} MT / ${fmtNum(r.bdmt)} BDMT — ${fmtPct(r.doKho)}</b></div>`).join('')}
+      </div>`;
+
+    // mục AH/AI/AJ/AK/AM (v2026.8.18): ĐỔI TÊN "Cân đối xuất hàng" ->
+    // "Cân đối kho xuất hàng" - GỘP theo TỪNG KHO (Kho Tiên Sa / Kho
+    // Dung Quất) - CỘNG TỔNG "Điều chỉnh MT"/"Điều chỉnh BDMT" của TẤT CẢ
+    // nhà máy có cân đối ĐÚNG ngày báo kho (c.coCanDoi === true) và
+    // c.kho khớp đúng Kho đó (xem computeCanDoiBDMT_/kho ghi trong
+    // CanDoiBDMT: giá trị CHỈ có thể là "Kho Tiên Sa" hoặc "Kho Dung
+    // Quất"). mục AM: BỎ chữ nhãn "Điều chỉnh" (chỉ còn "MT .../ BDMT
+    // ..."). Đơn vị CHƯA cân đối đúng ngày báo kho -> liệt kê tên ở dòng
+    // ghi chú cuối thẻ (không cộng vào tổng), để KHÔNG lặng lẽ ẩn thông
+    // tin thiếu.
+    const cdWrap = document.getElementById('dash-candoi-wrap');
+    const cdList = s.canDoiBDMTList || [];
+    if (!cdList.length) {
+      cdWrap.innerHTML = '<div class="empty"><div class="ic">📭</div>Chưa có dữ liệu đơn vị nào.</div>';
+    } else {
+      const cdByKho = { 'Kho Tiên Sa': { mt: 0, bdmt: 0 }, 'Kho Dung Quất': { mt: 0, bdmt: 0 } };
+      const cdChuaCanDoi = [];
+      cdList.forEach(c => {
+        if (c.coCanDoi && cdByKho[c.kho]) {
+          cdByKho[c.kho].mt += Number(c.dieuChinhMT) || 0;
+          cdByKho[c.kho].bdmt += Number(c.dieuChinhBDMT) || 0;
+        } else if (!c.coCanDoi) {
+          cdChuaCanDoi.push(c.donVi);
+        }
+      });
+      cdWrap.innerHTML = `
+        <div class="unit-card">
+          <div class="uname">Cân đối kho xuất hàng (cộng tổng ${cdList.length} đơn vị)</div>
+          <div class="urow" style="align-items:flex-start;gap:10px"><span style="white-space:nowrap">Kho Tiên Sa</span><b>MT ${fmtNum(cdByKho['Kho Tiên Sa'].mt)} / BDMT ${fmtNum(cdByKho['Kho Tiên Sa'].bdmt)}</b></div>
+          <div class="urow" style="align-items:flex-start;gap:10px"><span style="white-space:nowrap">Kho Dung Quất</span><b>MT ${fmtNum(cdByKho['Kho Dung Quất'].mt)} / BDMT ${fmtNum(cdByKho['Kho Dung Quất'].bdmt)}</b></div>
+          ${cdChuaCanDoi.length ? `<div class="urow" style="align-items:flex-start;gap:10px"><span class="badge pending dot">Chưa cân đối xuất hàng</span><b>${esc(cdChuaCanDoi.join(', '))}</b></div>` : ''}
+        </div>`;
+    }
 
     // Kho Nhà máy / Kho Xuất Hàng (bản ghi mới nhất mỗi đơn vị) - THEO
     // YÊU CẦU MỚI (v2026.8.7): bổ sung breakdown theo từng kho ngay ở
@@ -525,8 +715,300 @@ function renderDashboard(){
 function doRebuildChitiet(){
   if (!confirm('Đồng bộ lại TOÀN BỘ Chitiettonkho từ Form Responses 1?\nSẽ ghi đè dữ liệu hiện có trong Chitiettonkho (không ảnh hưởng Form Responses 1).')) return;
   call('rebuildAllChitietTonKho', [], 'Đang đồng bộ lại Chitiettonkho...').then(res => {
-    handleResult(res, () => renderDashboard());
+    handleResult(res, () => renderSettings());
   });
+}
+
+/** Mở file Google Sheet gốc đứng sau Web App (mục AA, v2026.8.17) - chỉ
+ * Admin gọi được (kiểm tra lại ở server, không tin riêng giao diện). */
+function moFileGocDuLieu(){
+  call('getSpreadsheetUrl', [], 'Đang lấy link...').then(res => {
+    if (!res.allowed || !res.url) { toast('Chỉ Admin mới mở được file dữ liệu gốc.', 'err'); return; }
+    window.open(res.url, '_blank');
+  });
+}
+
+/** Gửi email thử nghiệm (mục AE, v2026.8.18) - dùng khi có người báo
+ * không nhận được email cảnh báo/duyệt, để rà xem MailApp có gửi được
+ * không và lỗi thật (nếu có) là gì. */
+function guiEmailThuNghiem_(){
+  const to = document.getElementById('settings-email-test').value.trim();
+  if (!to) { toast('Vui lòng nhập email cần gửi thử.', 'warn'); return; }
+  call('guiEmailThuNghiem', [to], 'Đang gửi email thử...').then(res => handleResult(res));
+}
+
+/* ============================================================
+ * CÀI ĐẶT (mục X, v2026.8.17) - CHỈ ADMIN
+ * 3 tab con: Công cụ Admin (chuyển từ Trang chủ qua) / Phân quyền /
+ * Điều kiện kiểm tra duyệt.
+ * ============================================================ */
+function renderSettings(){
+  const c = document.getElementById('content');
+  c.innerHTML = `
+    <div class="card no-print" style="padding:8px;display:flex;gap:6px">
+      <button class="btn sm settings-tab-btn ${state.settingsTab==='admin'?'primary':''}" data-tab="admin" onclick="switchSettingsTab('admin')">🛠️ Công cụ Admin</button>
+      <button class="btn sm settings-tab-btn ${state.settingsTab==='phanquyen'?'primary':''}" data-tab="phanquyen" onclick="switchSettingsTab('phanquyen')">🔐 Phân quyền</button>
+      <button class="btn sm settings-tab-btn ${state.settingsTab==='dieukien'?'primary':''}" data-tab="dieukien" onclick="switchSettingsTab('dieukien')">📐 Điều kiện kiểm tra duyệt</button>
+    </div>
+
+    <div id="settings-admin-section" class="${state.settingsTab==='admin'?'':'hidden'}">
+      <div class="card">
+        <h3>Công cụ Admin</h3>
+        <p class="hint-text">Chitiettonkho là bảng dữ liệu đã lọc trùng (mỗi Đơn vị+Ngày chỉ 1 dòng, tự động lấy lần nộp mới nhất, loại bỏ báo cáo đang "Chờ duyệt"/"Từ chối") - dùng nút này nếu nghi ngờ Chitiettonkho bị lệch so với Form Responses 1, hoặc để lấp đầy dữ liệu lịch sử ngay sau khi triển khai lần đầu.</p>
+        <button class="btn accent" onclick="doRebuildChitiet()">🔄 Đồng bộ lại Chitiettonkho từ đầu</button>
+        <p class="hint-text" style="margin-top:12px">Bot Telegram tự động gửi 1 ảnh tóm tắt (giống hệt Trang chủ) vào lúc 16h hàng ngày (trừ Chủ nhật). Dùng nút dưới đây để gửi thử/gửi gấp ngoài lịch - mặc định gửi số liệu MỚI NHẤT của mỗi đơn vị; nếu cần gửi lại báo cáo cho 1 ngày cũ (khác hôm nay), chọn đúng "Ngày lập báo cáo" bên dưới trước khi gửi.</p>
+        <div class="grid cols-2" style="max-width:520px">
+          <div class="field"><label>Ngày lập báo cáo</label><input type="date" id="settings-tele-ngay" value="${todayISO_()}"></div>
+          <div class="field" style="display:flex;align-items:flex-end;gap:6px">
+            <button class="btn accent" onclick="guiBaoCaoTelegramDotXuat()">📨 Gửi báo cáo Telegram</button>
+          </div>
+        </div>
+        <p class="hint-text" style="margin-top:6px">Để nguyên ngày hôm nay = gửi số liệu mới nhất (hành vi mặc định như trước). Đổi sang ngày khác = gửi lại báo cáo TÍNH ĐẾN đúng ngày đó (bỏ qua báo cáo nộp sau ngày này).</p>
+        <p class="hint-text" style="margin-top:12px">Mở trực tiếp file Google Sheet gốc đứng sau Web App này (Form Responses 1, Chitiettonkho, PhanQuyen, DieuKienDuyet, Audit...) khi cần tra soát sâu hơn giao diện cho phép.</p>
+        <button class="btn" onclick="moFileGocDuLieu()">📂 Mở file dữ liệu gốc (Google Sheet)</button>
+        <p class="hint-text" style="margin-top:12px">Nếu có người báo KHÔNG nhận được email cảnh báo/duyệt, dùng nút dưới đây gửi 1 email thử tới đúng địa chỉ đó - báo lỗi THẬT ngay trên màn hình (không bị nuốt lỗi âm thầm như email tự động) để biết chính xác vì sao (hết quota MailApp trong ngày, sai địa chỉ...). Các lần gửi email tự động bị lỗi cũng được ghi lại vào Nhật Ký (Audit), người gửi ghi "(HỆ THỐNG)".</p>
+        <div class="grid cols-2" style="max-width:520px">
+          <div class="field"><label>Email cần gửi thử</label><input type="text" id="settings-email-test" placeholder="ten@congty.com"></div>
+          <div class="field" style="display:flex;align-items:flex-end;gap:6px">
+            <button class="btn" onclick="guiEmailThuNghiem_()">✉️ Gửi email thử nghiệm</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="settings-phanquyen-section" class="${state.settingsTab==='phanquyen'?'':'hidden'}">
+      <div class="card">
+        <h3>Thêm / Sửa phân quyền</h3>
+        <p class="hint-text">Mỗi email cần ít nhất 1 dòng ở đây mới dùng được hệ thống (email chưa có dòng nào bị CHẶN HẲN). "Nhập, sửa" tự động bao gồm quyền Xem. "Admin" là toàn quyền mọi Đơn vị, không cần chọn Đơn vị. Khi THÊM MỚI (không phải đang Sửa 1 dòng), có thể chọn NHIỀU Đơn vị cùng lúc (giữ Ctrl/Cmd để chọn nhiều) - hệ thống tự tạo riêng 1 dòng phân quyền cho mỗi Đơn vị đã chọn, cùng 1 Quyền.</p>
+        <div class="grid cols-4">
+          <div class="field"><label>Email</label><input type="text" id="pq-email" placeholder="ten@congty.com"></div>
+          <div class="field"><label>Quyền</label>
+            <select id="pq-quyen" onchange="togglePhanQuyenDonViField()">
+              <option value="nhap_sua">1. Nhập, sửa</option>
+              <option value="xem">2. Xem</option>
+              <option value="admin">3. Admin (toàn quyền)</option>
+            </select>
+          </div>
+          <div class="field" id="pq-donvi-field"><label>Đơn vị <span class="hint" id="pq-donvi-hint">(giữ Ctrl/Cmd để chọn nhiều)</span></label>
+            <select id="pq-donVi" multiple size="4">${(state.units.length?state.units:[]).map(u=>`<option value="${esc(u)}">${esc(u)}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label>Ghi chú</label><input type="text" id="pq-ghiChu" placeholder="(tùy chọn)"></div>
+        </div>
+        <input type="hidden" id="pq-rowIndex" value="">
+        <button class="btn primary" onclick="savePhanQuyenRow()">💾 Lưu phân quyền</button>
+        <button class="btn ghost" id="pq-cancel-btn" style="display:none" onclick="resetPhanQuyenForm()">Hủy sửa</button>
+      </div>
+      <div class="card" id="phanquyen-wrap"><div class="empty"><div class="ic">⏳</div>Đang tải...</div></div>
+    </div>
+
+    <div id="settings-dieukien-section" class="${state.settingsTab==='dieukien'?'':'hidden'}">
+      <div class="card">
+        <h3>Cấu hình Điều kiện kiểm tra duyệt</h3>
+        <p class="hint-text">Sau khi nộp báo cáo, hệ thống tìm đúng dòng cấu hình khớp Đơn vị + có khoảng "Từ ngày-Đến ngày" chứa đúng Ngày tồn kho của báo cáo đó. Nếu "Định mức" tính được (cột có sẵn ở báo cáo Tonkho_Damgo) nằm NGOÀI khoảng Tối thiểu-Tối đa của dòng đó, hệ thống tự gửi email cảnh báo "báo cáo chưa khớp định mức, đề nghị báo cáo lại" cho người nộp + Admin (không chặn lưu báo cáo). THEO YÊU CẦU MỚI: định mức KHÔNG cố định mãi mãi - 1 Đơn vị có thể có NHIỀU dòng cho các giai đoạn khác nhau. Để trống "Từ ngày"/"Đến ngày" = không giới hạn quá khứ/tương lai tương ứng. Ngày nào không rơi vào khoảng nào đã cấu hình thì KHÔNG bị kiểm tra.</p>
+        <div class="grid cols-4">
+          <div class="field"><label>Đơn vị</label>
+            <select id="dk-donVi">${(state.units.length?state.units:[]).map(u=>`<option value="${esc(u)}">${esc(u)}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label>Từ ngày (để trống = không giới hạn)</label><input type="date" id="dk-tuNgay"></div>
+          <div class="field"><label>Đến ngày (để trống = không giới hạn)</label><input type="date" id="dk-denNgay"></div>
+          <div class="field"></div>
+          <div class="field"><label>Định mức tối thiểu (%)</label><input type="text" inputmode="decimal" id="dk-min" placeholder="VD: 90"></div>
+          <div class="field"><label>Định mức tối đa (%)</label><input type="text" inputmode="decimal" id="dk-max" placeholder="VD: 105"></div>
+          <div class="field" style="display:flex;align-items:flex-end;gap:6px">
+            <button class="btn primary" onclick="saveDieuKienDuyetRow()">💾 Lưu</button>
+            <button class="btn ghost" id="dk-cancel-btn" style="display:none" onclick="resetDieuKienDuyetForm()">Hủy sửa</button>
+          </div>
+        </div>
+        <input type="hidden" id="dk-rowIndex" value="">
+      </div>
+      <div class="card" id="dieukien-wrap"><div class="empty"><div class="ic">⏳</div>Đang tải...</div></div>
+    </div>`;
+
+  if (!state.units.length) call('getUnitList', [], null).then(list => { state.units = list; renderSettings(); });
+  if (state.settingsTab === 'phanquyen') loadPhanQuyen();
+  if (state.settingsTab === 'dieukien') loadDieuKienDuyet();
+}
+
+function switchSettingsTab(tab){
+  state.settingsTab = tab;
+  document.getElementById('settings-admin-section').classList.toggle('hidden', tab!=='admin');
+  document.getElementById('settings-phanquyen-section').classList.toggle('hidden', tab!=='phanquyen');
+  document.getElementById('settings-dieukien-section').classList.toggle('hidden', tab!=='dieukien');
+  document.querySelectorAll('.settings-tab-btn').forEach(b => b.classList.toggle('primary', b.dataset.tab===tab));
+  if (tab === 'phanquyen') loadPhanQuyen();
+  if (tab === 'dieukien') loadDieuKienDuyet();
+}
+
+function togglePhanQuyenDonViField(){
+  const quyen = document.getElementById('pq-quyen').value;
+  document.getElementById('pq-donvi-field').style.display = quyen === 'admin' ? 'none' : '';
+}
+
+function resetPhanQuyenForm(){
+  document.getElementById('pq-email').value = '';
+  document.getElementById('pq-ghiChu').value = '';
+  document.getElementById('pq-quyen').value = 'nhap_sua';
+  document.getElementById('pq-rowIndex').value = '';
+  togglePhanQuyenDonViField();
+  document.getElementById('pq-cancel-btn').style.display = 'none';
+}
+
+function loadPhanQuyen(){
+  call('getPhanQuyenList', [], 'Đang tải phân quyền...').then(res => {
+    if (!res.allowed) { document.getElementById('phanquyen-wrap').innerHTML = '<div class="empty"><div class="ic">🔒</div>Chỉ Admin mới xem được.</div>'; return; }
+    state.phanQuyenList = res.rows;
+    renderPhanQuyenTable();
+  });
+}
+
+function renderPhanQuyenTable(){
+  const wrap = document.getElementById('phanquyen-wrap');
+  if (!wrap) return;
+  const list = state.phanQuyenList;
+  if (!list.length) { wrap.innerHTML = '<div class="empty"><div class="ic">📭</div>Chưa có phân quyền nào - hệ thống đang CHẶN HẲN mọi email không nằm trong danh sách Admin gốc.</div>'; return; }
+  const quyenLabel = q => q==='admin' ? '<span class="badge ready dot">3. Admin</span>' : (q==='nhap_sua' ? '<span class="badge ready dot">1. Nhập, sửa</span>' : '<span class="badge pending dot">2. Xem</span>');
+  wrap.innerHTML = `<table><thead><tr><th>Email</th><th>Đơn vị</th><th>Quyền</th><th>Ghi chú</th><th>Cập nhật lúc</th><th>Cập nhật bởi</th><th></th></tr></thead><tbody>
+    ${list.map(r => `<tr>
+      <td>${esc(r.email)}</td><td>${esc(r.donVi)||'(tất cả)'}</td><td>${quyenLabel(r.quyen)}</td>
+      <td>${esc(r.ghiChu)}</td><td>${esc(r.capNhatLuc)}</td><td>${esc(r.capNhatBoi)}</td>
+      <td style="white-space:nowrap">
+        <button class="btn sm ghost" onclick="editPhanQuyenRow(${r.rowIndex})">Sửa</button>
+        <button class="btn sm danger" onclick="deletePhanQuyenRow(${r.rowIndex})">Xóa</button>
+      </td>
+    </tr>`).join('')}
+    </tbody></table>`;
+}
+
+function editPhanQuyenRow(rowIndex){
+  const r = state.phanQuyenList.find(x => x.rowIndex === rowIndex);
+  if (!r) return;
+  document.getElementById('pq-email').value = r.email;
+  document.getElementById('pq-quyen').value = r.quyen;
+  document.getElementById('pq-ghiChu').value = r.ghiChu;
+  document.getElementById('pq-rowIndex').value = r.rowIndex;
+  togglePhanQuyenDonViField();
+  const pqDonViEl = document.getElementById('pq-donVi');
+  Array.from(pqDonViEl.options).forEach(o => { o.selected = !!r.donVi && o.value === r.donVi; });
+  document.getElementById('pq-cancel-btn').style.display = '';
+  window.scrollTo(0,0);
+}
+
+function savePhanQuyenRow(){
+  const rowIndex = document.getElementById('pq-rowIndex').value || null;
+  const email = document.getElementById('pq-email').value.trim();
+  const quyen = document.getElementById('pq-quyen').value;
+  const ghiChu = document.getElementById('pq-ghiChu').value.trim();
+  if (!email) { toast('Vui lòng nhập Email.', 'warn'); return; }
+
+  // Đang sửa 1 dòng có sẵn, hoặc quyền = admin -> lưu như cũ (1 Đơn vị hoặc rỗng)
+  if (rowIndex || quyen === 'admin') {
+    const donViSel = document.getElementById('pq-donVi');
+    const donVi = quyen === 'admin' ? '' : (donViSel.value || '');
+    const payload = { rowIndex, email, quyen, donVi, ghiChu };
+    call('luuPhanQuyen', [payload], 'Đang lưu...').then(res => {
+      handleResult(res, () => { resetPhanQuyenForm(); loadPhanQuyen(); });
+    });
+    return;
+  }
+
+  // Thêm mới, không phải admin -> cho phép chọn nhiều Đơn vị, mỗi Đơn vị 1 dòng riêng
+  const donViList = Array.from(document.getElementById('pq-donVi').selectedOptions).map(o => o.value);
+  if (!donViList.length) { toast('Vui lòng chọn ít nhất 1 Đơn vị.', 'warn'); return; }
+
+  (async () => {
+    showLoading('Đang lưu...');
+    try {
+      for (const donVi of donViList) {
+        const payload = { rowIndex: null, email, quyen, donVi, ghiChu };
+        const res = await call('luuPhanQuyen', [payload], null);
+        if (!res || res.success === false) {
+          toast((res && res.message) || ('Lỗi khi lưu Đơn vị "' + donVi + '"'), 'err');
+          hideLoading();
+          return;
+        }
+      }
+      hideLoading();
+      toast('Đã lưu phân quyền cho ' + donViList.length + ' đơn vị.', 'ok');
+      resetPhanQuyenForm();
+      loadPhanQuyen();
+    } catch (err) {
+      hideLoading();
+      toast('Lỗi: ' + (err && err.message ? err.message : err), 'err');
+    }
+  })();
+}
+
+function deletePhanQuyenRow(rowIndex){
+  if (!confirm('Xóa dòng phân quyền này?')) return;
+  call('xoaPhanQuyen', [rowIndex], 'Đang xóa...').then(res => handleResult(res, () => loadPhanQuyen()));
+}
+
+function loadDieuKienDuyet(){
+  call('getDieuKienDuyetList', [], 'Đang tải...').then(list => {
+    state.dieuKienDuyetList = list;
+    renderDieuKienDuyetTable();
+  });
+}
+
+function renderDieuKienDuyetTable(){
+  const wrap = document.getElementById('dieukien-wrap');
+  if (!wrap) return;
+  const list = state.dieuKienDuyetList;
+  if (!list.length) { wrap.innerHTML = '<div class="empty"><div class="ic">📭</div>Chưa có Đơn vị nào được cấu hình - chưa kiểm tra định mức cho Đơn vị nào.</div>'; return; }
+  // Sắp theo Đơn vị rồi Từ ngày để dễ nhìn các giai đoạn liên tiếp của
+  // cùng 1 Đơn vị (THEO YÊU CẦU MỚI - nhiều dòng/Đơn vị theo giai đoạn).
+  const sorted = list.slice().sort((a,b) => a.donVi.localeCompare(b.donVi) || (a.tuNgayISO||'').localeCompare(b.tuNgayISO||''));
+  wrap.innerHTML = `<table><thead><tr><th>Đơn vị</th><th>Từ ngày</th><th>Đến ngày</th><th class="num">Tối thiểu (%)</th><th class="num">Tối đa (%)</th><th>Cập nhật lúc</th><th></th></tr></thead><tbody>
+    ${sorted.map(r => `<tr>
+      <td>${esc(r.donVi)}</td><td>${esc(r.tuNgayDisplay)||'(không giới hạn)'}</td><td>${esc(r.denNgayDisplay)||'(không giới hạn)'}</td>
+      <td class="num">${fmtNum(r.minPct)}</td><td class="num">${fmtNum(r.maxPct)}</td><td>${esc(r.capNhatLuc)}</td>
+      <td style="white-space:nowrap">
+        <button class="btn sm ghost" onclick="editDieuKienDuyetRow(${r.rowIndex})">Sửa</button>
+        <button class="btn sm danger" onclick="deleteDieuKienDuyetRow(${r.rowIndex})">Xóa</button>
+      </td>
+    </tr>`).join('')}
+    </tbody></table>`;
+}
+
+function resetDieuKienDuyetForm(){
+  document.getElementById('dk-tuNgay').value = '';
+  document.getElementById('dk-denNgay').value = '';
+  document.getElementById('dk-min').value = '';
+  document.getElementById('dk-max').value = '';
+  document.getElementById('dk-rowIndex').value = '';
+  document.getElementById('dk-cancel-btn').style.display = 'none';
+}
+
+function editDieuKienDuyetRow(rowIndex){
+  const r = state.dieuKienDuyetList.find(x => x.rowIndex === rowIndex);
+  if (!r) return;
+  document.getElementById('dk-donVi').value = r.donVi;
+  document.getElementById('dk-tuNgay').value = r.tuNgayISO || '';
+  document.getElementById('dk-denNgay').value = r.denNgayISO || '';
+  document.getElementById('dk-min').value = r.minPct;
+  document.getElementById('dk-max').value = r.maxPct;
+  document.getElementById('dk-rowIndex').value = r.rowIndex;
+  document.getElementById('dk-cancel-btn').style.display = '';
+  window.scrollTo(0,0);
+}
+
+function saveDieuKienDuyetRow(){
+  const payload = {
+    rowIndex: document.getElementById('dk-rowIndex').value || null,
+    donVi: document.getElementById('dk-donVi').value,
+    tuNgay: document.getElementById('dk-tuNgay').value || '',
+    denNgay: document.getElementById('dk-denNgay').value || '',
+    minPct: getNumFieldValue_('dk-min'),
+    maxPct: getNumFieldValue_('dk-max')
+  };
+  call('luuDieuKienDuyet', [payload], 'Đang lưu...').then(res => {
+    handleResult(res, () => { resetDieuKienDuyetForm(); loadDieuKienDuyet(); });
+  });
+}
+
+function deleteDieuKienDuyetRow(rowIndex){
+  if (!confirm('Xóa điều kiện kiểm tra duyệt này?')) return;
+  call('xoaDieuKienDuyet', [rowIndex], 'Đang xóa...').then(res => handleResult(res, () => loadDieuKienDuyet()));
 }
 
 /* ============================================================
@@ -557,7 +1039,16 @@ const CREATE_CHILD_TABS = [
 function renderCreate(){
   const c = document.getElementById('content');
   const d = state.createData;
-  const unitOptions = (state.units.length?state.units:['HAK (Bà Nà)','CNHAK (QS)','Đại Hiệp (Đại Lộc)','HAKQN (QS Trung)']);
+  // THEO YÊU CẦU MỚI (mục X, v2026.8.17): người dùng thường chỉ được
+  // chọn Đơn vị mình có quyền "Nhập, sửa" (donViNhapSua) - Admin vẫn
+  // thấy đủ 4 đơn vị như cũ.
+  const unitOptions = state.isAdmin
+    ? (state.units.length?state.units:['HAK (Bà Nà)','CNHAK (QS)','Đại Hiệp (Đại Lộc)','HAKQN (QS Trung)'])
+    : myUnitOptions(true);
+  if (!state.isAdmin && !unitOptions.length) {
+    c.innerHTML = `<div class="card"><div class="empty"><div class="ic">🔒</div>Bạn không có quyền Nhập/Sửa cho Đơn vị nào. Liên hệ Admin để được cấp quyền.</div></div>`;
+    return;
+  }
   if (!CREATE_CHILD_TABS.some(t => t.key === state.createChildTab)) state.createChildTab = 'nhamay';
 
   c.innerHTML = `
@@ -971,6 +1462,7 @@ function submitCreate(){
   const loadingMsg = state.createData.isEditingExisting ? 'Đang cập nhật báo cáo...' : 'Đang lưu báo cáo mới...';
   call('submitInventoryEntry', [payload], loadingMsg).then(res => {
     handleResult(res, r => {
+      loadSoLuongChoDuyet(); // mục AD: báo cáo mới có thể vừa vào/ra trạng thái Chờ duyệt
       if (r && r.candoiResult) { showCanDoiBDMTResult_(r.candoiResult); }
       else { resetCreateData(); goTo('dashboard'); }
     });
@@ -1026,17 +1518,29 @@ function showCanDoiBDMTResult_(r){
  * ============================================================ */
 function renderHistory(){
   document.getElementById('topbar-actions').innerHTML = `<button class="btn" onclick="loadHistory()">↻ Làm mới</button>`;
-  const unitOptions = state.units.length ? state.units : [];
+  // THEO YÊU CẦU MỚI (mục X, v2026.8.17): người dùng thường chỉ thấy Đơn
+  // vị mình có quyền (Nhập/Sửa hoặc Xem) - Admin thấy đủ.
+  const unitOptions = state.isAdmin ? (state.units.length ? state.units : []) : myUnitOptions(false);
+  // THEO YÊU CẦU MỚI (mục AB, v2026.8.17): mặc định chọn SẴN Đơn vị
+  // được phân quyền thay vì để "-- Tất cả --" - vì người dùng thường
+  // chỉ quan tâm/được cấp đúng 1 Đơn vị, chọn sẵn cho đỡ phải bấm thêm.
+  // Chỉ áp dụng khi CHỈ có đúng 1 Đơn vị được phép (nếu được nhiều Đơn
+  // vị thì vẫn để "Tất cả" - đã tự lọc đúng phạm vi được phép ở server).
+  const defaultDonVi = (!state.isAdmin && unitOptions.length === 1) ? unitOptions[0] : '';
   const c = document.getElementById('content');
   c.innerHTML = `
     <div class="card">
       <div class="grid cols-4">
         <div class="field"><label>Đơn vị</label>
-          <select id="h-donVi"><option value="">-- Tất cả --</option>${unitOptions.map(u=>`<option value="${esc(u)}">${esc(u)}</option>`).join('')}</select>
+          <select id="h-donVi"><option value="" ${defaultDonVi?'':'selected'}>-- Tất cả --</option>${unitOptions.map(u=>`<option value="${esc(u)}" ${u===defaultDonVi?'selected':''}>${esc(u)}</option>`).join('')}</select>
         </div>
         <div class="field"><label>Từ ngày</label><input type="date" id="h-from" value="${todayISO_()}"></div>
         <div class="field"><label>Đến ngày</label><input type="date" id="h-to" value="${todayISO_()}"></div>
         <div class="field" style="display:flex;align-items:flex-end"><button class="btn primary" onclick="loadHistory()">🔍 Lọc</button></div>
+      </div>
+      <div style="margin-top:10px;display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="h-choDuyet" ${state.historyChiChoDuyet?'checked':''} onchange="toggleHistoryChoDuyet()">
+        <label style="margin:0" for="h-choDuyet">🔔 Chỉ hiện báo cáo "Chờ duyệt" (lệch đầu kỳ/lệch định mức, bỏ qua bộ lọc ngày ở trên) - đang MẶC ĐỊNH BẬT</label>
       </div>
     </div>
     <div class="card" id="history-wrap"><div class="empty"><div class="ic">⏳</div>Đang tải...</div></div>`;
@@ -1045,11 +1549,21 @@ function renderHistory(){
   loadHistory();
 }
 
+function toggleHistoryChoDuyet(){
+  state.historyChiChoDuyet = document.getElementById('h-choDuyet').checked;
+  loadHistory();
+}
+
 function loadHistory(){
   const filters = {
     donVi: (document.getElementById('h-donVi')||{}).value || '',
     fromDate: (document.getElementById('h-from')||{}).value || '',
-    toDate: (document.getElementById('h-to')||{}).value || ''
+    toDate: (document.getElementById('h-to')||{}).value || '',
+    // THEO YÊU CẦU MỚI (mục AD, v2026.8.18): trước đây chỉ Admin dùng
+    // được bộ lọc này - giờ áp dụng cho MỌI người dùng (server đã tự
+    // giới hạn đúng phạm vi Đơn vị được phép ở getHistoryList, không lộ
+    // thêm dữ liệu gì so với các bộ lọc khác).
+    chiChoDuyet: state.historyChiChoDuyet
   };
   state.historyFilters = filters;
   call('getHistoryList', [filters], 'Đang tải lịch sử...').then(list => {
@@ -1058,24 +1572,38 @@ function loadHistory(){
   });
 }
 
+function trangThaiDuyetBadge_(r){
+  // THEO YÊU CẦU MỚI (mục X, v2026.8.17): trạng thái duyệt được ưu tiên
+  // hiển thị TRƯỚC "Đang áp dụng/Đã bị thay thế" - vì báo cáo "Chờ
+  // duyệt"/"Từ chối" KHÔNG BAO GIỜ là bản chính thức trong Chitiettonkho
+  // (xem syncChitietTonKhoForKey_), dễ gây hiểu lầm nếu chỉ hiện nhãn cũ.
+  if (r.trangThaiDuyet === 'Chờ duyệt') return '<span class="badge pending dot">⏳ Chờ duyệt</span>';
+  if (r.trangThaiDuyet === 'Từ chối') return '<span class="badge danger dot">❌ Từ chối</span>';
+  if (r.trangThaiDuyet === 'Đã duyệt') return '<span class="badge ready dot">✅ Đã duyệt</span> ' + (r.isLatest ? '<span class="badge ready dot">Đang áp dụng</span>' : '<span class="badge pending dot">Đã bị thay thế</span>');
+  return r.isLatest ? '<span class="badge ready dot">Đang áp dụng</span>' : '<span class="badge pending dot">Đã bị thay thế</span>';
+}
+
 function renderHistoryTable(){
   const wrap = document.getElementById('history-wrap');
   const list = state.historyList;
   if (!list.length) { wrap.innerHTML = '<div class="empty"><div class="ic">📭</div>Không có báo cáo nào khớp bộ lọc.</div>'; return; }
-  wrap.innerHTML = `<div class="hint-text" style="margin-bottom:10px">"Đang áp dụng" = bản ghi này hiện đang được dùng làm dữ liệu chính thức trong Chitiettonkho cho (Đơn vị+Ngày) của nó. "Đã bị thay thế" = có 1 lần nộp SAU đó cho cùng Đơn vị+Ngày, nên bản này chỉ còn giá trị tra soát.</div>
+  wrap.innerHTML = `<div class="hint-text" style="margin-bottom:10px">"Đang áp dụng" = bản ghi này hiện đang được dùng làm dữ liệu chính thức trong Chitiettonkho cho (Đơn vị+Ngày) của nó. "Đã bị thay thế" = có 1 lần nộp SAU đó cho cùng Đơn vị+Ngày, nên bản này chỉ còn giá trị tra soát. "Chờ duyệt" = báo cáo lệch đầu kỳ và/hoặc lệch định mức, CHƯA tính vào Chitiettonkho/Dashboard/Báo cáo cho tới khi Admin duyệt.</div>
   <table><thead><tr>
       <th>Ngày tồn kho</th><th>Đơn vị</th><th>Người nộp</th><th>Trạng thái</th>
       <th class="num">Tồn đầu (MT)</th><th class="num">Cộng MT</th><th class="num">Cộng BDMT</th><th class="num">Tồn CK (MT)</th><th class="num">Độ ẩm</th><th></th>
     </tr></thead><tbody>
     ${list.map(r => `<tr>
       <td>${esc(r.ngayTonKho)}</td><td>${esc(r.donVi)}</td><td>${esc(r.email)}</td>
-      <td>${r.isLatest ? '<span class="badge ready dot">Đang áp dụng</span>' : '<span class="badge pending dot">Đã bị thay thế</span>'}</td>
+      <td>${trangThaiDuyetBadge_(r)}${(r.lyDoChoDuyet && (r.trangThaiDuyet==='Chờ duyệt'||r.trangThaiDuyet==='Từ chối')) ? `<div class="hint-text" style="margin-top:4px;max-width:260px">${esc(r.lyDoChoDuyet)}</div>` : ''}</td>
       <td class="num">${fmtNum(r.tonDauNgay)}</td><td class="num">${fmtNum(r.congMT)}</td><td class="num">${fmtNum(r.congBDMT)}</td>
       <td class="num">${fmtNum(r.tonCK)}</td><td class="num">${fmtPct(r.doAm)}</td>
       <td style="white-space:nowrap">
         <button class="btn sm ghost" onclick="viewHistoryDetail(${r.rowIndex})">Xem</button>
         <button class="btn sm ghost admin-only ${state.isAdmin?'':'hidden'}" onclick="editHistoryEntry(${r.rowIndex})">Sửa</button>
         <button class="btn sm danger admin-only ${state.isAdmin?'':'hidden'}" onclick="confirmDeleteHistory(${r.rowIndex})">Xóa</button>
+        ${(state.isAdmin && r.trangThaiDuyet === 'Chờ duyệt') ? `
+        <button class="btn sm accent" onclick="duyetBaoCaoLichSu(${r.rowIndex}, true)">✅ Duyệt</button>
+        <button class="btn sm danger" onclick="duyetBaoCaoLichSu(${r.rowIndex}, false)">❌ Từ chối</button>` : ''}
       </td>
     </tr>`).join('')}
     </tbody></table>`;
@@ -1090,6 +1618,12 @@ function viewHistoryDetail(rowIndex){
         <div class="kv"><span class="k">Ngày tồn kho</span><span class="v">${esc(r.ngayTonKho)}</span></div>
         <div class="kv"><span class="k">Người nộp</span><span class="v">${esc(r.email)}</span></div>
         <div class="kv"><span class="k">Thời gian nộp</span><span class="v">${esc(r.timestamp)}</span></div>
+        <div class="kv"><span class="k">Trạng thái duyệt</span><span class="v">${
+          r.trangThaiDuyet === 'Chờ duyệt' ? '⏳ Chờ duyệt' :
+          r.trangThaiDuyet === 'Đã duyệt' ? '✅ Đã duyệt' :
+          r.trangThaiDuyet === 'Từ chối' ? '❌ Từ chối' : '✅ Bình thường'
+        }</span></div>
+        ${r.lyDoChoDuyet ? `<div class="kv"><span class="k">Lý do</span><span class="v">${esc(r.lyDoChoDuyet)}</span></div>` : ''}
         <div class="kv"><span class="k">Tồn kho đầu ngày</span><span class="v mono">${fmtNum(r.tonDauNgay)} MT</span></div>
         <div class="kv"><span class="k">Hòa Nhơn</span><span class="v mono">${fmtNum(r.hoaNhonMT)} MT / ${fmtNum(r.hoaNhonBDMT)} BDMT</span></div>
         <div class="kv"><span class="k">Quế Sơn</span><span class="v mono">${fmtNum(r.queSonMT)} MT / ${fmtNum(r.queSonBDMT)} BDMT</span></div>
@@ -1176,6 +1710,29 @@ function confirmDeleteHistory(rowIndex){
   call('deleteEntry', [rowIndex], 'Đang xóa...').then(res => handleResult(res, loadHistory));
 }
 
+/** Duyệt/Từ chối báo cáo "Chờ duyệt" (lệch đầu kỳ và/hoặc lệch định
+ * mức) ngay tại Lịch Sử (mục X, v2026.8.17, CHỈ Admin thấy nút này) -
+ * gọi duyetBaoCao(rowIndex, chapNhan) ở Code.gs, tự đồng bộ lại
+ * Chitiettonkho + báo email cho người nộp. */
+function duyetBaoCaoLichSu(rowIndex, chapNhan){
+  const hanhDong = chapNhan ? 'DUYỆT' : 'TỪ CHỐI';
+  if (!confirm(`${hanhDong} báo cáo này?` + (chapNhan ? '' : '\nNgười nộp sẽ cần nộp lại báo cáo khác.'))) return;
+  call('duyetBaoCao', [rowIndex, chapNhan], 'Đang xử lý...').then(res => handleResult(res, () => { loadHistory(); loadSoLuongChoDuyet(); }));
+}
+
+/** Tải + hiện số badge "Chờ duyệt" ở menu Lịch Sử (mục AD, v2026.8.18) -
+ * gọi lúc khởi động, sau khi nộp báo cáo mới, và sau khi Duyệt/Từ chối
+ * (số lượng có thể đổi sau các hành động này). Badge tự ẩn khi = 0. */
+function loadSoLuongChoDuyet(){
+  call('getSoLuongChoDuyet', [], null).then(n => {
+    state.soLuongChoDuyet = n || 0;
+    const el = document.getElementById('nav-choduyet-badge');
+    if (!el) return;
+    el.textContent = state.soLuongChoDuyet > 99 ? '99+' : String(state.soLuongChoDuyet);
+    el.classList.toggle('hidden', state.soLuongChoDuyet === 0);
+  }).catch(() => {});
+}
+
 /* ============================================================
  * BÁO CÁO TỔNG HỢP (2 tab: theo khoảng thời gian tự tổng hợp, và theo
  * đúng mẫu "Tonkho_Damgo" cho 1 ngày cụ thể - mục G ở đầu Code.gs)
@@ -1186,7 +1743,13 @@ function renderReport(){
   document.getElementById('topbar-actions').innerHTML = `
     <button class="btn" onclick="exportReportToExcel()">⬇️ Xuất Excel</button>
     <button class="btn" onclick="exportReportToPdf()">🖨️ Xuất PDF</button>`;
-  const unitOptions = state.units.length ? state.units : [];
+  // THEO YÊU CẦU MỚI (mục X, v2026.8.17): người dùng thường chỉ thấy Đơn
+  // vị mình có quyền (Nhập/Sửa hoặc Xem) ở bộ lọc báo cáo - Admin đủ 4.
+  const unitOptions = state.isAdmin ? (state.units.length ? state.units : []) : myUnitOptions(false);
+  // THEO YÊU CẦU MỚI (mục AB, v2026.8.17): mặc định chọn SẴN Đơn vị
+  // được phân quyền (xem ghi chú tương tự ở renderHistory) khi CHỈ có
+  // đúng 1 Đơn vị được phép.
+  const defaultDonVi = (!state.isAdmin && unitOptions.length === 1) ? unitOptions[0] : '';
   // THEO YÊU CẦU MỚI (mục L, v2026.8.17): ngày mặc định của báo cáo
   // "Theo mẫu Tonkho_Damgo" là HÔM QUA (lùi 1 ngày so với hiện hành) -
   // vì các đơn vị thường báo cáo cho ngày hôm trước, mặc định "hôm nay"
@@ -1208,13 +1771,24 @@ function renderReport(){
       <div class="card no-print">
         <div class="grid cols-4">
           <div class="field"><label>Đơn vị</label>
-            <select id="rp-donVi"><option value="">-- Tất cả --</option>${unitOptions.map(u=>`<option value="${esc(u)}">${esc(u)}</option>`).join('')}</select>
+            <select id="rp-donVi"><option value="" ${defaultDonVi?'':'selected'}>-- Tất cả --</option>${unitOptions.map(u=>`<option value="${esc(u)}" ${u===defaultDonVi?'selected':''}>${esc(u)}</option>`).join('')}</select>
           </div>
           <div class="field"><label>Từ ngày</label><input type="date" id="rp-from" value="${toISO(today)}"></div>
           <div class="field"><label>Đến ngày</label><input type="date" id="rp-to" value="${toISO(today)}"></div>
           <div class="field" style="display:flex;align-items:flex-end"><button class="btn primary" onclick="loadReport()">🔍 Xem báo cáo</button></div>
         </div>
-        <div class="hint-text">Dữ liệu lấy từ Chitiettonkho (đã lọc trùng, mỗi Đơn vị+Ngày 1 bản ghi mới nhất). Tồn đầu kỳ lấy từ ngày sớm nhất trong khoảng lọc, Tồn cuối kỳ lấy từ ngày mới nhất trong khoảng lọc.</div>
+        <div class="grid cols-4" style="margin-top:8px">
+          <div class="field"><label>Nhà máy (chi tiết theo ngày)</label>
+            <select id="rp-nhaMay">
+              <option value="">-- Cả 4 nhà máy --</option>
+              <option value="hoaNhon">Hòa Nhơn</option>
+              <option value="queSon">Quế Sơn</option>
+              <option value="daiHiep">Đại Hiệp</option>
+              <option value="hakqn">HAKQN</option>
+            </select>
+          </div>
+        </div>
+        <div class="hint-text">Dữ liệu lấy từ Chitiettonkho (đã lọc trùng, mỗi Đơn vị+Ngày 1 bản ghi mới nhất). Tồn đầu kỳ lấy từ ngày sớm nhất trong khoảng lọc, Tồn cuối kỳ lấy từ ngày mới nhất trong khoảng lọc. Bảng "Chi tiết theo Nhà máy" bên dưới hiển thị TỪNG NGÀY (không gộp cuối kỳ) và lọc riêng theo 1 trong 4 nhà máy nếu chọn ở đây - THEO YÊU CẦU MỚI (mục V).</div>
       </div>
       <div class="card" id="report-wrap"><div class="empty"><div class="ic">📊</div>Chọn khoảng ngày rồi bấm "Xem báo cáo".</div></div>
     </div>
@@ -1241,6 +1815,10 @@ function renderReport(){
 
   if (!state.units.length) call('getUnitList', [], null).then(list => { state.units = list; });
   if (state.reportTab === 'tonkhodamgo' && document.getElementById('tkd-ngay').value) loadTonkhoDamgoReport();
+  // THEO YÊU CẦU MỚI (mục AB, v2026.8.17): người dùng chỉ được cấp
+  // đúng 1 Đơn vị thì tự động xem luôn báo cáo Đơn vị đó, đỡ phải bấm
+  // "Xem báo cáo" thêm 1 lần khi Đơn vị đã chọn sẵn.
+  if (state.reportTab === 'period' && defaultDonVi) loadReport();
 }
 
 function switchReportTab(tab){
@@ -1273,8 +1851,18 @@ function switchTonkhoDamgoMode(mode){
  * kiểm tra lại quyền ở server (guiBaoCaoTelegramTuWebApp) - không tin
  * riêng vào việc ẩn nút trên giao diện. */
 function guiBaoCaoTelegramDotXuat(){
-  if (!confirm('Gửi ảnh báo cáo tồn kho (giống Trang chủ, số liệu mới nhất mỗi đơn vị) vào Telegram ngay bây giờ?')) return;
-  call('guiBaoCaoTelegramTuWebApp', [], 'Đang gửi báo cáo Telegram...').then(res => handleResult(res));
+  // THEO YÊU CẦU MỚI (mục Y, v2026.8.17): cho Admin CHỌN NGÀY LẬP BÁO
+  // CÁO trước khi gửi - đôi lúc cần gửi lại báo cáo của 1 ngày trước đó,
+  // không phải ngày hiện tại. Chỉ truyền ngày lên server khi khác hôm
+  // nay - để nguyên hôm nay = giữ nguyên hành vi gốc (số liệu mới nhất).
+  const ngayChon = (document.getElementById('settings-tele-ngay')||{}).value || '';
+  const laHomNay = !ngayChon || ngayChon === todayISO_();
+  const ngayISO = laHomNay ? '' : ngayChon;
+  const xacNhan = laHomNay
+    ? 'Gửi ảnh báo cáo tồn kho (giống Trang chủ, số liệu mới nhất mỗi đơn vị) vào Telegram ngay bây giờ?'
+    : `Gửi LẠI ảnh báo cáo tồn kho TÍNH ĐẾN NGÀY ${ngayChon} (không phải số liệu mới nhất) vào Telegram ngay bây giờ?`;
+  if (!confirm(xacNhan)) return;
+  call('guiBaoCaoTelegramTuWebApp', [ngayISO], 'Đang gửi báo cáo Telegram...').then(res => handleResult(res));
 }
 
 /** Nút "Gửi báo cáo Telegram" ở trang Báo Cáo > Theo mẫu Tonkho_Damgo
@@ -1294,10 +1882,19 @@ function guiBaoCaoTonkhoDamgoTelegramDotXuat(){
 
 function loadReport(){
   const donVi = document.getElementById('rp-donVi').value;
+  const nhaMay = (document.getElementById('rp-nhaMay')||{}).value || '';
   const f = document.getElementById('rp-from').value, t = document.getElementById('rp-to').value;
+  state.reportNhaMay = nhaMay;
   call('getReportSummary', [f, t, donVi], 'Đang tổng hợp báo cáo...').then(res => {
     state.reportRows = res;
     renderReportTable();
+  });
+  // THEO YÊU CẦU MỚI (mục V): tải kèm bảng chi tiết theo NGÀY, lọc được
+  // theo Nhà máy - tách gọi riêng (không chung getReportSummary) vì đây
+  // là dữ liệu chi tiết từng ngày, không gộp đầu/cuối kỳ.
+  call('getNhaMayDetailReport', [f, t, donVi, nhaMay], null).then(res => {
+    state.reportNhaMayDetail = res;
+    renderNhaMayDetailTable();
   });
 }
 
@@ -1356,7 +1953,31 @@ function renderReportTable(){
     <div class="section-title">Chi tiết Kho Nhà máy (cuối kỳ, theo từng nguồn MT/BDMT)</div>
     <div style="overflow-x:auto">${mkDetailTable(factoryCols)}</div>
     <div class="section-title">Chi tiết Kho Xuất Hàng (cuối kỳ - Tiên Sa + Dung Quất, MT/BDMT)</div>
-    <div style="overflow-x:auto">${mkDetailTable(warehouseCols)}</div>`;
+    <div style="overflow-x:auto">${mkDetailTable(warehouseCols)}</div>
+    <div id="nhamay-detail-section"></div>`;
+  renderNhaMayDetailTable();
+}
+
+/** Bảng "Chi tiết theo Nhà máy (từng ngày)" - THEO YÊU CẦU MỚI (mục V):
+ * khác với các bảng cuối kỳ ở trên, bảng này hiển thị MỖI NGÀY 1 DÒNG
+ * (không gộp về đầu/cuối kỳ), lọc được riêng theo 1 nhà máy (hoặc xem
+ * cả 4 cạnh nhau) qua dropdown "Nhà máy" ở bộ lọc phía trên. */
+function renderNhaMayDetailTable(){
+  const host = document.getElementById('nhamay-detail-section');
+  if (!host) return;
+  const res = state.reportNhaMayDetail;
+  if (!res || !res.rows || !res.rows.length) {
+    host.innerHTML = `<div class="section-title">Chi tiết theo Nhà máy (từng ngày)</div><div class="empty" style="padding:16px"><div class="ic">📭</div>Không có dữ liệu chi tiết theo nhà máy trong khoảng ngày này.</div>`;
+    return;
+  }
+  const cols = [];
+  (res.factories||[]).forEach(f => { cols.push({key:f.key+'MT', label:f.label+' MT'}); cols.push({key:f.key+'BDMT', label:f.label+' BDMT'}); });
+  cols.push({key:'congMT', label:'Cộng MT'}); cols.push({key:'congBDMT', label:'Cộng BDMT'});
+  const html = `<table><thead><tr><th>Đơn vị</th><th>Ngày</th>${cols.map(c=>`<th class="num">${esc(c.label)}</th>`).join('')}<th class="num">Tồn CK</th></tr></thead><tbody>
+    ${res.rows.map(r => `<tr><td>${esc(r.donVi)}</td><td>${esc(r.ngay)}</td>${cols.map(c=>`<td class="num">${fmtNum(r[c.key])}</td>`).join('')}<td class="num">${fmtNum(r.tonCK)}</td></tr>`).join('')}
+    <tr style="font-weight:700;background:var(--moss-light)"><td colspan="2">Tổng cộng (${res.soDong} dòng)</td>${cols.map(c=>`<td class="num">${fmtNum(res.total[c.key])}</td>`).join('')}<td></td></tr>
+    </tbody></table>`;
+  host.innerHTML = `<div class="section-title">Chi tiết theo Nhà máy (từng ngày)</div><div style="overflow-x:auto">${html}</div>`;
 }
 
 /* ------------------------------------------------------------
@@ -1444,19 +2065,63 @@ function renderTonkhoDamgoTable(){
 
 /* ------------------------------------------------------------
  * XUẤT EXCEL / PDF CHO BÁO CÁO TỔNG HỢP
- * THEO YÊU CẦU MỚI (v2026.8.11): cả 2 tab của trang Báo Cáo (theo khoảng
- * thời gian + theo mẫu Tonkho_Damgo) đều xuất được ra Excel và PDF, xuất
- * đúng dữ liệu/bảng đang hiển thị trên màn hình theo bộ lọc hiện tại.
- * - Excel: dùng thư viện SheetJS (đã nhúng qua thẻ <script> ở cuối
- *   trang), gom mỗi <table> đang hiển thị thành 1 sheet riêng.
+ * THEO YÊU CẦU MỚI (v2026.8.11, sửa lại v2026.8.17): cả 2 tab của trang
+ * Báo Cáo (theo khoảng thời gian + theo mẫu Tonkho_Damgo) đều xuất được
+ * ra Excel và PDF, xuất đúng dữ liệu/bảng đang hiển thị trên màn hình
+ * theo bộ lọc hiện tại.
+ * - Excel (SỬA LỖI v2026.8.17): trước đây dùng thư viện SheetJS tải từ
+ *   CDN ngoài (cdnjs.cloudflare.com) - người dùng báo "không kết xuất
+ *   Excel được", nhiều khả năng do mạng/trình duyệt/chính sách công ty
+ *   chặn tải script từ CDN ngoài (ứng dụng chạy trong iframe của Apps
+ *   Script, phụ thuộc mạng của người dùng, không kiểm soát được). SỬA:
+ *   bỏ HẲN phụ thuộc CDN ngoài - tự dựng file Excel (.xls, định dạng
+ *   HTML đặc biệt Excel hiểu được, NHIỀU SHEET thật dùng namespace
+ *   "urn:schemas-microsoft-com:office:excel" chuẩn của Microsoft) hoàn
+ *   toàn bằng JavaScript thuần ngay trong trình duyệt - xem
+ *   xuatBangHtmlThanhExcel_() ngay dưới đây - không cần tải bất kỳ thư
+ *   viện ngoài nào nữa, luôn hoạt động bất kể mạng.
  * - PDF: không dùng thư viện tạo PDF riêng (jsPDF mặc định không hiển
  *   thị đúng dấu tiếng Việt nếu không nhúng thêm font) mà tận dụng hộp
  *   thoại "In" có sẵn của trình duyệt (window.print), ẩn hết
  *   sidebar/topbar/bộ lọc, chỉ để lại đúng bảng kết quả rồi cho người
- *   dùng chọn "Lưu dưới dạng PDF" - vừa nhẹ vừa hiển thị tiếng Việt chuẩn.
+ *   dùng chọn "Lưu dưới dạng PDF" - vừa nhẹ vừa hiển thị tiếng Việt
+ *   chuẩn. KHỔ NGANG (landscape) đặt làm mặc định (xem @page trong
+ *   @media print) vì các bảng nhiều cột (Kho Nhà máy...) hay bị tràn/cắt
+ *   cột khi in khổ dọc.
  * ------------------------------------------------------------ */
+
+/** Dựng + tải về 1 file Excel (.xls) nhiều sheet THẬT (mở ra có nhiều
+ * tab riêng biệt, không phải gộp chung 1 trang) từ danh sách <table>
+ * HTML đang hiển thị - KHÔNG cần thư viện ngoài (mục V, v2026.8.17).
+ * Kỹ thuật: file .xls thực chất là 1 trang HTML đặc biệt kèm khối XML
+ * "mso-application" khai báo tên từng sheet (x:ExcelWorksheet) - đây là
+ * định dạng CHÍNH THỨC Microsoft công bố để tạo file Excel từ HTML,
+ * KHÔNG phải mẹo/hack không chính thức. Excel khi mở sẽ hiện cảnh báo
+ * nhỏ "định dạng và phần mở rộng không khớp" (vì thực chất là HTML, không
+ * phải file .xlsx nhị phân) - đây là hành vi Excel BÌNH THƯỜNG với loại
+ * file này, chỉ cần bấm "Yes/Có" là mở được, không ảnh hưởng dữ liệu. */
+function xuatBangHtmlThanhExcel_(tables, sheetNames, fileNamePrefix){
+  const safeName = (s, i) => String(s || `Bang ${i+1}`).replace(/[\\\/\?\*\[\]:]/g, ' ').trim().slice(0, 31) || `Sheet${i+1}`;
+  const names = Array.from(tables).map((_, i) => safeName(sheetNames[i], i));
+  const worksheetsXml = names.map(n => `<x:ExcelWorksheet><x:Name>${esc(n)}</x:Name><x:WorksheetOptions><x:Panes/><x:ProtectObjects>False</x:ProtectObjects><x:ProtectScenarios>False</x:ProtectScenarios></x:WorksheetOptions></x:ExcelWorksheet>`).join('');
+  const bodyHtml = Array.from(tables).map((tbl, i) => `<div id="${esc(names[i])}">${tbl.outerHTML}</div>`).join('\n');
+  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="UTF-8">
+<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets>${worksheetsXml}</x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->
+<style>table{border-collapse:collapse;font-family:Arial,sans-serif;font-size:12px} td,th{border:1px solid #999;padding:4px 6px}</style>
+</head><body>${bodyHtml}</body></html>`;
+  const blob = new Blob(['﻿' + html], { type: 'application/vnd.ms-excel' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${fileNamePrefix}.xls`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
 function exportReportToExcel(){
-  if (typeof XLSX === 'undefined') { toast('Không tải được thư viện xuất Excel (kiểm tra kết nối mạng rồi thử lại).', 'err'); return; }
   let wrap, sheetNames, fileNamePrefix;
   if (state.reportTab === 'tonkhodamgo') {
     wrap = document.getElementById('tkd-wrap');
@@ -1465,19 +2130,14 @@ function exportReportToExcel(){
     fileNamePrefix = `BaoCao_TonkhoDamgo_${state.tonkhoDamgoDate || ''}_${modeSuffix}`;
   } else {
     wrap = document.getElementById('report-wrap');
-    sheetNames = ['Tong quan', 'Kho Nha may', 'Kho Xuat hang'];
+    sheetNames = ['Tong quan', 'Kho Nha may', 'Kho Xuat hang', 'Chi tiet theo Nha may'];
     const f = (document.getElementById('rp-from')||{}).value || '';
     const t = (document.getElementById('rp-to')||{}).value || '';
     fileNamePrefix = `BaoCao_TongHop_${f}_${t}`;
   }
   const tables = wrap ? wrap.querySelectorAll('table') : [];
   if (!tables.length) { toast('Chưa có dữ liệu báo cáo để xuất - vui lòng bấm "Xem báo cáo" trước.', 'warn'); return; }
-  const wb = XLSX.utils.book_new();
-  tables.forEach((tbl, i) => {
-    const ws = XLSX.utils.table_to_sheet(tbl);
-    XLSX.utils.book_append_sheet(wb, ws, (sheetNames[i] || `Bang ${i+1}`).slice(0, 31));
-  });
-  XLSX.writeFile(wb, `${fileNamePrefix}.xlsx`);
+  xuatBangHtmlThanhExcel_(tables, sheetNames, fileNamePrefix);
 }
 
 function exportReportToPdf(){
@@ -1525,15 +2185,65 @@ function loadAudit(){
   });
 }
 
+/** Màn hình CHẶN HẲN khi email chưa được Admin cấp quyền gì (mục X,
+ * v2026.8.17) - thay toàn bộ nội dung + ẩn sidebar/topbar, KHÔNG cho
+ * dùng bất kỳ trang nào của Web App (kể cả Xem) cho tới khi được cấp
+ * quyền. Đây là hành vi ĐÃ THỐNG NHẤT với người dùng (mặc định chặn,
+ * không mở - an toàn hơn cho dữ liệu tồn kho). */
+function renderBlockedAccess_(email){
+  const sidebar = document.querySelector('.sidebar');
+  const topbar = document.querySelector('.topbar');
+  if (sidebar) sidebar.style.display = 'none';
+  if (topbar) topbar.style.display = 'none';
+  // THEO YÊU CẦU MỚI (mục AB, v2026.8.17): nếu server KHÔNG lấy được
+  // email (Session.getActiveUser().getEmail() trả về rỗng - thường do
+  // deploy "Ai có quyền truy cập" = "Bất kỳ ai" (không bắt đăng nhập)
+  // hoặc do trình duyệt chưa đăng nhập/chưa cấp quyền chia sẻ email cho
+  // script), tách riêng thông báo này khỏi trường hợp "có email nhưng
+  // chưa được cấp Phân quyền" - tránh Admin tưởng nhầm là lỗi Phân
+  // quyền rồi loay hoay thêm dòng mà không có tác dụng.
+  if (!email) {
+    document.getElementById('content').innerHTML = `
+      <div class="card" style="max-width:560px;margin:60px auto;text-align:center">
+        <div style="font-size:40px;margin-bottom:10px">⚠️</div>
+        <h3>Không xác định được email đăng nhập</h3>
+        <p class="hint-text">Web App không lấy được email Google của bạn, nên KHÔNG PHẢI lỗi "chưa được cấp Phân quyền". Nguyên nhân thường gặp:</p>
+        <p class="hint-text" style="text-align:left">
+          1) Trong Apps Script &gt; Deploy &gt; Manage deployments, mục "Ai có quyền truy cập" đang để "Bất kỳ ai" (Anyone) - cần đổi thành "Bất kỳ ai có Tài khoản Google" (Anyone with Google account) để bắt buộc đăng nhập.<br>
+          2) Trình duyệt đang chưa đăng nhập Google, hoặc đăng nhập nhiều tài khoản gây nhầm lẫn - thử mở lại đường dẫn Web App ở cửa sổ ẩn danh rồi đăng nhập đúng 1 tài khoản.<br>
+          3) Sau khi đổi cấu hình/deploy phiên bản mới, cần bấm "New deployment" (hoặc thêm phiên bản mới cho deployment cũ) rồi mở lại link, có thể cần cấp quyền (Authorize) lại lần đầu.
+        </p>
+        <p class="hint-text">Sau khi sửa xong, tải lại trang này. Nếu vẫn gặp lỗi, liên hệ người phụ trách kỹ thuật.</p>
+      </div>`;
+    return;
+  }
+  document.getElementById('content').innerHTML = `
+    <div class="card" style="max-width:520px;margin:60px auto;text-align:center">
+      <div style="font-size:40px;margin-bottom:10px">🔒</div>
+      <h3>Bạn chưa được cấp quyền sử dụng hệ thống</h3>
+      <p class="hint-text">Email <b>${esc(email)}</b> chưa được Admin cấp quyền cho bất kỳ Đơn vị nào (Nhập/Sửa hoặc Xem). Vui lòng liên hệ Admin để được thêm vào danh sách Phân quyền (Cài đặt &gt; Phân quyền).</p>
+    </div>`;
+}
+
 /* ============================================================
  * INIT
  * ============================================================ */
-call('getDashboardStats', [], null).then(s => {
-  state.isAdmin = s.isAdmin;
+call('getMyAccess', [], null).then(access => {
+  state.myAccess = access;
+  state.isAdmin = access.isAdmin;
   applyAdminUI();
+
+  // THEO YÊU CẦU MỚI (mục X, v2026.8.17): email chưa được cấp quyền gì
+  // (và không phải Admin) bị chặn hẳn - không mở được trang nào.
+  if (!access.isAdmin && !access.coQuyenGi) {
+    renderBlockedAccess_(access.email);
+    return;
+  }
+
+  call('getUnitList', [], null).then(list => { state.units = list; });
+  loadSoLuongChoDuyet();
+  goTo('dashboard');
 });
-call('getUnitList', [], null).then(list => { state.units = list; });
-goTo('dashboard');
 </script>
 </body>
 </html>

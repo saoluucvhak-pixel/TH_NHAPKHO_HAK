@@ -471,6 +471,621 @@
  *         bấm nút này, HOẶC lịch tự động 16h hàng ngày
  *         (BAO_CAO_TON_KHO_TELEGRAM_HANG_NGAY_) - ảnh KHÔNG bao giờ gửi
  *         từ trang Báo Cáo nữa.
+ *  V) BÁO CÁO TỔNG HỢP - THÊM "CHI TIẾT THEO NHÀ MÁY", SỬA XUẤT EXCEL,
+ *     PDF KHỔ NGANG (v2026.8.17): 3 yêu cầu riêng biệt, gộp chung 1 mục
+ *     vì cùng nằm trong trang Báo Cáo Tổng Hợp.
+ *     - CHI TIẾT THEO NHÀ MÁY: trước đây trang "Theo khoảng thời gian"
+ *     chỉ lọc được theo ĐƠN VỊ (4 pháp nhân ở CFG.UNITS) và các bảng chi
+ *     tiết (Kho Nhà máy/Kho Xuất Hàng) chỉ có số CUỐI KỲ (1 dòng/đơn vị,
+ *     từ getReportSummary) - không có cách xem DIỄN BIẾN TỪNG NGÀY của
+ *     riêng 1 trong 4 "nhà máy" (Hòa Nhơn/Quế Sơn/Đại Hiệp/HAKQN - đây
+ *     là 4 NGUỒN NHẬP GỖ dùng chung ở cả 4 đơn vị, KHÁC KHÁI NIỆM với 4
+ *     "đơn vị" pháp nhân, dễ nhầm vì tên gần giống). Thêm hàm mới
+ *     getNhaMayDetailReport(fDate, tDate, donViFilter, nhaMay) trả về 1
+ *     DÒNG/NGÀY/ĐƠN VỊ (không gộp đầu/cuối kỳ), lọc thêm được theo 1
+ *     trong 4 nhà máy qua dropdown mới "Nhà máy (chi tiết theo ngày)" ở
+ *     Index.html - kết quả hiển thị ở bảng mới "Chi tiết theo Nhà máy
+ *     (từng ngày)" ngay dưới 2 bảng cuối kỳ cũ, tải song song (không
+ *     chung 1 lệnh gọi) với getReportSummary trong loadReport().
+ *     - XUẤT EXCEL: trước đây dùng thư viện SheetJS tải từ CDN ngoài
+ *     (cdnjs.cloudflare.com) - người dùng báo "không kết xuất Excel
+ *     được", nhiều khả năng do mạng/trình duyệt/chính sách công ty chặn
+ *     tải script từ CDN ngoài (Web App chạy trong trình duyệt người
+ *     dùng, không phải server Apps Script, nên không kiểm soát được).
+ *     SỬA: bỏ HẲN phụ thuộc CDN ngoài - Index.html tự dựng file Excel
+ *     (.xls, định dạng HTML đặc biệt Excel hiểu, nhiều sheet THẬT dùng
+ *     namespace "urn:schemas-microsoft-com:office:excel" CHÍNH THỨC của
+ *     Microsoft, không phải hack) hoàn toàn bằng JS thuần ngay trong
+ *     trình duyệt (xem xuatBangHtmlThanhExcel_ trong Index.html) - không
+ *     cần tải bất kỳ thư viện ngoài nào nữa.
+ *     - PDF KHỔ NGANG: đặt landscape làm mặc định cho cả 2 luồng xuất
+ *     PDF - (a) xuất PDF từ trang Báo Cáo qua nút "🖨️ Xuất PDF"
+ *     (window.print của trình duyệt, thêm @page{size:landscape} trong
+ *     @media print ở Index.html) và (b) PDF đính kèm khi gửi Telegram từ
+ *     nút "📨 Gửi báo cáo Telegram" ở tab Tonkho_Damgo (thêm
+ *     @page{size:A4 landscape} vào xayHtmlBaoCaoTonKhoDamgo_() ở đây) -
+ *     vì các bảng nhiều cột (Nhà máy: 10 cột) hay bị tràn/cắt cột khi in
+ *     khổ dọc.
+ *  W) TRANG CHỦ / ẢNH TELEGRAM - ĐỔI THẺ "SỐ NGÀY ĐÃ GHI NHẬN" THÀNH
+ *     "SỐ LƯỢNG NHÀ MÁY VÉT BÃI" (v2026.8.17): thẻ KPI thứ 4 ở Trang chủ
+ *     (và ảnh Telegram, dùng chung getDashboardStats()) trước đây hiện
+ *     "Số ngày đã ghi nhận (Chitiettonkho)" - ít giá trị vận hành hàng
+ *     ngày - đổi thành đếm số ĐƠN VỊ có "Kiểm kê vét bãi" = Có ở bản ghi
+ *     GẦN NHẤT (field mới getDashboardStats().soLuongVetBai/vetBaiDetail,
+ *     cùng cách tính "gần nhất của từng đơn vị" như tongNhapGo ở mục U)
+ *     + hiển thị chi tiết (thời điểm vét bãi, KL ước tính còn lại, chênh
+ *     lệch) ngay dưới hàng KPI trên Trang chủ, và thêm vào caption ảnh
+ *     Telegram (soanCaptionBaoCaoTrangChu_).
+ *  X) PHÂN QUYỀN THEO ĐƠN VỊ + ĐIỀU KIỆN KIỂM TRA DUYỆT + BÁO CÁO LỆCH
+ *     ĐẦU KỲ CHỜ ADMIN DUYỆT (v2026.8.17) - 4 phần liên quan, gộp
+ *     chung 1 mục:
+ *     1. MENU "CÀI ĐẶT" MỚI (Index.html, admin-only): gộp "Công cụ
+ *     Admin" (trước đây nằm ở Trang chủ, nay CHUYỂN HẲN vào đây) + 2
+ *     mục mới "Phân quyền" và "Điều kiện kiểm tra duyệt" vào 1 trang có
+ *     3 tab con.
+ *     2. PHÂN QUYỀN (sheet mới "PhanQuyen", xem getOrCreatePhanQuyenSheet_):
+ *     mỗi dòng = (Email, Đơn vị, Quyền) với Quyền là 1 trong 3:
+ *     "nhap_sua" (nhập/sửa được đúng Đơn vị đó, tự động bao gồm Xem),
+ *     "xem" (chỉ xem), "admin" (toàn quyền mọi Đơn vị + chức năng quản
+ *     trị, Đơn vị bỏ trống). ĐÃ THỐNG NHẤT với người dùng: phân quyền
+ *     tính theo ĐƠN VỊ (4 pháp nhân, khớp cấu trúc 1-form/1-đơn-vị hiện
+ *     có), KHÔNG theo "nhà máy" nguồn (Hòa Nhơn/Quế Sơn/Đại Hiệp/HAKQN -
+ *     đây là các CỘT trong CÙNG 1 form, không tách được theo quyền).
+ *     Email CHƯA có dòng nào (và không nằm trong CFG.ADMIN_EMAILS) bị
+ *     CHẶN HẲN - Index.html gọi getMyAccess() lúc khởi động, nếu
+ *     !isAdmin && !coQuyenGi thì thay toàn bộ giao diện bằng màn "chưa
+ *     được cấp quyền". utils.isAdmin() được SỬA để nhận thêm các email
+ *     có dòng Quyền="admin" trong sheet này (ngoài CFG.ADMIN_EMAILS cứng
+ *     - vẫn giữ lại làm "admin gốc" không thể tự khóa nhầm mình), nên
+ *     MỌI chỗ gọi utils.isAdmin() sẵn có trong file tự động áp dụng đúng
+ *     theo nguồn mới, không cần sửa từng chỗ. submitInventoryEntry()
+ *     chặn nộp nếu người dùng không có quyền "nhap_sua" cho đúng Đơn vị
+ *     đang nộp. Nhập Tồn Kho (Index.html) lọc dropdown Đơn vị theo
+ *     donViNhapSua cho non-admin; Báo Cáo/Lịch Sử lọc theo donViNhapSua
+ *     ∪ donViXem.
+ *     3. ĐIỀU KIỆN KIỂM TRA DUYỆT (sheet mới "DieuKienDuyet"): Admin
+ *     nhập khoảng % (tối thiểu-tối đa) cho cột "Định mức" có sẵn
+ *     (COL.DINH_MUC, công thức Sheet) của TỪNG Đơn vị. Sau khi
+ *     submitInventoryEntry() ghi xong + kéo công thức + flush, đọc LẠI
+ *     giá trị Định mức vừa tính cho đúng dòng đó, so với khoảng đã cấu
+ *     hình (nếu Đơn vị có cấu hình) - lệch thì GỬI EMAIL cảnh báo (người
+ *     nộp + toàn bộ CFG.ADMIN_EMAILS) "báo cáo chưa khớp định mức, đề
+ *     nghị báo cáo lại" qua kiemTraDinhMucVaCanhBao_() - CHỈ CẢNH BÁO,
+ *     KHÔNG chặn lưu báo cáo (khác với mục 4 bên dưới).
+ *     4. BÁO CÁO LỆCH ĐẦU KỲ - CHỜ ADMIN DUYỆT: cột mới COL.TRANG_THAI_DUYET
+ *     (cột thứ 42 = AP, nối cuối theo đúng phương án Kho Dung Quất ở mục
+ *     H - xem CFG.TOTAL_COL_COUNT, và hàm DAM_BAO_COT_TRANG_THAI_DUYET()
+ *     CẦN CHẠY 1 LẦN để thêm nhãn tiêu đề cột cho sheet thật). Khi 1
+ *     người dùng KHÔNG PHẢI ADMIN nộp báo cáo mới mà "Tồn kho đầu ngày"
+ *     nhập vào KHÔNG khớp "Tồn kho cuối kỳ" (COL.TON_CK) của bản ghi
+ *     CHÍNH THỨC (Chitiettonkho) ngày liền trước cùng Đơn vị
+ *     (timTonCuoiKyTruoc_) - ĐÃ THỐNG NHẤT với người dùng: vẫn LƯU bình
+ *     thường (không chặn nộp) nhưng gắn trạng thái "Chờ duyệt", báo email
+ *     ngay cho Admin, và syncChitietTonKhoForKey_() được sửa để LOẠI các
+ *     bản ghi "Chờ duyệt"/"Từ chối" khỏi danh sách xét "bản mới nhất" khi
+ *     đồng bộ vào Chitiettonkho (áp dụng luôn cho rebuildAllChitietTonKho())
+ *     - nghĩa là báo cáo lệch đầu kỳ KHÔNG hiển thị trên
+ *     Dashboard/Báo cáo/ảnh Telegram cho tới khi được duyệt. Admin xem +
+ *     bấm "✅ Duyệt"/"❌ Từ chối" ngay tại trang LỊCH SỬ (nút mới, chỉ hiện
+ *     khi trạng thái = "Chờ duyệt") - gọi duyetBaoCao(rowIndex, chapNhan),
+ *     tự đồng bộ lại Chitiettonkho + báo email kết quả cho người nộp.
+ *     Admin tự nộp thì BỎ QUA toàn bộ kiểm tra này (đã có toàn quyền).
+ *     LƯU Ý PHẠM VI: kiểm tra lệch đầu kỳ + phân quyền nộp CHỈ áp dụng
+ *     cho kênh Web App (submitInventoryEntry) - kênh Google Form song
+ *     song (onFormSubmit, mục E) vẫn "nộp thoải mái" như cũ, không qua
+ *     2 lớp kiểm tra mới này (Form không có khái niệm đăng nhập/quyền).
+ *  Y) NÚT "GỬI BÁO CÁO TELEGRAM" (ẢNH) - CHO CHỌN NGÀY LẬP BÁO CÁO
+ *     (v2026.8.17): trước đây nút này ở Cài đặt > Công cụ Admin LUÔN gửi
+ *     số liệu MỚI NHẤT của mỗi đơn vị (giống hệt getDashboardStats gốc)
+ *     - THEO YÊU CẦU MỚI: đôi lúc Admin cần GỬI LẠI báo cáo của 1 NGÀY
+ *     TRƯỚC ĐÓ (không phải ngày hiện tại). Thêm ô chọn "Ngày lập báo
+ *     cáo" (Index.html, mặc định = hôm nay) cạnh nút gửi - để nguyên hôm
+ *     nay thì hành vi y hệt cũ (không truyền tham số ngày lên server);
+ *     đổi sang ngày khác thì gọi hàm MỚI getDashboardStatsForDate_(ngayISO)
+ *     thay vì getDashboardStats() gốc. Hàm mới này CỐ Ý viết RIÊNG (copy
+ *     gần như nguyên logic, không refactor dùng chung) để KHÔNG rủi ro
+ *     ảnh hưởng luồng mặc định (Trang chủ tương tác + lịch tự động 16h,
+ *     cả 2 vẫn gọi getDashboardStats() gốc y nguyên, không đổi 1 dòng).
+ *     Với mỗi đơn vị, getDashboardStatsForDate_ lấy bản ghi Chitiettonkho
+ *     GẦN NHẤT có Ngày tồn kho <= ngày được chọn (bỏ qua báo cáo SAU
+ *     ngày đó, đúng ngữ cảnh "gửi lại báo cáo ngày cũ" - không lộ số
+ *     liệu mới hơn). taoAnhBaoCaoTrangChu_/soanCaptionBaoCaoTrangChu_ tự
+ *     nhận diện qua field `ngayBaoCaoDisplay` (CHỈ có ở biến thể theo
+ *     ngày) để đổi dòng phụ đề ("Báo cáo cho ngày X" thay vì "Trang chủ
+ *     · giờ hiện tại") và nhãn thẻ "chưa báo cáo hôm nay" -> "chưa báo
+ *     cáo đúng ngày này" cho khớp ngữ cảnh. Chuỗi gọi:
+ *     guiBaoCaoTelegramDotXuat() [client, đọc ô ngày] ->
+ *     guiBaoCaoTelegramTuWebApp(ngayISO) [server, admin-gated] ->
+ *     guiBaoCaoTrangChuTelegram_(null, ngayISO) [dùng chung với lịch tự
+ *     động - ngayISO rỗng/null thì y hệt hành vi gốc].
+ *  Z) "ĐIỀU KIỆN KIỂM TRA DUYỆT" - THÊM KHOẢNG NGÀY ÁP DỤNG (v2026.8.17):
+ *     bản đầu (mục X) mỗi Đơn vị chỉ có ĐÚNG 1 dòng định mức, áp dụng
+ *     MÃI MÃI - người dùng phản hồi "kg phải nhất nhất 1 điều kiện mãi
+ *     mãi" vì định mức thực tế thay đổi theo giai đoạn/mùa vụ. SỬA: sheet
+ *     "DieuKienDuyet" thêm 2 cột "Từ ngày"/"Đến ngày" - mỗi Đơn vị giờ có
+ *     thể có NHIỀU dòng cấu hình cho các khoảng ngày khác nhau (không còn
+ *     tự động ghi đè theo Đơn vị). Bỏ trống "Từ ngày"/"Đến ngày" = không
+ *     giới hạn quá khứ/tương lai tương ứng. luuDieuKienDuyet() đổi sang
+ *     nhận 1 object (donVi, tuNgay, denNgay, minPct, maxPct, rowIndex tùy
+ *     chọn để SỬA) thay vì 3 tham số vị trí như bản đầu - Index.html có
+ *     nút "Sửa" riêng từng dòng (giống mẫu Phân quyền). Khi kiểm tra 1
+ *     báo cáo vừa nộp (kiemTraDinhMucVaCanhBao_), giờ nhận thêm `ngayISO`
+ *     (Ngày tồn kho của báo cáo) - tìm ĐÚNG dòng cấu hình có khoảng ngày
+ *     CHỨA ngày đó; nếu nhiều dòng cùng Đơn vị chồng lấn ngày, ưu tiên
+ *     dòng có "Từ ngày" GẦN NHẤT (coi là thiết lập mới hơn, ghi đè ý định
+ *     dòng cũ Admin quên xóa).
+ *  AA) "DIEUKIENDUYET" CHẶN LƯU (không chỉ gửi email) + MỞ FILE GỐC +
+ *     PHÂN QUYỀN NHIỀU ĐƠN VỊ 1 LẦN (v2026.8.17):
+ *     1. Trước đây (mục X/Z) lệch định mức CHỈ gửi email cảnh báo, báo
+ *        cáo vẫn lưu chính thức bình thường - THEO YÊU CẦU MỚI: lệch định
+ *        mức giờ CŨNG CHẶN không cho vào Chitiettonkho, dùng LẠI đúng cơ
+ *        chế "Chờ duyệt" đã có sẵn cho "lệch đầu kỳ" (mục X) - Admin sửa
+ *        xong đảm bảo số liệu thì duyệt ở Lịch Sử (duyệtBaoCao) mới chính
+ *        thức tính vào Chitiettonkho/Dashboard/Báo cáo. kiemTraDinhMucVaCanhBao_
+ *        đổi từ void sang trả về true/false (true = lệch); submitInventoryEntry
+ *        gọi hàm này TRƯỚC syncChitietTonKhoForKey_ (thay vì sau như cũ) để
+ *        kịp set "Chờ duyệt" trước khi đồng bộ Chitiettonkho. Admin nộp báo
+ *        cáo vẫn được BỎ QUA việc chặn (tin tưởng toàn quyền) - chỉ nhận
+ *        email nhắc kiểm tra lại số liệu, không bị "Chờ duyệt".
+ *     2. Công cụ Admin (Cài đặt > Công cụ Admin) thêm nút "Mở file dữ liệu
+ *        gốc (Google Sheet)" - gọi getSpreadsheetUrl() (admin-gated ở
+ *        server) trả về SpreadsheetApp.getActive().getUrl(), mở tab mới -
+ *        tiện tra soát trực tiếp Form Responses 1/PhanQuyen/DieuKienDuyet/
+ *        Audit khi cần sâu hơn giao diện Web App cho phép.
+ *     3. Phân quyền: ban đầu người dùng hỏi có cần thêm mức quyền "xem
+ *        riêng" hay tách "Nhập, sửa" thành 2 quyền - hỏi lại thì xác nhận
+ *        đây là NHẦM LẪN, "xem"/"xem riêng" là 1 (chỉ xem đúng Đơn vị được
+ *        cấp), giữ nguyên 3 mức quyền cũ (Nhập-sửa/Xem/Admin), KHÔNG đổi
+ *        schema PhanQuyen. Yêu cầu THẬT SỰ chỉ là: 1 email có thể được cấp
+ *        NHIỀU Đơn vị cùng lúc dễ dàng hơn (trước đây phải lặp lại thao
+ *        tác Thêm cho từng Đơn vị). Ô "Đơn vị" ở form Phân quyền đổi sang
+ *        <select multiple> - khi THÊM MỚI (không phải Sửa) và quyền khác
+ *        "admin", cho chọn nhiều Đơn vị (Ctrl/Cmd-click), client tự gọi
+ *        luuPhanQuyen() TUẦN TỰ (tránh ghi đồng thời) 1 lần / Đơn vị đã
+ *        chọn để tạo riêng từng dòng PhanQuyen (mỗi dòng vẫn 1 Đơn vị -
+ *        không đổi cấu trúc sheet). Khi ĐANG SỬA 1 dòng có sẵn (có
+ *        rowIndex) hoặc quyền = "admin", vẫn lưu 1 Đơn vị/rỗng như cũ.
+ *  AB) 2 LỖI PHÁT SINH THỰC TẾ SAU KHI TRIỂN KHAI mục X/AA (v2026.8.17):
+ *     1. "Chưa được cấp quyền" hiện SAI cho cả email Admin gốc: màn hình
+ *        chặn hẳn (renderBlockedAccess_) hiện thông báo giống hệt nhau dù
+ *        nguyên nhân là "server không lấy được email đăng nhập" (thường
+ *        do deploy "Ai có quyền truy cập" = "Bất kỳ ai", không bắt đăng
+ *        nhập, nên Session.getActiveUser().getEmail() trả về rỗng) HAY
+ *        "có email nhưng chưa được cấp Phân quyền" - khiến Admin tưởng
+ *        nhầm là lỗi Phân quyền. SỬA: renderBlockedAccess_ tách 2 thông
+ *        báo riêng - email rỗng thì hiện hướng dẫn kiểm tra cấu hình
+ *        Deploy/đăng nhập trình duyệt, KHÔNG nhắc tới Phân quyền.
+ *     2. "Xem" 1 Đơn vị vẫn thấy dữ liệu CẢ 4 Đơn vị: getDashboardStats/
+ *        getHistoryList/getReportSummary/getNhaMayDetailReport/
+ *        getUnitTimeline trước đây CHỈ dựa vào việc Index.html tự ẩn bớt
+ *        lựa chọn trong dropdown Đơn vị (myUnitOptions) - khi để bộ lọc
+ *        trống ("-- Tất cả --", là lựa chọn MẶC ĐỊNH) thì server vẫn trả
+ *        về TOÀN BỘ 4 Đơn vị cho bất kỳ ai gọi, kể cả người chỉ được
+ *        cấp "Xem" đúng 1 Đơn vị (vd HAKQN) - không đúng ý đã thống nhất
+ *        trước đó ("Xem chỉ được xem đúng dữ liệu Nhà máy được phân
+ *        quyền"). SỬA: thêm hàm donViChoPhepCuaToi_(email) (trả về
+ *        null = Admin không giới hạn, hoặc mảng Đơn vị được phép) - gọi
+ *        NGAY ĐẦU mỗi hàm kể trên để lọc cứng ở server (không chỉ dựa
+ *        giao diện, an toàn kể cả khi có ai gọi thẳng API). Đồng thời
+ *        Index.html (renderHistory/renderReport) mặc định CHỌN SẴN Đơn
+ *        vị được phân quyền (thay vì để "Tất cả") khi người dùng chỉ có
+ *        đúng 1 Đơn vị, và tab "Báo Cáo Tổng Hợp > Theo khoảng thời
+ *        gian" tự tải báo cáo luôn (đỡ phải bấm "Xem báo cáo" thêm 1
+ *        lần); các nhãn "Tổng tồn kho cuối (4 đơn vị)"/"chưa báo cáo
+ *        hôm nay / X đơn vị" ở Trang chủ cũng đổi sang lấy đúng số Đơn
+ *        vị mà NGƯỜI ĐANG XEM được phép (s.units.length, đã lọc), không
+ *        còn cố định "4" hay dùng số Đơn vị toàn công ty.
+ *  AC) SỬA NGAY LỖI TIỀM ẨN CỦA mục AB TRƯỚC KHI XẢY RA THỰC TẾ
+ *     (v2026.8.17) - người dùng hỏi "bot Telegram có bị ảnh hưởng bởi
+ *     Phân quyền không": rà lại thì phát hiện CÓ RỦI RO THẬT - trigger
+ *     tự động gửi báo cáo Telegram lúc 16h hàng ngày
+ *     (BAO_CAO_TON_KHO_TELEGRAM_HANG_NGAY_) gọi guiBaoCaoTrangChuTelegram_()
+ *     KHÔNG kèm ngày -> gọi getDashboardStats() -> hàm này (mục AB mới
+ *     thêm) tự lọc Đơn vị theo email người gọi. NHƯNG trigger nền (time-
+ *     driven trigger) chạy KHÔNG có phiên đăng nhập trình duyệt, nên
+ *     Session.getActiveUser().getEmail() (dùng trong getCurrentUserEmail_)
+ *     THƯỜNG trả về RỖNG trong ngữ cảnh này (khác hẳn lúc mở Web App qua
+ *     trình duyệt) - nếu coi rỗng là "0 quyền" thì mỗi lần trigger chạy
+ *     sẽ lọc còn 0 Đơn vị, gửi ảnh báo cáo Telegram TRẮNG mỗi ngày lúc
+ *     16h. SỬA: donViChoPhepCuaToi_() coi email RỖNG là KHÔNG giới hạn
+ *     (giống Admin) - đúng bản chất báo cáo Telegram là báo cáo TOÀN
+ *     CÔNG TY, không gắn với 1 người xem cụ thể. Luồng NHẬP/SỬA dữ liệu
+ *     (submitInventoryEntry) và luồng chặn hẳn giao diện lúc mở Web App
+ *     (getMyAccess/renderBlockedAccess_) KHÔNG dùng donViChoPhepCuaToi_,
+ *     vẫn kiểm tra coQuyenGi/isAdmin trực tiếp như cũ - không bị nới
+ *     lỏng theo thay đổi này, chỉ riêng các hàm ĐỌC báo cáo (Trang chủ/
+ *     Lịch Sử/Báo Cáo Tổng Hợp/Chi tiết Nhà máy) được nới cho ngữ cảnh
+ *     "không xác định được người gọi" (trigger/hệ thống) mới áp dụng.
+ *  AD) SỬA CÔNG THỨC "LỆCH ĐẦU KỲ" + THÔNG BÁO/EMAIL RÕ LÝ DO
+ *     (v2026.8.18) - THEO YÊU CẦU MỚI, đã hỏi lại và xác nhận với người
+ *     dùng qua AskUserQuestion:
+ *     1. CÔNG THỨC "Đầu kỳ dự kiến" (so sánh với "Tồn kho đầu ngày" vừa
+ *        nhập để phát hiện lệch đầu kỳ): TRƯỚC ĐÂY chỉ so với TON_CK
+ *        (Tồn kho CK) thô của báo cáo chính thức ngày liền trước - GIỜ
+ *        = TON_CK đó (đã sẵn = Cộng MT Kho Nhà máy + Kho Tiên Sa MT +
+ *        Kho Dung Quất MT, công thức Sheet có sẵn từ mục H) CỘNG THÊM
+ *        "Điều chỉnh MT" (sheet CanDoiBDMT, mục K) NẾU CÓ cân đối BDMT
+ *        xuất hàng ĐÚNG NGÀY với báo cáo đó (đã xác nhận: KHÔNG lấy tạm
+ *        lần cân đối cũ hơn nếu đúng ngày không có) - xem
+ *        tongDieuChinhMTCanDoiDungNgay_/timTonCuoiKyTruoc_ (hàm này đổi
+ *        từ trả về 1 số sang trả về 1 object {ngayISO, ngayDisplay,
+ *        tonCK, dieuChinhMT, tonCuoiKyDuKien}).
+ *     2. THÔNG BÁO RÕ TRẠNG THÁI TRÊN WEB APP: kết quả trả về của
+ *        submitInventoryEntry giờ LUÔN có dòng "TRẠNG THÁI: CHƯA DUYỆT"
+ *        (kèm lý do cụ thể, hiện dạng toast dài hơn - xem hàm toast() ở
+ *        Index.html, tự kéo dài thời gian hiện cho thông báo warn/err)
+ *        hoặc "TRẠNG THÁI: ĐÃ DUYỆT" ngay sau khi nộp - không phải chờ
+ *        vào Lịch Sử mới biết.
+ *     3. CỘT MỚI "Lý do chờ duyệt" (COL.LY_DO_CHO_DUYET, cột AQ, thứ 43,
+ *        NỐI VÀO CUỐI - CẦN CHẠY LẠI 1 LẦN DAM_BAO_COT_TRANG_THAI_DUYET()
+ *        để thêm nhãn tiêu đề cho cột mới vào Form Responses 1 +
+ *        Chitiettonkho, giống lần thêm "Trạng thái duyệt" ở mục X) - ghi
+ *        lại NGAY LÚC nộp lý do vì sao "Chờ duyệt" (lệch đầu kỳ/lệch
+ *        định mức/cả 2, gộp bằng " | ") - dùng để: (a) hiện ngay dưới
+ *        badge trạng thái ở bảng Lịch Sử, (b) duyetBaoCao() đọc lại lý
+ *        do NÀY khi gửi email duyệt/từ chối thay vì hardcode cứng "do
+ *        lệch đầu kỳ" như trước (sai khi thực ra là lệch định mức).
+ *        kiemTraDinhMucVaCanhBao_() đổi từ trả true/false sang trả
+ *        false/CHUỖI LÝ DO (vẫn dùng được như boolean ở nơi gọi cũ).
+ *     4. EMAIL "LỆCH ĐẦU KỲ" GIỜ GỬI CẢ CHO NGƯỜI NỘP (trước đây CHỈ
+ *        gửi Admin, khác với "lệch định mức" đã gửi cả 2 từ đầu) - kèm
+ *        lý do cụ thể (số Tồn đầu ngày đã nhập vs Đầu kỳ dự kiến, có
+ *        breakdown Tồn CK + Điều chỉnh MT nếu có).
+ *     5. LỊCH SỬ MẶC ĐỊNH BẬT SẴN "Chỉ hiện Chờ duyệt" (trước đây mặc
+ *        định TẮT, và chỉ ADMIN thấy được checkbox này) - giờ áp dụng
+ *        cho MỌI người dùng (an toàn vì đã lọc theo allowedUnits/mục AB
+ *        ở getHistoryList, người dùng thường chỉ thấy đúng Đơn vị mình
+ *        được cấp quyền, không lộ thêm gì).
+ *     6. BADGE SỐ LƯỢNG "Chờ duyệt" Ở MENU: mục nav "Lịch Sử" hiện thêm
+ *        số đếm (getSoLuongChoDuyet(), tự lọc theo allowedUnits, ẩn khi
+ *        = 0) - tải lúc khởi động, sau khi nộp báo cáo, và sau khi
+ *        Duyệt/Từ chối.
+ *     (Email "khi được duyệt cũng gửi" - mục duyetBaoCao() - ĐÃ CÓ SẴN
+ *     từ mục X, không cần thêm gì, chỉ sửa lại wording lấy đúng lý do ở
+ *     mục 3 thay vì hardcode như nói ở trên.)
+ *  AE) NGƯỜI DÙNG BÁO "ĐÃ TEST VÀ KHÔNG NHẬN ĐƯỢC EMAIL" (v2026.8.18) -
+ *     rà lại thì phát hiện CẢ 3 CHỖ gửi email (lệch đầu kỳ, lệch định
+ *     mức, duyệt/từ chối) đều bọc trong try/catch NUỐT LỖI ÂM THẦM (chỉ
+ *     có comment "không để lỗi gửi mail làm hỏng luồng chính") - nếu
+ *     MailApp.sendEmail() thất bại (VD hết quota gửi mail trong ngày -
+ *     tài khoản Gmail cá nhân giới hạn ~100 mail/ngày, Google Workspace
+ *     ~1500 mail/ngày; hoặc "to" sai định dạng...) thì KHÔNG CÓ CÁCH NÀO
+ *     biết được lỗi thật, chỉ thấy hiện tượng "không nhận được mail".
+ *     SỬA:
+ *     1. Thêm guiEmailAnToan_(options, nguCanh) DÙNG CHUNG cho cả 3 chỗ
+ *        gửi email tự động - vẫn KHÔNG throw làm hỏng luồng chính
+ *        (giống trước), nhưng nếu lỗi thì GHI LẠI vào sheet Audit (cột
+ *        Email = "(HỆ THỐNG)") kèm NGUYÊN VĂN lỗi thật từ Google + gửi
+ *        tới địa chỉ nào + ngữ cảnh nào - vào Nhật Ký (Audit) trên Web
+ *        App (hoặc mở thẳng sheet Audit) là thấy ngay, không cần đoán.
+ *     2. Thêm công cụ Admin MỚI "Gửi email thử nghiệm" (Cài đặt > Công
+ *        cụ Admin) - guiEmailThuNghiem(toEmail) gửi 1 email test tới
+ *        địa chỉ tự nhập, CỐ Ý KHÔNG dùng guiEmailAnToan_ (để lỗi thật
+ *        LỘ RA NGAY trên màn hình thay vì phải vào Audit tra) - cũng trả
+ *        về luôn số quota MailApp còn lại trong ngày
+ *        (MailApp.getRemainingDailyQuota()) khi gửi thành công, để Admin
+ *        biết có đang gần hết quota hay không. Nếu gửi thành công nhưng
+ *        người nhận vẫn báo không thấy, khả năng cao rơi vào Spam - đã
+ *        ghi chú nhắc trong cả UI lẫn nội dung email test.
+ *  AF) TRANG CHỦ - THÊM BDMT CHO "GỖ KEO NHẬP TRONG NGÀY" + "TỒN KHO" +
+ *     THẺ "ĐỘ ẨM TRUNG BÌNH" (v2026.8.18) - THEO PHẢN HỒI người dùng
+ *     "trang chủ tổng lượng gỗ keo nhập trong ngày mới có khối lượng MT,
+ *     chưa có BDMT, tổng lượng tồn kho cũng chưa có BDMT, chưa có độ ẩm
+ *     trung bình trong ngày":
+ *     1. "Tổng lượng gỗ keo nhập" (nhapGo) là 1 Ô NHẬP TAY THUẦN, KHÔNG
+ *        có cột Độ ẩm/Độ khô riêng đi kèm trong sheet - hỏi lại người
+ *        dùng cách quy đổi và được xác nhận: DÙNG "Độ khô TB Kho Nhà
+ *        máy" (COL.DO_KHO) đã ghi nhận CÙNG dòng/CÙNG ngày/CÙNG đơn vị
+ *        đó → nhapGoBDMT = nhapGo × doKho (không cần thêm cột/sửa form
+ *        nhập liệu). Áp dụng ở CẢ getDashboardStats() (Trang chủ +
+ *        16h tự động) LẪN getDashboardStatsForDate_() (gửi lại báo cáo
+ *        ngày cũ) để 2 nguồn số liệu luôn khớp nhau.
+ *     2. "Tổng lượng tồn kho" (tongTonCK) vốn đã đúng bằng Cộng MT + Kho
+ *        Tiên Sa MT + Kho Dung Quất MT (mục H) - BDMT tương ứng
+ *        (tongTonCKBDMT) tính CÙNG CÔNG THỨC nhưng cộng các cột BDMT đã
+ *        có sẵn (khoTotal.congBDMT + khoTotal.tienSaBDMT +
+ *        khoTotal.dungQuatBDMT) - không cần số liệu mới.
+ *     3. "Độ ẩm trung bình" MỚI - tính THEO TRỌNG SỐ khối lượng tồn kho
+ *        (không phải trung bình cộng đơn giản giữa các đơn vị, vì mỗi
+ *        đơn vị tồn kho nhiều/ít khác nhau): doAmTrungBinh = 1 -
+ *        (tongTonCKBDMT / tongTonCK) - nhất quán với đúng số BDMT/MT
+ *        đang hiển thị cùng lúc (doKho + doAm cộng lại luôn = 100%).
+ *     Cả 3 số mới đều thêm vào Trang chủ (Index.html renderDashboard),
+ *     ảnh + caption báo cáo Telegram (taoAnhBaoCaoTrangChu_/
+ *     soanCaptionBaoCaoTrangChu_) để 2 nơi luôn khớp số.
+ *  AG) TRANG CHỦ - THÊM "ĐỊNH MỨC TIÊU HAO HIỆN TẠI ÁP DỤNG" + "TỒN KHO
+ *     TẠI CẢNG" + ĐỐI CHIẾU TỰ ĐỘNG "NHẬP GỖ KEO" VỚI PHIẾU CÂN NGOÀI
+ *     (v2026.8.18) - THEO YÊU CẦU MỚI, đã hỏi lại 3 điểm mơ hồ trước khi
+ *     làm (xem câu trả lời người dùng):
+ *     1. "Định mức tiêu hao hiện tại áp dụng tại các nhà máy" (HAKQN,
+ *        HAK, Đại Hiệp, CNQS - trùng khớp CFG.UNITS hiện có, không cần
+ *        thêm đơn vị) - NGƯỜI DÙNG CHỌN hiển thị Định mức THỰC TẾ tính
+ *        được (COL.DINH_MUC) của bản ghi GẦN NHẤT mỗi nhà máy (KHÔNG
+ *        phải khoảng min%-max% cấu hình ở "Điều kiện duyệt" - đó là
+ *        NGƯỠNG kiểm tra, không phải "định mức đang áp dụng thực tế").
+ *        Thêm trường `dinhMuc` vào units[] của getDashboardStats() (đọc
+ *        COL.DINH_MUC), hiển thị ở Trang chủ (card mới "Định mức tiêu
+ *        hao hiện tại áp dụng").
+ *     2. "Tồn Kho tại Cảng Tiên Sa, Dung Quất: MT/BDMT (tổng kg chi
+ *        tiết)" - KHÔNG CẦN số liệu backend mới (khoTotal.tienSaMT/BDMT,
+ *        dungQuatMT/BDMT đã có sẵn từ trước) - chỉ thêm 1 bảng mới ở
+ *        Trang chủ (card "Tồn kho tại Cảng") quy đổi thêm ra kg
+ *        (MT/BDMT × 1000) cho chi tiết hơn, cạnh số liệu MT/BDMT gốc.
+ *     3. ĐỐI CHIẾU TỰ ĐỘNG "Nhập gỗ keo trong ngày" (nhập tay) với PHIẾU
+ *        CÂN THỰC TẾ - mỗi Đơn vị có 1 file Google Sheet RIÊNG (NGOÀI
+ *        file dữ liệu chính, do bộ phận cân xe ghi - xem
+ *        CFG.PHIEUCAN_MAP): lấy TỔNG cột "KL hàng (KG)" (cột J) của các
+ *        dòng có "Ngày cân 1" (cột B) = đúng Ngày tồn kho đang báo cáo,
+ *        chia 1000 ra MT (xem docTongPhieuCanNgoai_). NGƯỜI DÙNG CHỌN:
+ *          - % lệch = |Nhập gỗ keo - Tổng phiếu cân| / TỔNG PHIẾU CÂN
+ *            (coi phiếu cân - số liệu cân THỰC TẾ từng xe - là chuẩn
+ *            khách quan hơn số nhập tay, dùng làm MẪU SỐ).
+ *          - Lệch ≤ 5% → coi như khớp, không cần báo (chữ "kg" người
+ *            dùng gõ trong yêu cầu = viết tắt "không", đã thấy quy ước
+ *            này nhiều lần trong hội thoại trước - vd "kg hề có sẵn").
+ *          - Lệch > 5% → CÙNG cơ chế "Chờ duyệt" + gửi email như "lệch
+ *            đầu kỳ"/"lệch định mức" đã có (xem
+ *            kiemTraPhieuCanVaCanhBao_, gọi trong submitInventoryEntry
+ *            NGAY SAU bước kiểm tra lệch định mức, gộp chung
+ *            lyDoChoDuyetList/COL.LY_DO_CHO_DUYET nếu bị nhiều lỗi cùng
+ *            lúc). Admin tự nộp vẫn BỎ QUA việc chặn (cùng nguyên tắc 2
+ *            check trước) nhưng vẫn nhận email lưu ý.
+ *          - Tên sheet/tab BÊN TRONG mỗi file phiếu cân: NGƯỜI DÙNG XÁC
+ *            NHẬN trùng tên file (PhieuCan_DN/DH/QC/QS).
+ *          - Nếu KHÔNG có dòng phiếu cân nào đúng ngày đó (chưa kịp
+ *            nhập) HOẶC lỗi đọc file (chưa chia sẻ quyền Xem...) → BỎ
+ *            QUA hoàn toàn (không báo lỗi/không chặn oan) - lỗi đọc file
+ *            NGOÀI được ghi riêng vào Audit (email "(HỆ THỐNG)") để Admin
+ *            biết mà xử lý, KHÔNG làm hỏng luồng nộp báo cáo chính.
+ *        QUAN TRỌNG - CẦN LÀM 1 LẦN, KHÔNG TỰ ĐỘNG ĐƯỢC: tài khoản đứng
+ *        sau Web App (mục "Execute as" lúc Deploy) phải được CHIA SẺ
+ *        quyền Xem (Viewer) trên cả 4 file Phiếu cân trong
+ *        CFG.PHIEUCAN_MAP thì đối chiếu mới đọc được - nếu chưa chia sẻ,
+ *        mỗi lần nộp báo cáo sẽ tự ghi cảnh báo vào Audit thay vì chặn
+ *        cứng, nên Admin cứ vào Nhật Ký (Audit) kiểm tra nếu thấy tính
+ *        năng này "im lặng không hoạt động".
+ *  AH) KHỐI "TỒN KHO TẠI CẢNG" - THÊM ĐỘ ẨM/ĐỘ KHÔ TRUNG BÌNH + KHỐI MỚI
+ *     "CÂN ĐỐI XUẤT HÀNG" (v2026.8.18) - THEO YÊU CẦU MỚI:
+ *     1. Độ ẩm/Độ khô TRUNG BÌNH của Kho Tiên Sa/Kho Dung Quất - tính
+ *        CÙNG NGUYÊN TẮC mục O/Q (Báo Cáo Tổng Hợp): trung bình cộng
+ *        ĐƠN GIẢN (KHÔNG theo trọng số khối lượng, khác với
+ *        doAmTrungBinh của mục AF) chỉ trên đơn vị THỰC SỰ có tồn ở
+ *        đúng kho đó (MT > 0) - bỏ qua đơn vị không xuất qua kho này
+ *        (Độ ẩm/Độ khô ghi 0/rác nếu tính chung sẽ kéo lệch số). Cần
+ *        đọc thêm COL.DO_AM_TIEN_SA/DO_KHO_TIEN_SA/DO_AM_DUNG_QUAT/
+ *        DO_KHO_DUNG_QUAT (đã có sẵn cột, TRƯỚC ĐÓ getDashboardStats()
+ *        chưa từng đọc 4 cột này).
+ *     2. Khối "Cân đối xuất hàng" MỚI - hiện LẦN CÂN ĐỐI BDMT XUẤT HÀNG
+ *        GẦN NHẤT (xem mục K/sheet CanDoiBDMT) của MỖI nhà máy (4 đơn
+ *        vị), gồm Kho, Ngày cân đối, "Điều chỉnh MT"/"Điều chỉnh BDMT"
+ *        (= LỆCH giữa số Kho Nhà máy đang ghi sổ và số THỰC TẾ đo lúc
+ *        xuất hàng - dương = phải XUẤT điều chỉnh bổ sung, âm = phải
+ *        NHẬP điều chỉnh bổ sung, xem computeCanDoiBDMT_). [SỬA LẠI ở
+ *        mục AI ngay dưới - "gần nhất bất kỳ" dễ hiểu lầm là còn hiệu
+ *        lực dù đã cũ, đổi sang so khớp ĐÚNG ngày báo kho.]
+ *  AI) SỬA "CÂN ĐỐI XUẤT HÀNG" THEO ĐÚNG NGÀY BÁO KHO + CÔNG THỨC ĐỘ
+ *     ẨM/ĐỘ KHÔ TỪ BDMT/MT + BOT TELEGRAM (v2026.8.18) - THEO YÊU CẦU
+ *     MỚI, 3 điểm:
+ *     1. "Cân đối xuất hàng" KHÔNG còn lấy lần cân đối GẦN NHẤT bất kỳ
+ *        nữa (bản mục AH ban đầu) - CHỈ lấy đúng cân đối có "Ngày cân
+ *        đối" (cột A) TRÙNG với "ngày báo kho" (= ngày báo cáo tồn kho
+ *        gần nhất đang hiển thị, u.ngayGanNhatISO) của CHÍNH đơn vị đó;
+ *        không có thì hiện "Chưa cân đối xuất hàng" (KHÔNG bị ẩn khỏi
+ *        danh sách như trước) - xem layCanDoiBDMTDungNgayMoiDonVi_ (thay
+ *        thế layCanDoiBDMTGanNhatMoiDonVi_ cũ).
+ *     2. Công thức Độ ẩm/Độ khô cho TỔNG (không phải trung bình cộng)
+ *        dùng CHUNG 1 quy tắc, đúng người dùng yêu cầu: Độ khô = TỔNG
+ *        BDMT / TỔNG MT × 100%, Độ ẩm = 100% - Độ khô. Áp dụng cho dòng
+ *        "Tổng cộng" của khối "Tồn kho tại Cảng" (trước đó để trống "–")
+ *        VÀ cho "Tổng lượng gỗ keo nhập hàng ngày" (doAmNhapTB/
+ *        doKhoNhapTB, mới thêm - KHÁC doAmTienSaTB/doKhoTienSaTB... của
+ *        mục AH vốn là trung bình cộng đơn giản trên đơn vị có tồn).
+ *     3. BOT TELEGRAM (ảnh + caption, dùng CHUNG
+ *        taoAnhBaoCaoTrangChu_/soanCaptionBaoCaoTrangChu_ cho cả lịch
+ *        16h tự động lẫn gửi thủ công): bổ sung dòng Độ ẩm/Độ khô của
+ *        tổng lượng tồn (đã có từ mục AF) + tổng lượng nhập hàng ngày
+ *        (mới). Mục "KHO XUẤT HÀNG" trong ẢNH ĐỔI từ bảng chi tiết theo
+ *        đơn vị (addDataTable_, giống "KHO NHÀ MÁY") SANG chỉ báo BẰNG
+ *        CHỮ (text đơn giản, theo đúng yêu cầu "chỉ báo bằng chữ Kho
+ *        xuất hàng") - gồm Tổng MT/BDMT + Độ ẩm/Độ khô TỔNG của Kho Tiên
+ *        Sa + Dung Quất gộp lại, kèm khối "Cân đối xuất hàng" (text,
+ *        không phải bảng) ngay bên dưới. getDashboardStatsForDate_ (biến
+ *        thể "gửi lại báo cáo ngày cũ") ĐƯỢC CẬP NHẬT ĐỒNG BỘ (đọc thêm
+ *        4 cột Độ ẩm/Độ khô Tiên Sa/Dung Quất + gọi
+ *        layCanDoiBDMTDungNgayMoiDonVi_ y hệt getDashboardStats gốc) để
+ *        2 luồng Telegram (16h tự động vs gửi lại ngày cũ) luôn khớp số,
+ *        không bị thiếu trường khi dùng chung 2 hàm dựng ảnh/caption ở
+ *        trên.
+ *  AJ) ĐỔI 3 KHỐI "ĐỊNH MỨC TIÊU HAO HIỆN TẠI ÁP DỤNG", "TỒN KHO TẠI
+ *     CẢNG", "CÂN ĐỐI XUẤT HÀNG" SANG THẺ NHỎ "unit-card" (v2026.8.18) -
+ *     CHỈ SỬA GIAO DIỆN Index.html, KHÔNG đổi logic/dữ liệu Code.gs. Theo
+ *     yêu cầu người dùng (kèm ảnh mẫu thẻ "HAK (Bà Nà)" ở khối "Tình
+ *     trạng theo đơn vị"): 3 khối trên trước đó hiện dạng bảng
+ *     (Tồn kho tại Cảng, Cân đối xuất hàng dùng <table> overflow-x:auto)
+ *     hoặc ô KPI to (Định mức tiêu hao) - nay ĐỔI ĐỒNG BỘ sang lưới thẻ
+ *     nhỏ `class="grid cols-4"` chứa nhiều `.unit-card` (mỗi thẻ: tiêu đề
+ *     `.uname` + các dòng `.urow` label/giá trị), giống hệt style thẻ
+ *     "Tình trạng theo đơn vị" sẵn có. Chi tiết:
+ *     1. "Định mức tiêu hao hiện tại áp dụng": mỗi đơn vị 1 thẻ - Định
+ *        mức (%) + Ngày báo cáo.
+ *     2. "Tồn kho tại Cảng": 3 thẻ - Kho Tiên Sa, Kho Dung Quất, Tổng
+ *        cộng (thẻ Tổng cộng tô nền nhạt để nổi bật) - mỗi thẻ: MT,
+ *        BDMT, Độ ẩm (TB hoặc TỔNG), Độ khô (TB hoặc TỔNG).
+ *     3. "Cân đối xuất hàng": mỗi nhà máy 1 thẻ - có cân đối đúng ngày
+ *        báo kho thì hiện Kho/Ngày cân đối/Điều chỉnh MT/Điều chỉnh
+ *        BDMT; không có thì thẻ chỉ hiện nhãn "Chưa cân đối xuất hàng".
+ *        [SỬA LẠI ở mục AK ngay dưới - gộp 3 khối này lại còn 1 thẻ mỗi
+ *        khối + thêm khối mới "Độ ẩm trung bình nhà máy".]
+ *  AK) GỘP 3 KHỐI TRANG CHỦ THÀNH 1 THẺ/KHỐI + THÊM "ĐỘ ẨM TRUNG BÌNH
+ *     NHÀ MÁY" (v2026.8.18) - THEO YÊU CẦU MỚI, CHỈ SỬA GIAO DIỆN
+ *     Index.html (KHÔNG đổi logic/dữ liệu Code.gs, mọi số liệu vẫn lấy
+ *     từ getDashboardStats() có sẵn - kể cả canDoiBDMTList, tính gộp
+ *     theo Kho được làm NGAY TẠI CLIENT). Thay bản "mỗi đơn vị 1 thẻ nhỏ"
+ *     (mục AJ) bằng:
+ *     1. "Định mức tiêu hao hiện tại áp dụng": GỘP 1 thẻ DUY NHẤT, mỗi
+ *        đơn vị 1 dòng "Tên đơn vị: Định mức % (ngày báo cáo)".
+ *     2. "Tồn kho tại Cảng" ĐỔI TÊN THÀNH "Kho xuất hàng" (khớp tên BOT
+ *        Telegram, mục AI) - GỘP 1 thẻ DUY NHẤT, 2 dòng Kho Tiên Sa/Kho
+ *        Dung Quất (MT/BDMT + Độ ẩm/Độ khô TB) - BỎ dòng "Tổng cộng"
+ *        riêng (đã có sẵn ở thẻ KPI "Tổng tồn kho" đầu Trang chủ).
+ *     3. "Cân đối xuất hàng" ĐỔI TÊN THÀNH "Cân đối kho xuất hàng" - GỘP
+ *        1 thẻ DUY NHẤT theo YÊU CẦU MỚI "cộng tổng 4 đơn vị": thay vì
+ *        hiện riêng từng nhà máy, CỘNG DỒN "Điều chỉnh MT"/"Điều chỉnh
+ *        BDMT" của các nhà máy có cân đối đúng ngày báo kho THEO TỪNG
+ *        KHO (Kho Tiên Sa / Kho Dung Quất, dựa vào c.kho của mỗi đơn vị
+ *        trong canDoiBDMTList) -> 2 dòng tổng theo Kho; đơn vị chưa cân
+ *        đối đúng ngày báo kho liệt kê tên ở dòng ghi chú cuối thẻ (không
+ *        cộng vào tổng, KHÔNG ẩn khỏi giao diện).
+ *     4. "Độ ẩm trung bình nhà máy" - KHỐI MỚI: dòng đầu là Độ ẩm/Độ khô
+ *        trung bình CHUNG của Kho Nhà máy (KHÁC thẻ KPI "Độ ẩm trung
+ *        bình" mục AF vốn tính TOÀN CÔNG TY gồm cả Cảng) - tính từ
+ *        TỔNG congBDMT / TỔNG congMT (Cộng MT/BDMT Kho Nhà máy, đã có
+ *        sẵn ở units[]) × 100% CÙNG công thức Độ khô/Độ ẩm dùng xuyên
+ *        suốt (mục AI); mỗi đơn vị 1 dòng dùng Độ ẩm/Độ khô (u.doAm/
+ *        u.doKho) + ngày báo cáo GẦN NHẤT của chính đơn vị đó.
+ *     Cả 4 khối dùng thẻ `.unit-card` rộng 100% (không còn `grid cols-4`
+ *     nhiều thẻ nhỏ) để "rộng ra, cân đối" với các khối phía trên theo
+ *     đúng yêu cầu người dùng.
+ *  AL) LIVE-FORMAT DẤU PHÂN CÁCH NGHÌN NGAY LÚC GÕ Ở CÁC Ô NHẬP MT/BDMT
+ *     (v2026.8.18) - CHỈ SỬA GIAO DIỆN Index.html (KHÔNG đổi logic/dữ
+ *     liệu Code.gs). THEO PHẢN HỒI người dùng: cách làm cũ (mục
+ *     v2026.8.10 - "format khi BLUR, bỏ format khi FOCUS" để né lỗi nhảy
+ *     con trỏ) khiến lúc ĐANG GÕ DỞ hoàn toàn không có dấu phân cách nên
+ *     rất dễ gõ NHẦM THỪA/THIẾU SỐ 0 (VD gõ 100000 mà không để ý, trong
+ *     khi ý định là 10000) vì không đếm được chữ số bằng mắt. Bổ sung
+ *     listener 'input' cho mọi ô `.num-fmt` (xem liveFormatNumberInputValue_/
+ *     attachNumberFormatting_ trong Index.html) - thêm dấu chấm phân
+ *     cách nghìn NGAY SAU MỖI PHÍM GÕ (VD gõ "10000" sẽ thấy ngay
+ *     "10.000" thay vì phải rời ô mới thấy), đồng thời TỰ TÍNH LẠI vị
+ *     trí con trỏ (đếm số ký tự "có nghĩa" - chữ số/dấu phẩy thập
+ *     phân/dấu trừ - đứng trước con trỏ ở giá trị CŨ rồi đặt con trỏ vào
+ *     đúng vị trí tương ứng ở giá trị MỚI) để KHÔNG bị nhảy con trỏ như
+ *     lo ngại ban đầu của mục v2026.8.10. KHÔNG ép đủ 2 số thập phân khi
+ *     đang gõ dở (chỉ ép khi BLUR như cũ, dùng formatNumberInputValue_
+ *     không đổi) để không cản trở việc gõ tiếp phần thập phân.
+ *  AM) THU GỌN 3 KHỐI "ĐỊNH MỨC/KHO XUẤT HÀNG/CÂN ĐỐI KHO XUẤT HÀNG"
+ *     THÀNH 1 HÀNG 3 Ô + ĐỒNG BỘ ẢNH/CAPTION TELEGRAM (v2026.8.18) -
+ *     THEO YÊU CẦU MỚI, xác nhận qua NHIỀU vòng vẽ mockup (ảnh xem
+ *     trước) trước khi code vào file thật, theo đúng yêu cầu người dùng
+ *     "vẽ lại đưa tôi xem rồi code". Thay bản mục AK (mỗi khối 1
+ *     `.card` riêng, xếp dọc, có thêm khối "Độ ẩm trung bình nhà máy"):
+ *     1. GỘP CHUNG 1 `.card` DUY NHẤT (tiêu đề "Định mức tiêu hao hiện
+ *        tại áp dụng"), bên trong dùng `grid cols-3` xếp 3 `.unit-card`
+ *        NGANG HÀNG (Định mức tiêu hao / Kho xuất hàng / Cân đối kho
+ *        xuất hàng) - THEO YÊU CẦU "1 dòng được 3 ô", rộng hơn bản mục
+ *        AJ (4 thẻ nhỏ/hàng) nhưng KHÔNG dàn tràn 1 thẻ/hàng như mục AK.
+ *     2. BỎ HẲN khối "Độ ẩm trung bình nhà máy" (mục AK) vì người dùng
+ *        thấy TRÙNG LẶP với thẻ KPI "Độ ẩm trung bình" đã có sẵn đầu
+ *        Trang chủ (mục AF) - không tính/hiện lại ở Index.html nữa.
+ *     3. "Định mức tiêu hao hiện tại áp dụng": mỗi đơn vị 1 dòng, BỔ
+ *        SUNG thêm Độ ẩm (u.doAm) NGAY TRONG dòng đó - "{đơn vị}: {Định
+ *        mức}% với độ ẩm {Độ ẩm}% (ngày {ngày báo cáo})".
+ *     4. "Kho xuất hàng": BỎ dòng "Tổng cộng" (đã có mục AK) VÀ BỎ Độ ẩm
+ *        (chỉ giữ Độ khô) - "Kho Tiên Sa/Kho Dung Quất: {MT} MT / {BDMT}
+ *        BDMT — {Độ khô}%" (KHÔNG còn chữ nhãn "Độ khô", chỉ số %).
+ *     5. "Cân đối kho xuất hàng" (đổi tên từ "Cân đối xuất hàng"): BỎ
+ *        chữ nhãn "Điều chỉnh" - chỉ còn "Kho Tiên Sa/Kho Dung Quất: MT
+ *        {...} / BDMT {...}" (số vẫn CỘNG TỔNG theo Kho như mục AK).
+ *     6. ĐỒNG BỘ ảnh (taoAnhBaoCaoTrangChu_) + caption
+ *        (soanCaptionBaoCaoTrangChu_) BOT Telegram theo ĐÚNG 5 thay đổi
+ *        trên - THÊM MỚI khối "ĐỊNH MỨC TIÊU HAO" vào ảnh/caption (TRƯỚC
+ *        ĐÂY CHƯA TỪNG CÓ ở Telegram, chỉ có ở Trang chủ web từ mục AG).
+ *        Ảnh Telegram (khung cố định CF.H=936, KHÔNG cuộn được) rút gọn
+ *        khối "Cân đối kho xuất hàng" chỉ còn 2 dòng tổng theo Kho + 1
+ *        dòng gộp tên đơn vị chưa cân đối (nếu có) - KHÁC caption (text
+ *        thường, không giới hạn khung) vẫn liệt kê đủ từng đơn vị chưa
+ *        cân đối, để không mất thông tin dù ảnh phải rút gọn cho vừa
+ *        khung.
+ *  AN) BỎ "ĐỊNH MỨC TIÊU HAO" + "CÂN ĐỐI KHO XUẤT HÀNG" KHỎI ẢNH/CAPTION
+ *     TELEGRAM (v2026.8.18) - THEO YÊU CẦU MỚI: sau khi xem thử nội dung
+ *     caption đầy đủ (mục AM) - người dùng hỏi "telegram báo text gì",
+ *     được trả lời kèm cảnh báo caption ví dụ đã ~1170 ký tự, VƯỢT giới
+ *     hạn 1024 ký tự Telegram cho phép (guiAnhTelegram_ tự cắt bớt phần
+ *     dư) - người dùng chọn bỏ bớt 2 khối mới thêm ở mục AM để giảm rủi
+ *     ro bị cắt, thay vì sắp xếp lại thứ tự. taoAnhBaoCaoTrangChu_ +
+ *     soanCaptionBaoCaoTrangChu_ nay CHỈ còn "KHO XUẤT HÀNG" (giữ
+ *     nguyên, không đổi định dạng mục AM) - BỎ HẲN 2 đoạn "ĐỊNH MỨC TIÊU
+ *     HAO"/"CÂN ĐỐI KHO XUẤT HÀNG" vừa thêm. CHỈ sửa 2 hàm này (ảnh +
+ *     caption Telegram) - Trang chủ (Index.html, mục AM) GIỮ NGUYÊN đủ 3
+ *     khối (Định mức/Kho xuất hàng/Cân đối kho xuất hàng), vì Trang chủ
+ *     không bị giới hạn ký tự như Telegram.
+ *  AO) LÀM RÕ MỤC AN - CHỈ BỎ 2 KHỐI KHỎI CAPTION, KHÔI PHỤC LẠI Ở ẢNH
+ *     (v2026.8.18) - THEO YÊU CẦU MỚI: người dùng làm rõ ý mục AN - CHỈ
+ *     muốn bỏ "Định mức tiêu hao"/"Cân đối kho xuất hàng" khỏi CAPTION
+ *     (phần CHỮ đi kèm ảnh, bị Telegram giới hạn CỨNG 1024 ký tự và tự
+ *     cắt bớt phần dư - guiAnhTelegram_), KHÔNG phải bỏ khỏi ẢNH (ẢNH
+ *     không bị giới hạn ký tự như caption, chỉ bị giới hạn CHIỀU CAO CỐ
+ *     ĐỊNH của khung Slides CF.H=936 - đã tính đủ ngân sách chiều cao ở
+ *     mục AM, y cuối cùng ~910/936). taoAnhBaoCaoTrangChu_ (ẢNH) KHÔI
+ *     PHỤC LẠI đủ 3 khối (Định mức tiêu hao/Kho xuất hàng/Cân đối kho
+ *     xuất hàng) - GIỮ NGUYÊN định dạng mục AM (không đổi lại cách trình
+ *     bày). soanCaptionBaoCaoTrangChu_ (CAPTION) GIỮ NGUYÊN như mục AN
+ *     (chỉ còn "Kho xuất hàng"). Trang chủ (Index.html) không đổi gì
+ *     thêm ở mục này.
+ *  AP) BỎ HẲN LẠI 2 KHỐI "ĐỊNH MỨC TIÊU HAO"/"CÂN ĐỐI KHO XUẤT HÀNG"
+ *     KHỎI ẢNH TELEGRAM (v2026.8.18) - THEO YÊU CẦU MỚI: sau khi xem ẢNH
+ *     THẬT do taoAnhBaoCaoTrangChu_ dựng (mục AO khôi phục lại 2 khối
+ *     này), người dùng gửi ảnh chụp kèm nhận xét "phía dưới xấu quá,
+ *     không cân đối, sau không để 3 khối như trang chủ webapp" - lý do:
+ *     addText_/addRect_ (Slides API vẽ text/hình chữ nhật THÔ theo tọa
+ *     độ x/y cố định) KHÔNG tự canh lề/bọc cột đẹp như CSS flexbox thật
+ *     của `.unit-card` ở Trang chủ - 2 khối "Định mức tiêu hao"/"Cân đối
+ *     kho xuất hàng" khi dựng bằng cách xếp dòng addText_ chồng lên nhau
+ *     (mục AM/AO) bị xem là xấu/lộn xộn trong ẢNH THẬT, dù Y HỆT nội
+ *     dung với bản trên Trang chủ. QUYẾT ĐỊNH: BỎ HẲN 2 khối này khỏi
+ *     ẢNH (không cố canh chỉnh lại cho đẹp hơn) - taoAnhBaoCaoTrangChu_
+ *     nay CHỈ còn "KHO XUẤT HÀNG", KHỚP Y HỆT caption
+ *     (soanCaptionBaoCaoTrangChu_, mục AN, không đổi). Trang chủ
+ *     (Index.html) KHÔNG đổi gì - vẫn giữ nguyên đủ 3 khối card đẹp như
+ *     đã duyệt (mục AM), vì bố cục HTML/CSS thật không gặp vấn đề canh
+ *     lề như Slides API.
+ *  AQ) DỰNG LẠI ĐỦ 3 THẺ (Ô KHUNG THẬT) CHO ẢNH TELEGRAM - THAY VÌ BỎ
+ *     (v2026.8.18) - THEO YÊU CẦU MỚI: người dùng gửi lại ảnh chụp 3 thẻ
+ *     THẬT của Trang chủ, hỏi "sao không tạo 3 khối như Trang chủ" - LÀM
+ *     RÕ lại mục AP: vấn đề KHÔNG phải ở NỘI DUNG 2 khối "Định mức tiêu
+ *     hao"/"Cân đối kho xuất hàng" (nên bỏ hẳn), mà ở CÁCH DỰNG - mục
+ *     AM/AO chỉ dùng addText_ xếp CHỮ CHỒNG DÒNG, KHÔNG có khung/nền
+ *     (khác "TÌNH TRẠNG THEO ĐƠN VỊ" phía trên VỐN ĐÃ dùng addRect_ vẽ
+ *     khung thẻ cho từng đơn vị, nhìn đẹp/cân đối bình thường) - đây mới
+ *     là lý do bị chê xấu, KHÔNG phải do có 3 khối. SỬA ĐÚNG: dựng lại
+ *     ĐỦ 3 thẻ (Định mức tiêu hao/Kho xuất hàng/Cân đối kho xuất hàng)
+ *     NGANG HÀNG, MỖI thẻ 1 addRect_ (khung/nền CF.CARD/CF.BORDER, CÙNG
+ *     CÁCH "TÌNH TRẠNG THEO ĐƠN VỊ") rộng bằng nhau (dmCardW = (CF.W -
+ *     2*CF.M - 2*gap)/3), cao bằng nhau (dmCardH=190, tính theo thẻ
+ *     nhiều dòng nhất - Định mức 4 đơn vị) để nhìn CÂN ĐỐI như ảnh chụp
+ *     Trang chủ người dùng gửi. Nội dung/công thức mỗi thẻ GIỮ NGUYÊN
+ *     như mục AM/AO (không đổi số liệu, chỉ đổi CÁCH VẼ). Ngân sách
+ *     chiều cao: y bắt đầu ~704 (sau bảng Kho Nhà máy), +190 = ~894,
+ *     trong khung CF.H=936 (dư ~42px, không tràn). Caption
+ *     (soanCaptionBaoCaoTrangChu_) KHÔNG đổi - vẫn chỉ có "Kho xuất
+ *     hàng" như mục AN (câu hỏi lần này chỉ về ẢNH).
+ *  AR) PHÂN TÁN LẠI 3 KHỐI VÀO CÁC KHỐI SẴN CÓ TRÊN ẢNH TELEGRAM, THAY
+ *     VÌ 1 HÀNG 3 THẺ RIÊNG (v2026.8.18) - THEO YÊU CẦU MỚI: người dùng
+ *     gửi ảnh chụp 2 khối THẬT của Trang chủ (thẻ "Tình trạng theo đơn
+ *     vị" + bảng "Kho Xuất Hàng" kiểu CŨ - dash-xuathang-wrap, KHÁC thẻ
+ *     "Kho xuất hàng" tóm tắt mới ở mục AM) làm mẫu, yêu cầu 3 điểm:
+ *     1. BỎ thẻ riêng "ĐỊNH MỨC TIÊU HAO" (mục AQ) - THÊM 1 dòng "Định
+ *        mức" (fmtPctVN_(u.dinhMuc)) vào MỖI thẻ đơn vị ở "TÌNH TRẠNG
+ *        THEO ĐƠN VỊ" (5 dòng thay vì 4: Ngày gần nhất/Tồn kho cuối/
+ *        Nhập gỗ keo/Độ ẩm/Định mức) - cardH tăng 150->162, khoảng cách
+ *        dòng giảm 20->18 để vừa 5 dòng mà không tăng quá nhiều chiều
+ *        cao thẻ.
+ *     2. "CÂN ĐỐI KHO XUẤT HÀNG" ĐỔI THÀNH 1 THẺ KPI (hàng 5 thẻ đầu
+ *        Trang chủ), THAY THẾ thẻ "TỔNG LƯỢT NỘP FORM" (bỏ luôn, không
+ *        còn hiện ở ảnh Telegram) - value = Tổng Điều chỉnh MT (cộng cả
+ *        2 Kho), sub = Tổng Điều chỉnh BDMT - NGẮN GỌN, BỎ HẲN danh sách
+ *        "Chưa cân đối: ..." (diễn giải chữ phía dưới) như bản thẻ card
+ *        mục AQ.
+ *     3. "KHO XUẤT HÀNG" bỏ dạng thẻ tóm tắt 2 dòng (mục AM/AQ) - QUAY
+ *        LẠI bảng CHI TIẾT THEO ĐƠN VỊ bằng addDataTable_ (CÙNG CÁCH
+ *        "KHO NHÀ MÁY" ngay phía trên) - cột: Đơn vị/Kho Tiên Sa MT/BDMT/
+ *        Kho Dung Quất MT/BDMT + dòng Tổng cộng - giống HỆT bảng
+ *        "Kho Xuất Hàng" kiểu cũ ở Trang chủ (ảnh mẫu người dùng gửi).
+ *     Ngân sách chiều cao đã tính lại đủ 3 thay đổi trên: y cuối cùng
+ *     ~918/936 (dư ~18px, không tràn). Caption
+ *     (soanCaptionBaoCaoTrangChu_) KHÔNG đổi gì - vẫn chỉ có "Kho xuất
+ *     hàng" như mục AN. Trang chủ (Index.html) KHÔNG đổi gì - vẫn giữ
+ *     nguyên các khối hiện có.
  * ============================================================
  */
 
@@ -486,9 +1101,31 @@ const CFG = {
   // - độc lập hoàn toàn với Form Responses 1/Chitiettonkho, không dùng
   // COL/TOTAL_COL_COUNT ở trên (xem logCanDoiBDMT_).
   SHEET_CANDOIBDMT: "CanDoiBDMT",
+  // 2 sheet mới (mục X, v2026.8.17) - xem ghi chú thiết kế ở mục X đầu
+  // file: SHEET_PHANQUYEN lưu danh sách email được cấp quyền theo từng
+  // Đơn vị (Nhập/Sửa | Xem | Admin); SHEET_DIEUKIENDUYET lưu khoảng định
+  // mức (%) admin cấu hình cho từng Đơn vị để tự động kiểm tra khớp.
+  SHEET_PHANQUYEN: "PhanQuyen",
+  SHEET_DIEUKIENDUYET: "DieuKienDuyet",
   // Danh sách đơn vị báo cáo (đã thấy trong dữ liệu thực tế) - có thể
   // thêm/bớt tại đây nếu công ty mở thêm đơn vị mới.
   UNITS: ["HAK (Bà Nà)", "CNHAK (QS)", "Đại Hiệp (Đại Lộc)", "HAKQN (QS Trung)"],
+  // Đối chiếu tự động "Nhập gỗ keo trong ngày" với PHIẾU CÂN THỰC TẾ -
+  // mỗi Đơn vị có 1 file Google Sheet RIÊNG (KHÔNG thuộc file dữ liệu
+  // đứng sau Web App này) do bộ phận cân xe ghi - xem mục AG,
+  // v2026.8.18/kiemTraPhieuCanVaCanhBao_/docTongPhieuCanNgoai_. `id` lấy
+  // từ URL file (đoạn giữa "/d/" và "/edit"); `sheetName` = tên
+  // sheet/tab BÊN TRONG file đó (đã xác nhận TRÙNG tên file). QUAN
+  // TRỌNG: tài khoản đứng sau Web App (mục "Execute as" lúc Deploy) BẮT
+  // BUỘC phải được CHIA SẺ quyền Xem (Viewer) trên cả 4 file này thì mới
+  // đọc được - nếu chưa chia sẻ, docTongPhieuCanNgoai_ sẽ lỗi và TỰ ĐỘNG
+  // ghi cảnh báo vào Audit (không chặn luồng nộp báo cáo).
+  PHIEUCAN_MAP: {
+    "HAK (Bà Nà)": { id: "1vqMVxccBA7zlAMHrGsVBydGFwZJ6QuDZW10zJ74V29g", sheetName: "PhieuCan_DN" },
+    "Đại Hiệp (Đại Lộc)": { id: "1VmfNI0Q6Q1f7KXJr_9sQjlhzUc9ngv91HWf1AR5SJZI", sheetName: "PhieuCan_DH" },
+    "HAKQN (QS Trung)": { id: "1wR7ZcbdJjIJcsz-4kdLpgRqZq7zR7ewL6eP4t4oshWE", sheetName: "PhieuCan_QC" },
+    "CNHAK (QS)": { id: "1Ul0PRtMr579jKcaNFLvPHH2AA2APdAp6dzuJKNwf9x4", sheetName: "PhieuCan_QS" }
+  },
   // Số cột INPUT (người dùng nhập / web app ghi) tính từ cột A = cột
   // thứ 1 tới cột W = cột thứ 23. Từ cột X trở đi (thứ 24) là công
   // thức tính tự động, Web App không ghi trực tiếp mà copy công thức
@@ -497,8 +1134,22 @@ const CFG = {
   // "Định mức") thay vì chèn giữa, cho đỡ rối / không dịch cột cũ (mục
   // H ở đầu file, đã đổi phương án so với v2026.8.4 ban đầu). 37 cột
   // gốc A..AK giữ NGUYÊN vị trí, cộng 4 cột mới AL..AO.
+  // v2026.8.17 (mục X): +1 cột "Trạng thái duyệt" NỐI VÀO CUỐI (cột AP,
+  // thứ 42) - CÙNG PHƯƠNG ÁN với Kho Dung Quất ở mục H (nối cuối, không
+  // chèn giữa, không dịch cột cũ). Cột này KHÔNG PHẢI người dùng tự
+  // nhập - Web App tự ghi "" (bình thường) hoặc "Chờ duyệt"/"Đã
+  // duyệt"/"Từ chối" (xem COL.TRANG_THAI_DUYET). CẦN CHẠY 1 LẦN hàm
+  // DAM_BAO_COT_TRANG_THAI_DUYET() (Apps Script Editor > chọn hàm > Run)
+  // để thêm nhãn tiêu đề cho cột mới vào sheet thật (Form Responses 1 +
+  // Chitiettonkho) - xem hàm đó để biết chi tiết.
+  // v2026.8.18 (mục AD): +1 cột "Lý do chờ duyệt" NỐI VÀO CUỐI (cột AQ,
+  // thứ 43) - CÙNG PHƯƠNG ÁN nối cuối như 2 lần mở rộng trước (Kho Dung
+  // Quất mục H, Trạng thái duyệt mục X). Lưu lại (dạng text) VÌ SAO 1
+  // dòng bị đánh "Chờ duyệt" (lệch đầu kỳ/lệch định mức/cả 2) NGAY LÚC
+  // ghi - để khi Admin duyệt (duyetBaoCao) hoặc gửi email không cần đoán
+  // lại lý do (xem COL.LY_DO_CHO_DUYET).
   INPUT_COL_COUNT: 25, // A..Y (không đổi - 2 cột input Dung Quất mới nằm NGOÀI dải này, ở cuối AL:AM, xem mục H)
-  TOTAL_COL_COUNT: 41 // A..AO
+  TOTAL_COL_COUNT: 43 // A..AQ
 };
 
 // Chỉ số cột 0-based (khớp mảng giá trị 1 dòng đọc bằng getValues()).
@@ -516,7 +1167,11 @@ const COL = {
   TON_CK: 34, NHAP_TRONG_KY: 35, DINH_MUC: 36,
   // --- Cột mới NỐI VÀO CUỐI (v2026.8.5, mục H) ---
   DUNG_QUAT_MT: 37, DUNG_QUAT_BDMT: 38,           // input (AL, AM)
-  DO_AM_DUNG_QUAT: 39, DO_KHO_DUNG_QUAT: 40        // công thức (AN, AO)
+  DO_AM_DUNG_QUAT: 39, DO_KHO_DUNG_QUAT: 40,       // công thức (AN, AO)
+  // --- Cột mới NỐI VÀO CUỐI (v2026.8.17, mục X) - xem CFG.TOTAL_COL_COUNT ---
+  TRANG_THAI_DUYET: 41,                            // Web App tự ghi (AP)
+  // --- Cột mới NỐI VÀO CUỐI (v2026.8.18, mục AD) ---
+  LY_DO_CHO_DUYET: 42                              // Web App tự ghi (AQ)
 };
 
 const utils = {
@@ -536,7 +1191,18 @@ const utils = {
     return Utilities.formatDate(d1, "GMT+7", "yyyy-MM-dd") === Utilities.formatDate(d2, "GMT+7", "yyyy-MM-dd");
   },
   normEmail: (v) => String(v || "").trim().toLowerCase(),
-  isAdmin: (email) => CFG.ADMIN_EMAILS.map(utils.normEmail).includes(utils.normEmail(email))
+  // THEO YÊU CẦU MỚI (mục X, v2026.8.17): Admin giờ có 2 nguồn - danh
+  // sách cứng CFG.ADMIN_EMAILS (luôn có, không thể bị khóa nhầm ngay cả
+  // khi sheet PhanQuyen bị xóa/sai) VÀ các email được gán quyền "admin"
+  // trong sheet PhanQuyen (xem phanQuyenIsAdmin_) - CHỈ CẦN 1 TRONG 2 là
+  // đủ. Toàn bộ chỗ gọi utils.isAdmin() sẵn có trong file (sửa/xóa Lịch
+  // Sử, đồng bộ Chitiettonkho, gửi Telegram...) tự động áp dụng đúng
+  // theo nguồn mới này, không cần sửa từng chỗ gọi riêng lẻ.
+  isAdmin: (email) => {
+    const e = utils.normEmail(email);
+    if (CFG.ADMIN_EMAILS.map(utils.normEmail).includes(e)) return true;
+    return phanQuyenIsAdmin_(e);
+  }
 };
 
 function getCurrentUserEmail_() {
@@ -586,6 +1252,413 @@ function getOrCreateAuditSheet_() {
 function logAudit_(email, donVi, ngayTonKho, lyDo) {
   const sh = getOrCreateAuditSheet_();
   sh.appendRow([new Date(), email, donVi, ngayTonKho, lyDo]);
+}
+
+/** Gửi email AN TOÀN (không throw làm hỏng luồng chính) NHƯNG KHÔNG
+ * NUỐT LỖI ÂM THẦM như trước (mục AE, v2026.8.18 - THEO PHẢN HỒI người
+ * dùng "đã test và KHÔNG nhận được email"): mọi lỗi gửi mail (VD hết
+ * quota MailApp trong ngày, "to" rỗng/sai định dạng, tài khoản chưa
+ * được cấp quyền Gmail...) giờ được GHI LẠI vào sheet Audit (donVi =
+ * "(HỆ THỐNG)") kèm nguyên văn lỗi - vào Nhật Ký (Audit) trên Web App
+ * hoặc mở thẳng sheet Audit để xem lý do THẬT thay vì đoán mò. Trả về
+ * true/false để nơi gọi biết gửi có thành công hay không nếu cần. */
+function guiEmailAnToan_(options, nguCanh) {
+  try {
+    MailApp.sendEmail(options);
+    return true;
+  } catch (e) {
+    try {
+      logAudit_("(HỆ THỐNG)", "(HỆ THỐNG)", utils.formatDate(new Date()),
+        "❌ GỬI EMAIL THẤT BẠI (" + (nguCanh || "?") + ") - to: " + (options && options.to) + " - lỗi: " + e.toString());
+    } catch (e2) { /* kể cả ghi Audit cũng lỗi thì đành chịu, không throw tiếp */ }
+    return false;
+  }
+}
+
+// ============================================================
+// PHÂN QUYỀN THEO ĐƠN VỊ (mục X, v2026.8.17) - sheet mới "PhanQuyen"
+// ------------------------------------------------------------
+// THEO YÊU CẦU MỚI: mỗi email được gán 1 hoặc nhiều dòng (Email, Đơn
+// vị, Quyền) - Quyền là 1 trong 3: "nhap_sua" (nhập/sửa được báo cáo
+// của đúng Đơn vị đó), "xem" (chỉ xem, không nhập/sửa được), "admin"
+// (toàn quyền mọi Đơn vị + các chức năng quản trị khác - Đơn vị để
+// trống cho dòng "admin"). ĐÃ THỐNG NHẤT với người dùng (v2026.8.17):
+// - Phân quyền tính theo ĐƠN VỊ (4 pháp nhân), KHÔNG theo "nhà máy"
+//   nguồn (Hòa Nhơn/Quế Sơn/Đại Hiệp/HAKQN) - vì 1 form nộp/sửa LUÔN
+//   thuộc đúng 1 Đơn vị, khớp đúng cấu trúc dữ liệu hiện có.
+// - Email CHƯA có dòng nào trong sheet này (và không nằm trong
+//   CFG.ADMIN_EMAILS) bị CHẶN HẲN - không nhập/sửa/xem được gì cho tới
+//   khi Admin chủ động thêm quyền (xem layPhanQuyenNguoiDung_,
+//   getMyAccess() ở Index.html dùng để hiện màn "chưa được cấp quyền").
+// ============================================================
+function getOrCreatePhanQuyenSheet_() {
+  const ss = SpreadsheetApp.getActive();
+  let sh = ss.getSheetByName(CFG.SHEET_PHANQUYEN);
+  if (!sh) {
+    sh = ss.insertSheet(CFG.SHEET_PHANQUYEN);
+    sh.appendRow(["Email", "Đơn vị (để trống nếu Quyền = admin)", "Quyền (nhap_sua | xem | admin)", "Ghi chú", "Cập nhật lúc", "Cập nhật bởi"]);
+    sh.getRange(1, 1, 1, 6).setFontWeight("bold").setBackground("#d9ead3");
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+// Cache trong phạm vi 1 lần thực thi (1 request Apps Script) - tránh
+// đọc lại sheet PhanQuyen nhiều lần cho cùng 1 request (utils.isAdmin
+// có thể được gọi rất nhiều lần trong 1 hàm). Bị xóa (= null) mỗi khi
+// luuPhanQuyen()/xoaPhanQuyen() thay đổi dữ liệu.
+let __phanQuyenCache = null;
+function getPhanQuyenRows_() {
+  if (__phanQuyenCache) return __phanQuyenCache;
+  const sh = getOrCreatePhanQuyenSheet_();
+  const lastRow = sh.getLastRow();
+  if (lastRow <= 1) { __phanQuyenCache = []; return __phanQuyenCache; }
+  const data = sh.getRange(2, 1, lastRow - 1, 3).getValues();
+  __phanQuyenCache = data
+    .filter(r => !utils.isBlank(r[0]))
+    .map(r => ({ email: utils.normEmail(r[0]), donVi: String(r[1] || "").trim(), quyen: String(r[2] || "").trim().toLowerCase() }));
+  return __phanQuyenCache;
+}
+
+function phanQuyenIsAdmin_(email) {
+  return getPhanQuyenRows_().some(r => r.email === email && r.quyen === "admin");
+}
+
+/** Tổng hợp quyền của 1 email: admin (toàn quyền) hoặc danh sách Đơn vị
+ * được Nhập/Sửa + danh sách Đơn vị được Xem (Nhập/Sửa TỰ ĐỘNG bao gồm
+ * Xem). `coQuyenGi` = false nghĩa là email này CHƯA được cấp bất kỳ
+ * quyền nào - Web App phải chặn hẳn (xem getMyAccess()). */
+function layPhanQuyenNguoiDung_(email) {
+  const e = utils.normEmail(email);
+  const isAdminFull = utils.isAdmin(e);
+  const rows = getPhanQuyenRows_().filter(r => r.email === e);
+  const donViNhapSuaSet = new Set(), donViXemSet = new Set();
+  rows.forEach(r => {
+    if (r.quyen === "nhap_sua") { donViNhapSuaSet.add(r.donVi); donViXemSet.add(r.donVi); }
+    else if (r.quyen === "xem") donViXemSet.add(r.donVi);
+  });
+  return {
+    isAdmin: isAdminFull,
+    donViNhapSua: Array.from(donViNhapSuaSet),
+    donViXem: Array.from(donViXemSet),
+    coQuyenGi: isAdminFull || rows.length > 0
+  };
+}
+
+/** Danh sách Đơn vị mà 1 email được phép XEM dữ liệu (gộp cả Nhập/Sửa
+ * lẫn Xem, vì Nhập/Sửa tự động bao gồm Xem) - dùng để CHẶN Ở SERVER cho
+ * Dashboard/Lịch Sử/Báo Cáo Tổng Hợp/Chi tiết Nhà máy (mục AB,
+ * v2026.8.17). THEO YÊU CẦU MỚI: trước đây các hàm getDashboardStats/
+ * getHistoryList/getReportSummary/getNhaMayDetailReport/getUnitTimeline
+ * CHỈ dựa vào việc giao diện tự ẩn bớt lựa chọn trong dropdown Đơn vị -
+ * nhưng khi bộ lọc để trống (mặc định "-- Tất cả --") thì server vẫn
+ * trả về TOÀN BỘ 4 Đơn vị cho bất kỳ ai, kể cả người chỉ được cấp
+ * quyền "Xem" đúng 1 Đơn vị (ví dụ HAKQN) - không đúng ý đã thống nhất
+ * "Xem chỉ được xem đúng dữ liệu Đơn vị được phân quyền". Trả về `null`
+ * nghĩa là KHÔNG giới hạn (Admin - xem được hết); trả về 1 mảng (có thể
+ * rỗng nếu chưa được cấp Đơn vị nào) nếu bị giới hạn.
+ * QUAN TRỌNG (mục AC, v2026.8.17): email RỖNG (không xác định được
+ * người gọi) được coi là KHÔNG giới hạn (giống Admin), KHÔNG PHẢI "0
+ * Đơn vị". Đây là tình huống XUẤT HIỆN THẬT SỰ khi getDashboardStats()
+ * được gọi từ trigger tự động 16h gửi báo cáo Telegram
+ * (BAO_CAO_TON_KHO_TELEGRAM_HANG_NGAY_) - trigger chạy nền không có
+ * phiên đăng nhập trình duyệt nên Session.getActiveUser().getEmail()
+ * thường trả về rỗng (khác hẳn lúc người dùng mở Web App qua trình
+ * duyệt). Báo cáo Telegram vốn là báo cáo TOÀN CÔNG TY (không gắn với
+ * 1 người xem cụ thể) - nếu coi email rỗng là "chưa được cấp quyền" thì
+ * mỗi lần trigger chạy sẽ lọc còn 0 Đơn vị, gửi ảnh báo cáo TRẮNG mỗi
+ * ngày lúc 16h - lỗi nghiêm trọng, ĐÃ PHÁT HIỆN VÀ SỬA TRƯỚC KHI xảy ra
+ * trên thực tế. Luồng NHẬP/SỬA dữ liệu (submitInventoryEntry) và luồng
+ * chặn hẳn giao diện lúc mở Web App (getMyAccess/renderBlockedAccess_)
+ * KHÔNG dùng hàm này - vẫn kiểm tra coQuyenGi/isAdmin riêng như cũ, nên
+ * không bị nới lỏng theo thay đổi này. */
+function donViChoPhepCuaToi_(email) {
+  const e = utils.normEmail(email);
+  if (!e) return null; // không xác định được người gọi (trigger nền) - không giới hạn
+  if (utils.isAdmin(e)) return null;
+  const pq = layPhanQuyenNguoiDung_(e);
+  return Array.from(new Set([].concat(pq.donViNhapSua || [], pq.donViXem || [])));
+}
+
+/** Dùng cho Index.html lúc khởi động - trả về quyền của người đang mở
+ * Web App để: (a) chặn hẳn giao diện nếu coQuyenGi=false, (b) lọc bớt
+ * danh sách Đơn vị hiển thị ở các dropdown cho khớp quyền Xem/Nhập. */
+function getMyAccess() {
+  const email = getCurrentUserEmail_();
+  const pq = layPhanQuyenNguoiDung_(email);
+  return Object.assign({ email }, pq);
+}
+
+/** Danh sách Phân quyền hiện có (CHỈ Admin xem được) - dùng cho màn
+ * Cài đặt > Phân quyền. */
+function getPhanQuyenList() {
+  const email = getCurrentUserEmail_();
+  if (!utils.isAdmin(email)) return { allowed: false, rows: [] };
+  const sh = getOrCreatePhanQuyenSheet_();
+  const lastRow = sh.getLastRow();
+  if (lastRow <= 1) return { allowed: true, rows: [] };
+  const data = sh.getRange(2, 1, lastRow - 1, 6).getValues();
+  const rows = data.map((r, i) => ({
+    rowIndex: i + 2,
+    email: String(r[0] || ""),
+    donVi: String(r[1] || ""),
+    quyen: String(r[2] || ""),
+    ghiChu: String(r[3] || ""),
+    capNhatLuc: r[4] instanceof Date ? utils.formatDate(r[4]) : String(r[4] || ""),
+    capNhatBoi: String(r[5] || "")
+  })).filter(r => r.email);
+  return { allowed: true, rows };
+}
+
+/** Thêm mới (payload.rowIndex trống) hoặc sửa (payload.rowIndex có giá
+ * trị) 1 dòng Phân quyền - CHỈ Admin. */
+function luuPhanQuyen(payload) {
+  const email = getCurrentUserEmail_();
+  if (!utils.isAdmin(email)) return { success: false, message: "❌ Chỉ Admin mới được sửa Phân quyền." };
+  payload = payload || {};
+  const targetEmail = utils.normEmail(payload.email);
+  if (!targetEmail) return { success: false, message: "❌ Vui lòng nhập Email." };
+  const quyen = String(payload.quyen || "").trim().toLowerCase();
+  if (["nhap_sua", "xem", "admin"].indexOf(quyen) === -1) return { success: false, message: "❌ Quyền không hợp lệ." };
+  const donVi = quyen === "admin" ? "" : String(payload.donVi || "").trim();
+  if (quyen !== "admin" && !donVi) return { success: false, message: "❌ Vui lòng chọn Đơn vị (trừ khi cấp Quyền = admin)." };
+
+  const sh = getOrCreatePhanQuyenSheet_();
+  const rowVals = [targetEmail, donVi, quyen, String(payload.ghiChu || ""), new Date(), email];
+  if (payload.rowIndex) {
+    const rowIndex = Number(payload.rowIndex);
+    if (rowIndex < 2 || rowIndex > sh.getLastRow()) return { success: false, message: "❌ Dòng không hợp lệ." };
+    sh.getRange(rowIndex, 1, 1, 6).setValues([rowVals]);
+  } else {
+    sh.appendRow(rowVals);
+  }
+  SpreadsheetApp.flush();
+  __phanQuyenCache = null;
+  return { success: true, message: "✅ Đã lưu phân quyền cho " + targetEmail + "." };
+}
+
+function xoaPhanQuyen(rowIndex) {
+  const email = getCurrentUserEmail_();
+  if (!utils.isAdmin(email)) return { success: false, message: "❌ Chỉ Admin mới được xóa Phân quyền." };
+  const sh = getOrCreatePhanQuyenSheet_();
+  if (rowIndex < 2 || rowIndex > sh.getLastRow()) return { success: false, message: "❌ Dòng không hợp lệ." };
+  sh.deleteRow(rowIndex);
+  __phanQuyenCache = null;
+  return { success: true, message: "✅ Đã xóa phân quyền." };
+}
+
+// ============================================================
+// ĐIỀU KIỆN KIỂM TRA DUYỆT - ĐỊNH MỨC THEO ĐƠN VỊ + KHOẢNG NGÀY ÁP
+// DỤNG (mục X, v2026.8.17; THÊM khoảng ngày áp dụng ở mục Z, v2026.8.17)
+// ------------------------------------------------------------
+// Sheet mới "DieuKienDuyet": Admin nhập khoảng % (tối thiểu - tối đa)
+// cho cột "Định mức" đã có sẵn (COL.DINH_MUC, tính tự động theo công
+// thức Sheet, xem bảng "Định mức SX" ở báo cáo Tonkho_Damgo) của TỪNG
+// Đơn vị. THEO YÊU CẦU MỚI (mục Z): định mức KHÔNG CỐ ĐỊNH MÃI MÃI -
+// mỗi dòng cấu hình có thêm "Từ ngày"/"Đến ngày" xác định KHOẢNG NGÀY
+// TỒN KHO mà định mức đó áp dụng, nên 1 Đơn vị có thể có NHIỀU dòng
+// cấu hình cho các giai đoạn khác nhau (không còn giới hạn 1 dòng/Đơn
+// vị như bản đầu). Bỏ trống "Từ ngày" = không giới hạn quá khứ, bỏ
+// trống "Đến ngày" = áp dụng tới khi có thay đổi mới (không giới hạn
+// tương lai). Sau mỗi lần nộp báo cáo (submitInventoryEntry), tìm ĐÚNG
+// dòng cấu hình khớp Đơn vị + có khoảng ngày CHỨA ngày tồn kho của báo
+// cáo đó - nếu Định mức tính được nằm NGOÀI khoảng cho phép, hệ thống
+// tự gửi email cảnh báo "báo cáo chưa khớp định mức, đề nghị báo cáo
+// lại" cho người nộp + Admin (xem kiemTraDinhMucVaCanhBao_) - KHÔNG
+// chặn lưu báo cáo, chỉ cảnh báo.
+// ============================================================
+function getOrCreateDieuKienDuyetSheet_() {
+  const ss = SpreadsheetApp.getActive();
+  let sh = ss.getSheetByName(CFG.SHEET_DIEUKIENDUYET);
+  if (!sh) {
+    sh = ss.insertSheet(CFG.SHEET_DIEUKIENDUYET);
+    sh.appendRow(["Đơn vị", "Từ ngày (để trống = không giới hạn)", "Đến ngày (để trống = không giới hạn)", "Định mức tối thiểu (%)", "Định mức tối đa (%)", "Cập nhật lúc", "Cập nhật bởi"]);
+    sh.getRange(1, 1, 1, 7).setFontWeight("bold").setBackground("#d9ead3");
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+function getDieuKienDuyetList() {
+  const sh = getOrCreateDieuKienDuyetSheet_();
+  const lastRow = sh.getLastRow();
+  if (lastRow <= 1) return [];
+  const data = sh.getRange(2, 1, lastRow - 1, 7).getValues();
+  return data.map((r, i) => ({
+    rowIndex: i + 2,
+    donVi: String(r[0] || "").trim(),
+    tuNgayISO: utils.formatDateISO(r[1]), // "" nếu để trống -> không giới hạn quá khứ
+    denNgayISO: utils.formatDateISO(r[2]), // "" nếu để trống -> không giới hạn tương lai
+    tuNgayDisplay: utils.formatDate(r[1]),
+    denNgayDisplay: utils.formatDate(r[2]),
+    minPct: utils.parseNum(r[3]),
+    maxPct: utils.parseNum(r[4]),
+    capNhatLuc: r[5] instanceof Date ? utils.formatDate(r[5]) : String(r[5] || "")
+  })).filter(r => r.donVi);
+}
+
+/** Thêm mới (payload.rowIndex trống) hoặc sửa (payload.rowIndex có giá
+ * trị) 1 dòng Điều kiện kiểm tra duyệt - CHỈ Admin. THEO YÊU CẦU MỚI
+ * (mục Z): 1 Đơn vị có thể có NHIỀU dòng cho các khoảng ngày khác nhau
+ * (không còn tự động ghi đè theo Đơn vị như bản đầu mục X) - admin tự
+ * quản lý các khoảng ngày không nên chồng lấn (nếu chồng lấn, xem
+ * kiemTraDinhMucVaCanhBao_ để biết dòng nào được ưu tiên). */
+function luuDieuKienDuyet(payload) {
+  const email = getCurrentUserEmail_();
+  if (!utils.isAdmin(email)) return { success: false, message: "❌ Chỉ Admin mới được sửa Điều kiện kiểm tra duyệt." };
+  payload = payload || {};
+  const donVi = String(payload.donVi || "").trim();
+  if (!donVi) return { success: false, message: "❌ Vui lòng chọn Đơn vị." };
+  const tuNgay = String(payload.tuNgay || "").trim();   // "" hợp lệ = không giới hạn quá khứ
+  const denNgay = String(payload.denNgay || "").trim(); // "" hợp lệ = không giới hạn tương lai
+  if (tuNgay && denNgay && tuNgay > denNgay) return { success: false, message: "❌ \"Từ ngày\" phải trước hoặc bằng \"Đến ngày\"." };
+  const minPct = utils.parseNum(payload.minPct), maxPct = utils.parseNum(payload.maxPct);
+  if (minPct > maxPct) return { success: false, message: "❌ Định mức tối thiểu phải nhỏ hơn hoặc bằng tối đa." };
+
+  const sh = getOrCreateDieuKienDuyetSheet_();
+  const rowVals = [donVi, tuNgay ? new Date(tuNgay) : "", denNgay ? new Date(denNgay) : "", minPct, maxPct, new Date(), email];
+  if (payload.rowIndex) {
+    const rowIndex = Number(payload.rowIndex);
+    if (rowIndex < 2 || rowIndex > sh.getLastRow()) return { success: false, message: "❌ Dòng không hợp lệ." };
+    sh.getRange(rowIndex, 1, 1, 7).setValues([rowVals]);
+  } else {
+    sh.appendRow(rowVals);
+  }
+  SpreadsheetApp.flush();
+  return { success: true, message: "✅ Đã lưu điều kiện kiểm tra duyệt cho " + donVi + (tuNgay || denNgay ? " (" + (tuNgay || "…") + " → " + (denNgay || "…") + ")" : " (không giới hạn ngày)") + "." };
+}
+
+function xoaDieuKienDuyet(rowIndex) {
+  const email = getCurrentUserEmail_();
+  if (!utils.isAdmin(email)) return { success: false, message: "❌ Chỉ Admin mới được xóa Điều kiện kiểm tra duyệt." };
+  const sh = getOrCreateDieuKienDuyetSheet_();
+  if (rowIndex < 2 || rowIndex > sh.getLastRow()) return { success: false, message: "❌ Dòng không hợp lệ." };
+  sh.deleteRow(rowIndex);
+  return { success: true, message: "✅ Đã xóa." };
+}
+
+/** Kiểm tra "Định mức" (COL.DINH_MUC, công thức Sheet, đọc LẠI sau khi
+ * đã ghi + kéo công thức) của báo cáo vừa nộp so với khoảng cho phép
+ * ĐÚNG khoảng ngày áp dụng chứa "Ngày tồn kho" của báo cáo đó (mục Z) -
+ * lệch ra ngoài thì gửi email cảnh báo cho người nộp + Admin, VÀ TRẢ VỀ
+ * true để nơi gọi (submitInventoryEntry) gắn trạng thái "Chờ duyệt"
+ * (mục AA, v2026.8.17 - SỬA LẠI so với bản đầu mục X: trước đây CHỈ
+ * cảnh báo qua email rồi vẫn lưu chính thức bình thường; nay lệch định
+ * mức cũng CHẶN không cho vào Chitiettonkho, CÙNG cơ chế "Chờ duyệt"
+ * với "lệch đầu kỳ", chờ Admin duyệt ở Lịch Sử). Nếu có NHIỀU dòng cấu
+ * hình cùng Đơn vị khớp ngày (khoảng ngày chồng lấn), ƯU TIÊN dòng có
+ * "Từ ngày" GẦN NHẤT (mới thiết lập gần đây nhất) - coi như dòng mới
+ * hơn ghi đè ý định của dòng cũ hơn mà Admin quên xóa. Trả về false nếu
+ * không có cấu hình khớp hoặc định mức khớp khoảng cho phép. Bọc
+ * try/catch ở nơi gọi để lỗi gửi mail (VD hết quota MailApp) không làm
+ * hỏng luồng nộp báo cáo. */
+/** Trả về `false` nếu KHÔNG lệch định mức (hoặc chưa cấu hình gì cho
+ * Đơn vị/khoảng ngày này); trả về CHUỖI LÝ DO (truthy) nếu lệch - vừa
+ * dùng làm điều kiện boolean ở nơi gọi, vừa dùng để ghi vào
+ * COL.LY_DO_CHO_DUYET (mục AD, v2026.8.18 - trước đây chỉ trả
+ * true/false, không lưu lại lý do cụ thể). Luôn gửi email cảnh báo
+ * (submitter + Admin) như cũ khi lệch, bất kể Admin hay không. */
+function kiemTraDinhMucVaCanhBao_(donVi, ngayISO, rowIndex, sh, submitterEmail) {
+  const ungVien = getDieuKienDuyetList().filter(function (d) {
+    if (d.donVi !== donVi) return false;
+    if (d.tuNgayISO && ngayISO < d.tuNgayISO) return false;
+    if (d.denNgayISO && ngayISO > d.denNgayISO) return false;
+    return true;
+  });
+  if (!ungVien.length) return false; // Đơn vị chưa cấu hình định mức cho đúng khoảng ngày này -> bỏ qua, không báo gì
+
+  // Ưu tiên "Từ ngày" gần nhất (chuỗi rỗng coi như xa xưa nhất, luôn xếp
+  // sau các giá trị có ngày cụ thể khi so sánh chuỗi ISO yyyy-mm-dd).
+  ungVien.sort(function (a, b) { return (b.tuNgayISO || "0000-00-00").localeCompare(a.tuNgayISO || "0000-00-00"); });
+  const dieuKien = ungVien[0];
+
+  const rawVal = sh.getRange(rowIndex, COL.DINH_MUC + 1).getValue();
+  const dinhMucPct = utils.parseNum(rawVal) * 100; // cột lưu dạng thập phân (0.95 = 95%)
+  if (dinhMucPct >= dieuKien.minPct && dinhMucPct <= dieuKien.maxPct) return false; // khớp định mức -> không cần báo
+
+  const laAdmin = utils.isAdmin(submitterEmail);
+  const khoangNgay = (dieuKien.tuNgayDisplay || "…") + " → " + (dieuKien.denNgayDisplay || "…");
+  const lyDo = "Lệch định mức: Định mức tính được " + dinhMucPct.toFixed(2) + "% nằm NGOÀI khoảng cho phép (" +
+    dieuKien.minPct + "% - " + dieuKien.maxPct + "%) áp dụng cho giai đoạn " + khoangNgay + ".";
+  const subject = "⚠️ Báo cáo tồn kho CHƯA KHỚP định mức - " + donVi;
+  const body = "Báo cáo tồn kho của đơn vị \"" + donVi + "\" (người nộp: " + submitterEmail + ") có Định mức tính được là " +
+    dinhMucPct.toFixed(2) + "%, nằm NGOÀI khoảng cho phép (" + dieuKien.minPct + "% - " + dieuKien.maxPct + "%) áp dụng cho giai đoạn " + khoangNgay + ".\n\n" +
+    (laAdmin
+      ? "Người nộp là Admin nên báo cáo vẫn được lưu chính thức bình thường (không bị chặn) - email này chỉ để lưu ý kiểm tra lại số liệu."
+      : "Báo cáo đã được LƯU ở trạng thái \"Chờ duyệt\" (CHƯA tính vào Chitiettonkho/Dashboard/Báo cáo). Vào trang Lịch Sử trên Web App để xem chi tiết và Duyệt/Từ chối, hoặc đề nghị người nộp kiểm tra lại số liệu và báo cáo lại.") +
+    "\n\n(Email tự động từ Web App Quản Lý Tồn Kho Dăm - HAK Group)";
+  const toList = [submitterEmail].concat(CFG.ADMIN_EMAILS).filter(function (v, i, a) { return v && a.indexOf(v) === i; });
+  guiEmailAnToan_({ to: toList.join(","), subject: subject, body: body }, "lệch định mức - " + donVi);
+  return lyDo;
+}
+
+/** Đọc TỔNG "KL hàng (KG)" (cột J) từ file Phiếu cân NGOÀI của 1 đơn vị,
+ * lọc đúng "Ngày cân 1" (cột B) = ngayISO - dùng để đối chiếu tự động
+ * với "Nhập gỗ keo trong ngày" (mục AG, v2026.8.18 - xem
+ * CFG.PHIEUCAN_MAP + kiemTraPhieuCanVaCanhBao_). Trả về {tongKG, tongMT,
+ * soDong} hoặc `null` nếu KHÔNG đọc được (đơn vị chưa cấu hình file/lỗi
+ * quyền truy cập/đổi cấu trúc cột...) - lỗi này KHÔNG throw ra ngoài
+ * (không được để 1 file NGOÀI lỗi làm hỏng luồng nộp báo cáo chính) mà
+ * ghi vào Audit để Admin biết mà xử lý (thường do CHƯA CHIA SẺ quyền
+ * Xem file đó cho tài khoản đứng sau Web App - xem CFG.PHIEUCAN_MAP). */
+function docTongPhieuCanNgoai_(donVi, ngayISO) {
+  const cfg = CFG.PHIEUCAN_MAP[donVi];
+  if (!cfg) return null; // đơn vị chưa có file Phiếu cân cấu hình -> bỏ qua
+  try {
+    const ssNgoai = SpreadsheetApp.openById(cfg.id);
+    const sh = ssNgoai.getSheetByName(cfg.sheetName) || ssNgoai.getSheets()[0];
+    const lastRow = sh.getLastRow();
+    if (lastRow < 2) return { tongKG: 0, tongMT: 0, soDong: 0 };
+    // Đọc 1 lần cả khoảng B..J (9 cột: Ngày cân 1 ở B, KL hàng (KG) ở J)
+    // cho nhanh, thay vì đọc từng cột riêng.
+    const data = sh.getRange(2, 2, lastRow - 1, 9).getValues(); // B..J
+    let tongKG = 0, soDong = 0;
+    data.forEach(function (r) {
+      const rISO = ngayCanDoiToISO_(r[0]); // cột B (Ngày cân 1) = index 0 trong khoảng B..J
+      if (rISO !== ngayISO) return;
+      tongKG += utils.parseNum(r[8]); // cột J (KL hàng KG) = index 8 trong khoảng B..J
+      soDong++;
+    });
+    return { tongKG: tongKG, tongMT: tongKG / 1000, soDong: soDong };
+  } catch (e) {
+    try {
+      logAudit_("(HỆ THỐNG)", donVi, utils.formatDate(new Date()),
+        "❌ KHÔNG ĐỌC ĐƯỢC file Phiếu cân ngoài của \"" + donVi + "\" (ngày " + ngayISO + ") - lỗi: " + e.toString() +
+        " - kiểm tra lại: (1) ID file trong CFG.PHIEUCAN_MAP còn đúng không, (2) tài khoản đứng sau Web App (mục \"Execute as\" lúc Deploy) đã được CHIA SẺ quyền Xem file đó chưa.");
+    } catch (e2) { /* kể cả ghi Audit cũng lỗi thì đành chịu, không throw tiếp */ }
+    return null;
+  }
+}
+
+/** Đối chiếu "Nhập gỗ keo trong ngày" (người nhập tay trên form) với
+ * TỔNG "KL hàng (KG)" từ file Phiếu cân NGOÀI đúng đơn vị/ngày (mục AG,
+ * v2026.8.18) - THEO YÊU CẦU MỚI: lệch quá 5% (MẪU SỐ là TỔNG PHIẾU CÂN
+ * - coi số liệu cân thực tế từng xe là chuẩn khách quan hơn số nhập tay)
+ * -> CÙNG cơ chế "Chờ duyệt" + gửi email như "lệch đầu kỳ"/"lệch định
+ * mức" (xem kiemTraDinhMucVaCanhBao_, cùng khuôn mẫu). Nếu KHÔNG có dữ
+ * liệu phiếu cân đúng ngày đó (chưa kịp nhập/đơn vị chưa cấu hình
+ * file/lỗi đọc file) THÌ BỎ QUA (không báo lỗi, không chặn oan) - vì
+ * phiếu cân có thể đơn giản là CHƯA được nhập kịp lúc báo cáo tồn kho
+ * được nộp, không có nghĩa là số liệu sai. */
+function kiemTraPhieuCanVaCanhBao_(donVi, ngayISO, nhapGoMT, submitterEmail) {
+  const kq = docTongPhieuCanNgoai_(donVi, ngayISO);
+  if (!kq || kq.tongMT <= 0) return false;
+  const pctLech = Math.abs(nhapGoMT - kq.tongMT) / kq.tongMT;
+  if (pctLech <= 0.05) return false; // lệch trong 5% -> coi như khớp, không cần báo
+
+  const laAdmin = utils.isAdmin(submitterEmail);
+  const lyDo = "Lệch phiếu cân: \"Nhập gỗ keo trong ngày\" nhập tay (" + fmtNumVN_(nhapGoMT) + " MT) lệch " +
+    (pctLech * 100).toFixed(2) + "% so với TỔNG Phiếu cân thực tế ngày " + ngayISO + " (" + fmtNumVN_(kq.tongMT) + " MT, " + kq.soDong + " phiếu cân) - vượt ngưỡng cho phép 5%.";
+  const subject = "⚠️ Báo cáo tồn kho LỆCH PHIẾU CÂN - " + donVi;
+  const body = "Báo cáo tồn kho của đơn vị \"" + donVi + "\" (người nộp: " + submitterEmail + ") có \"Nhập gỗ keo trong ngày\" nhập tay KHÔNG khớp TỔNG Phiếu cân thực tế (nguồn: file Phiếu cân ngoài, cột \"KL hàng (KG)\", lọc theo \"Ngày cân 1\").\n\n" +
+    lyDo + "\n\n" +
+    (laAdmin
+      ? "Người nộp là Admin nên báo cáo vẫn được lưu chính thức bình thường (không bị chặn) - email này chỉ để lưu ý kiểm tra lại số liệu."
+      : "Báo cáo đã được LƯU ở trạng thái \"Chờ duyệt\" (CHƯA tính vào Chitiettonkho/Dashboard/Báo cáo). Vào trang Lịch Sử trên Web App để xem chi tiết và Duyệt/Từ chối, hoặc đề nghị người nộp kiểm tra lại số liệu \"Nhập gỗ keo trong ngày\" và nộp lại.") +
+    "\n\n(Email tự động từ Web App Quản Lý Tồn Kho Dăm - HAK Group)";
+  const toList = [submitterEmail].concat(CFG.ADMIN_EMAILS).filter(function (v, i, a) { return v && a.indexOf(v) === i; });
+  guiEmailAnToan_({ to: toList.join(","), subject: subject, body: body }, "lệch phiếu cân - " + donVi);
+  return lyDo;
 }
 
 // ============================================================
@@ -706,6 +1779,55 @@ function logCanDoiBDMT_(r) {
   ]);
 }
 
+/** Lấy LẦN CÂN ĐỐI BDMT XUẤT HÀNG đúng "ngày báo kho" (= ngày báo cáo
+ * tồn kho gần nhất hiện đang hiển thị ở Trang chủ) của MỖI nhà máy (cột
+ * P "Đơn vị nhập") từ sheet CanDoiBDMT - dùng cho khối "Cân đối xuất
+ * hàng" ở Trang chủ/Telegram (mục AH/AI, v2026.8.18 - xem
+ * getDashboardStats). THEO YÊU CẦU MỚI (mục AI): KHÔNG lấy lần cân đối
+ * GẦN NHẤT bất kỳ nữa (dễ hiểu lầm là "còn hiệu lực" dù đã cũ) - CHỈ lấy
+ * ĐÚNG cân đối có "Ngày cân đối" (cột A) TRÙNG với ngày báo kho của
+ * chính đơn vị đó; nếu không có, coi như "Chưa cân đối xuất hàng". Tham
+ * số `donViNgayISOMap` = {donVi: "yyyy-mm-dd" (ngày báo kho gần nhất
+ * của đơn vị đó) | null}. Trả về {donVi: {...coCanDoi:true} |
+ * {donVi, coCanDoi:false}} cho ĐÚNG các đơn vị có trong map (thường là
+ * `units` đã lọc theo Phân quyền). Nếu 1 ngày có NHIỀU lần cân đối
+ * (hiếm) thì lấy lần GHI SAU CÙNG (cột R "Thời gian ghi"). */
+function layCanDoiBDMTDungNgayMoiDonVi_(donViNgayISOMap) {
+  const result = {};
+  Object.keys(donViNgayISOMap).forEach(function (u) {
+    result[u] = { donVi: u, coCanDoi: false };
+  });
+  const sh = getOrCreateCanDoiBDMTSheet_();
+  const lastRow = sh.getLastRow();
+  if (lastRow < 2) return result;
+  const data = sh.getRange(2, 1, lastRow - 1, 18).getValues();
+  const bestTime = {};
+  data.forEach(function (r) {
+    const donVi = String(r[15] || "").trim(); // P Đơn vị nhập
+    if (!donVi || !(donVi in result)) return;
+    const ngayBaoKhoISO = donViNgayISOMap[donVi];
+    if (!ngayBaoKhoISO) return; // đơn vị chưa từng có báo cáo tồn kho -> không có "ngày báo kho" để so khớp
+    const rISO = ngayCanDoiToISO_(r[0]); // A Ngày cân đối
+    if (rISO !== ngayBaoKhoISO) return; // KHÔNG đúng ngày báo kho -> bỏ qua (mục AI)
+    const thoiGianGhi = r[17]; // R Thời gian ghi
+    const tgTime = thoiGianGhi instanceof Date ? thoiGianGhi.getTime() : 0;
+    if (result[donVi].coCanDoi && bestTime[donVi] >= tgTime) return; // đã có bản ghi mới hơn/bằng cùng ngày
+    bestTime[donVi] = tgTime;
+    result[donVi] = {
+      donVi: donVi,
+      coCanDoi: true,
+      kho: String(r[1] || "").trim(), // B Kho
+      ngayCanDoi: utils.formatDate(new Date(rISO + "T00:00:00")),
+      dieuChinhBDMT: utils.parseNum(r[11]), // L
+      dienGiaiBDMT: String(r[12] || ""),    // M
+      dieuChinhMT: utils.parseNum(r[13]),   // N
+      dienGiaiMT: String(r[14] || ""),      // O
+      thoiGianGhi: thoiGianGhi instanceof Date ? utils.formatDate(thoiGianGhi) : ""
+    };
+  });
+  return result;
+}
+
 /** Đọc toàn bộ dữ liệu (không header) dạng mảng 2 chiều. */
 function readAllData_() {
   const sh = getResponsesSheet_();
@@ -767,22 +1889,34 @@ function syncChitietTonKhoForKey_(donVi, ngayISO) {
   const matches = formData.filter(r =>
     String(r[COL.DON_VI] || "").trim() === donVi && utils.formatDateISO(r[COL.NGAY_TON_KHO]) === ngayISO);
 
+  // THEO YÊU CẦU MỚI (mục X, v2026.8.17): bản ghi đang "Chờ duyệt" (lệch
+  // đầu kỳ, chưa được Admin duyệt) hoặc đã "Từ chối" KHÔNG được coi là
+  // dữ liệu chính thức - loại khỏi danh sách xét "mới nhất" để đồng bộ
+  // vào Chitiettonkho (dù vẫn giữ nguyên trong Form Responses 1/Lịch Sử
+  // để Admin xem lại/duyệt sau). Nếu TOÀN BỘ các lần nộp khớp khóa này
+  // đều đang chờ duyệt/bị từ chối thì coi như CHƯA có báo cáo chính
+  // thức cho (Đơn vị, Ngày) đó - xóa khỏi Chitiettonkho nếu trước đó có.
+  const officialMatches = matches.filter(r => {
+    const st = String(r[COL.TRANG_THAI_DUYET] || "");
+    return st !== "Chờ duyệt" && st !== "Từ chối";
+  });
+
   const chSh = getOrCreateChitietSheet_();
   const chLastRow = chSh.getLastRow();
   const chData = chLastRow > 1 ? chSh.getRange(2, 1, chLastRow - 1, CFG.TOTAL_COL_COUNT).getValues() : [];
   const existingIndex = findChitietIndex_(chData, donVi, ngayISO);
 
-  if (matches.length === 0) {
+  if (officialMatches.length === 0) {
     if (existingIndex >= 0) chSh.deleteRow(existingIndex + 2); // +2: bù header (dòng 1) + 1-based
     return;
   }
 
-  matches.sort((a, b) => {
+  officialMatches.sort((a, b) => {
     const ta = a[COL.TIMESTAMP] instanceof Date ? a[COL.TIMESTAMP].getTime() : 0;
     const tb = b[COL.TIMESTAMP] instanceof Date ? b[COL.TIMESTAMP].getTime() : 0;
     return tb - ta; // mới nhất trước
   });
-  const latest = matches[0];
+  const latest = officialMatches[0];
 
   if (existingIndex >= 0) {
     chSh.getRange(existingIndex + 2, 1, 1, CFG.TOTAL_COL_COUNT).setValues([latest]);
@@ -812,6 +1946,13 @@ function rebuildAllChitietTonKho() {
       const donVi = String(r[COL.DON_VI] || "").trim();
       const ngayISO = utils.formatDateISO(r[COL.NGAY_TON_KHO]);
       if (!donVi || !ngayISO) return;
+      // THEO YÊU CẦU MỚI (mục X, v2026.8.17): giữ ĐỒNG NHẤT với
+      // syncChitietTonKhoForKey_ - bỏ qua bản ghi "Chờ duyệt"/"Từ chối"
+      // khi chọn bản "mới nhất" cho mỗi khóa, để "Đồng bộ lại
+      // Chitiettonkho từ đầu" không vô tình đưa báo cáo lệch đầu kỳ
+      // chưa được duyệt thành dữ liệu chính thức.
+      const trangThai = String(r[COL.TRANG_THAI_DUYET] || "");
+      if (trangThai === "Chờ duyệt" || trangThai === "Từ chối") return;
       const key = donVi + "|" + ngayISO;
       const ts = r[COL.TIMESTAMP] instanceof Date ? r[COL.TIMESTAMP].getTime() : 0;
       if (!latestByKey[key] || ts > latestByKey[key].__ts) {
@@ -917,6 +2058,20 @@ function submitInventoryEntry(payload) {
     const ngayTonKho = new Date(payload.ngayTonKho);
     if (isNaN(ngayTonKho.getTime())) return { success: false, message: "❌ Ngày nhập tồn kho không hợp lệ." };
 
+    // THEO YÊU CẦU MỚI (mục X, v2026.8.17): kiểm tra Phân quyền TRƯỚC
+    // khi ghi - email chưa được cấp quyền gì bị chặn hẳn; email có
+    // quyền nhưng không phải "nhap_sua" cho ĐÚNG Đơn vị này cũng bị
+    // chặn (Admin luôn qua được, không cần kiểm tra).
+    if (!isAdmin) {
+      const pq = layPhanQuyenNguoiDung_(email);
+      if (!pq.coQuyenGi) {
+        return { success: false, message: "❌ Email " + email + " chưa được Admin cấp quyền sử dụng hệ thống. Vui lòng liên hệ Admin (mục Cài đặt > Phân quyền)." };
+      }
+      if (pq.donViNhapSua.indexOf(donVi) === -1) {
+        return { success: false, message: "❌ Bạn không có quyền Nhập/Sửa cho đơn vị \"" + donVi + "\"." + (pq.donViNhapSua.length ? " Bạn chỉ được Nhập/Sửa: " + pq.donViNhapSua.join(", ") + "." : "") };
+      }
+    }
+
     const now = new Date();
     const { sh, headerRow, data } = readAllData_();
 
@@ -967,6 +2122,33 @@ function submitInventoryEntry(payload) {
       row[COL.CHENH_LECH_VET_BAI] = utils.parseNum(payload.chenhLechVetBai);
     }
 
+    // THEO YÊU CẦU MỚI (mục X, v2026.8.17; SỬA LẠI công thức + email ở
+    // mục AD, v2026.8.18): "Báo cáo lệch đầu kỳ" - Tồn kho đầu ngày vừa
+    // nhập KHÔNG khớp "Đầu kỳ DỰ KIẾN" (= Tồn kho CK của báo cáo CHÍNH
+    // THỨC ngày liền trước cùng Đơn vị, đã sẵn gồm Cộng MT + Kho Xuất
+    // hàng Tiên Sa/Dung Quất MT + "Điều chỉnh MT" của Cân đối BDMT xuất
+    // hàng NẾU có cân đối đúng ngày đó - xem timTonCuoiKyTruoc_) -> vẫn
+    // LƯU bình thường nhưng đánh dấu "Chờ duyệt" (KHÔNG đưa vào
+    // Chitiettonkho/Dashboard/Báo cáo chính thức cho tới khi Admin duyệt
+    // ở trang Lịch Sử - xem syncChitietTonKhoForKey_ + duyetBaoCao()).
+    // Admin tự nộp thì BỎ QUA kiểm tra này (admin đã có toàn quyền, tự
+    // chịu trách nhiệm số liệu, không cần tự duyệt lại chính mình).
+    let lechDauKy = false;
+    let dauKyInfo = null;
+    let lyDoLechDauKy = "";
+    if (!isAdmin) {
+      dauKyInfo = timTonCuoiKyTruoc_(donVi, utils.formatDateISO(ngayTonKho));
+      if (dauKyInfo !== null && Math.abs(utils.parseNum(payload.tonDauNgay) - dauKyInfo.tonCuoiKyDuKien) > 0.01) {
+        lechDauKy = true;
+        lyDoLechDauKy = "Lệch đầu kỳ: Tồn kho đầu ngày nhập (" + fmtNumVN_(payload.tonDauNgay) + " MT) không khớp Đầu kỳ dự kiến (" +
+          fmtNumVN_(dauKyInfo.tonCuoiKyDuKien) + " MT) tính từ báo cáo chính thức ngày " + dauKyInfo.ngayDisplay + " = Tồn CK " + fmtNumVN_(dauKyInfo.tonCK) + " MT" +
+          (dauKyInfo.dieuChinhMT ? " + Điều chỉnh MT (Cân đối BDMT xuất hàng cùng ngày) " + fmtNumVN_(dauKyInfo.dieuChinhMT) + " MT" : "") + ".";
+      }
+    }
+    row[COL.TRANG_THAI_DUYET] = lechDauKy ? "Chờ duyệt" : "";
+    const lyDoChoDuyetList = [];
+    if (lechDauKy) lyDoChoDuyetList.push(lyDoLechDauKy);
+
     sh.appendRow(row);
     const newRowIndex = sh.getLastRow();
     extendFormulasToNewRow_(sh, newRowIndex, headerRow);
@@ -977,8 +2159,75 @@ function submitInventoryEntry(payload) {
     if (emailUsedToday && isAdmin) {
       logAudit_(email, donVi, utils.formatDate(ngayTonKho), "Override giới hạn 1 lần/ngày bởi admin");
     }
+    if (lechDauKy) {
+      logAudit_(email, donVi, utils.formatDate(ngayTonKho), "Báo cáo lệch đầu kỳ - Chờ Admin duyệt");
+      // THEO YÊU CẦU MỚI (mục AD, v2026.8.18): trước đây email này CHỈ
+      // gửi cho Admin - giờ gửi CẢ cho người nộp (đơn vị) kèm lý do cụ
+      // thể, giống cách kiemTraDinhMucVaCanhBao_ đã làm cho "lệch định
+      // mức" (để người nhập biết ngay vì sao chưa được duyệt).
+      const toListDauKy = [email].concat(CFG.ADMIN_EMAILS).filter(function (v, i, a) { return v && a.indexOf(v) === i; });
+      guiEmailAnToan_({
+        to: toListDauKy.join(","),
+        subject: "🔔 Báo cáo lệch đầu kỳ đang CHỜ DUYỆT - " + donVi,
+        body: "Đơn vị \"" + donVi + "\" nộp báo cáo ngày " + utils.formatDate(ngayTonKho) + " (người nộp: " + email + ") có Tồn kho đầu ngày KHÔNG khớp Đầu kỳ dự kiến.\n\n" +
+          lyDoLechDauKy + "\n\n" +
+          "Báo cáo đã được LƯU ở trạng thái \"Chờ duyệt\" (chưa tính vào Chitiettonkho/Dashboard/Báo cáo). Vào trang Lịch Sử trên Web App để xem chi tiết, hoặc đề nghị người nộp kiểm tra lại Tồn kho đầu ngày và nộp lại. Admin có thể Duyệt/Từ chối ở trang Lịch Sử.\n\n(Email tự động từ Web App Quản Lý Tồn Kho Dăm - HAK Group)"
+      }, "lệch đầu kỳ - " + donVi);
+    }
 
     SpreadsheetApp.flush();
+
+    // Mục X/AA (v2026.8.17): kiểm tra "Định mức" vừa tính được (đọc lại
+    // SAU khi đã kéo công thức + flush ở trên) so với khoảng cho phép
+    // Admin cấu hình cho Đơn vị này ĐÚNG khoảng ngày áp dụng chứa Ngày
+    // tồn kho của báo cáo (nếu có) - THEO YÊU CẦU MỚI (SỬA LẠI so với
+    // bản đầu mục X): lệch định mức giờ CŨNG CHẶN không cho vào
+    // Chitiettonkho (gắn "Chờ duyệt", CÙNG cơ chế với "lệch đầu kỳ" ở
+    // trên) thay vì chỉ gửi email cảnh báo rồi vẫn lưu chính thức như
+    // trước - phải chạy TRƯỚC syncChitietTonKhoForKey_ (đặt phía dưới)
+    // để lần đồng bộ đó thấy đúng trạng thái mới nhất. Admin tự nộp vẫn
+    // BỎ QUA việc chặn (cùng nguyên tắc với "lệch đầu kỳ"), nhưng vẫn
+    // nhận được email cảnh báo như bình thường (để biết mà tự kiểm tra).
+    let lechDinhMuc = false;
+    try {
+      const lyDoDinhMuc = kiemTraDinhMucVaCanhBao_(donVi, utils.formatDateISO(ngayTonKho), newRowIndex, sh, email);
+      lechDinhMuc = !!lyDoDinhMuc;
+      if (lyDoDinhMuc) lyDoChoDuyetList.push(lyDoDinhMuc);
+    } catch (e) { /* không để lỗi gửi mail làm hỏng luồng nộp báo cáo */ }
+    if (lechDinhMuc && !isAdmin && row[COL.TRANG_THAI_DUYET] !== "Chờ duyệt") {
+      sh.getRange(newRowIndex, COL.TRANG_THAI_DUYET + 1).setValue("Chờ duyệt");
+      row[COL.TRANG_THAI_DUYET] = "Chờ duyệt";
+      SpreadsheetApp.flush();
+      logAudit_(email, donVi, utils.formatDate(ngayTonKho), "Báo cáo lệch định mức - Chờ Admin duyệt");
+    }
+
+    // Mục AG (v2026.8.18): đối chiếu "Nhập gỗ keo trong ngày" (nhập tay)
+    // với TỔNG "KL hàng (KG)" từ file Phiếu cân NGOÀI đúng đơn vị/ngày -
+    // CÙNG cơ chế "Chờ duyệt" với lệch đầu kỳ/lệch định mức ở trên (xem
+    // kiemTraPhieuCanVaCanhBao_/CFG.PHIEUCAN_MAP). Đặt SAU lệch định mức
+    // để lyDoChoDuyetList gộp đủ cả 3 lý do nếu bị cả 3 cùng lúc.
+    let lechPhieuCan = false;
+    try {
+      const lyDoPhieuCan = kiemTraPhieuCanVaCanhBao_(donVi, utils.formatDateISO(ngayTonKho), utils.parseNum(payload.nhapGo), email);
+      lechPhieuCan = !!lyDoPhieuCan;
+      if (lyDoPhieuCan) lyDoChoDuyetList.push(lyDoPhieuCan);
+    } catch (e) { /* không để lỗi đối chiếu phiếu cân (file ngoài) làm hỏng luồng nộp báo cáo */ }
+    if (lechPhieuCan && !isAdmin && row[COL.TRANG_THAI_DUYET] !== "Chờ duyệt") {
+      sh.getRange(newRowIndex, COL.TRANG_THAI_DUYET + 1).setValue("Chờ duyệt");
+      row[COL.TRANG_THAI_DUYET] = "Chờ duyệt";
+      SpreadsheetApp.flush();
+      logAudit_(email, donVi, utils.formatDate(ngayTonKho), "Báo cáo lệch phiếu cân - Chờ Admin duyệt");
+    }
+
+    // Mục AD (v2026.8.18): ghi lại lý do (gộp cả các trường hợp nếu bị
+    // nhiều lỗi cùng lúc) vào COL.LY_DO_CHO_DUYET - để Lịch Sử hiển thị
+    // và duyetBaoCao() không phải đoán lại lý do khi gửi email lúc
+    // duyệt/từ chối.
+    if (!isAdmin && lyDoChoDuyetList.length) {
+      sh.getRange(newRowIndex, COL.LY_DO_CHO_DUYET + 1).setValue(lyDoChoDuyetList.join(" | "));
+      SpreadsheetApp.flush();
+    }
+
     syncChitietTonKhoForKey_(donVi, utils.formatDateISO(ngayTonKho));
 
     // Mục K (v2026.8.13): TỰ TÍNH toàn bộ chuỗi công thức "Cân đối BDMT
@@ -999,10 +2248,19 @@ function submitInventoryEntry(payload) {
       if (!candoiResult.error) logCanDoiBDMT_(candoiResult);
     }
 
-    const msg = duplicateUnitDate
+    let msg = duplicateUnitDate
       ? `✅ Đã cập nhật báo cáo tồn kho cho "${donVi}" ngày ${utils.formatDate(ngayTonKho)}.`
       : `✅ Đã lưu báo cáo tồn kho mới cho "${donVi}" ngày ${utils.formatDate(ngayTonKho)}.`;
-    return { success: true, message: msg, wasEdit: duplicateUnitDate, candoiResult };
+    // THEO YÊU CẦU MỚI (mục AD, v2026.8.18): thông báo rõ ràng "CHƯA
+    // DUYỆT" (kèm lý do) hoặc "ĐÃ DUYỆT" ngay trên Web App để người
+    // nhập biết ngay - không chỉ hiện ở Lịch Sử.
+    if (lyDoChoDuyetList.length) {
+      msg += "\n\n⚠️ 🔶 TRẠNG THÁI: CHƯA DUYỆT - báo cáo đang \"Chờ duyệt\", CHƯA hiển thị trên Dashboard/Báo cáo cho tới khi Admin duyệt ở Lịch Sử.\n" +
+        lyDoChoDuyetList.map(function (l) { return "• " + l; }).join("\n");
+    } else if (!isAdmin) {
+      msg += "\n\n✅ TRẠNG THÁI: ĐÃ DUYỆT (khớp đầu kỳ + định mức, không cần Admin duyệt lại).";
+    }
+    return { success: true, message: msg, wasEdit: duplicateUnitDate, candoiResult, lechDauKy, lechDinhMuc, lechPhieuCan, lyDoChoDuyet: lyDoChoDuyetList.join(" | ") };
   } catch (err) {
     return { success: false, message: "❌ Lỗi: " + err.toString() };
   } finally {
@@ -1098,8 +2356,24 @@ function getDashboardStats() {
         congMT: utils.parseNum(r[COL.CONG_MT]),
         congBDMT: utils.parseNum(r[COL.CONG_BDMT]),
         doAm: utils.parseNum(r[COL.DO_AM]),
+        doKho: utils.parseNum(r[COL.DO_KHO]), // dùng để quy đổi nhapGo -> BDMT (mục AF)
+        dinhMuc: utils.parseNum(r[COL.DINH_MUC]), // Định mức tiêu hao THỰC TẾ tính được (mục AG)
         nhapGo: utils.parseNum(r[COL.NHAP_GO]), // lượng gỗ keo nhập ngày gần nhất (v2026.8.9)
+        // Độ ẩm/Độ khô riêng Kho Tiên Sa/Kho Dung Quất (mục AH,
+        // v2026.8.18) - dùng để tính Độ ẩm/Độ khô TRUNG BÌNH của khối
+        // "Tồn kho tại Cảng" ở Trang chủ, CÙNG NGUYÊN TẮC mục O/Q (chỉ
+        // AVERAGE trên đơn vị THỰC SỰ có tồn ở đúng kho đó).
+        doAmTienSa: utils.parseNum(r[COL.DO_AM_TIEN_SA]), doKhoTienSa: utils.parseNum(r[COL.DO_KHO_TIEN_SA]),
+        doAmDungQuat: utils.parseNum(r[COL.DO_AM_DUNG_QUAT]), doKhoDungQuat: utils.parseNum(r[COL.DO_KHO_DUNG_QUAT]),
         daBaoCaoHomNay: utils.isSameDay(r[COL.TIMESTAMP], now),
+        // --- Kiểm kê vét bãi (bản ghi mới nhất mỗi đơn vị) - THEO YÊU
+        // CẦU MỚI (mục W, v2026.8.17): dùng để đổi thẻ KPI "Số ngày đã
+        // ghi nhận" thành "Số lượng nhà máy vét bãi" ở Trang chủ + ảnh
+        // Telegram (xem soLuongVetBai/vetBaiDetail bên dưới). ---
+        kiemKeVetBai: String(r[COL.KIEM_KE_VET_BAI] || "") === "Có",
+        thoiDiemVetBai: utils.formatDate(r[COL.THOI_DIEM_VET_BAI]),
+        klUocTinhConLai: utils.parseNum(r[COL.KL_UOC_TINH_CON_LAI]),
+        chenhLechVetBai: utils.parseNum(r[COL.CHENH_LECH_VET_BAI]),
         // --- Chi tiết KHO NHÀ MÁY / KHO XUẤT HÀNG (bản mới nhất) -
         // THEO YÊU CẦU MỚI (v2026.8.7): Trang chủ trước đây chỉ có Tồn
         // CK/Độ ẩm gộp chung - bổ sung breakdown theo từng kho, cùng
@@ -1117,18 +2391,33 @@ function getDashboardStats() {
 
   const ZERO_KHO = {
     hoaNhonMT:0, hoaNhonBDMT:0, queSonMT:0, queSonBDMT:0, daiHiepMT:0, daiHiepBDMT:0,
-    hakqnMT:0, hakqnBDMT:0, congMT:0, congBDMT:0, tienSaMT:0, tienSaBDMT:0, dungQuatMT:0, dungQuatBDMT:0
+    hakqnMT:0, hakqnBDMT:0, congMT:0, congBDMT:0, tienSaMT:0, tienSaBDMT:0, dungQuatMT:0, dungQuatBDMT:0,
+    doAmTienSa:0, doKhoTienSa:0, doAmDungQuat:0, doKhoDungQuat:0
   };
-  const units = Object.keys(latestByUnit).map(u => {
+  const unitsAll = Object.keys(latestByUnit).map(u => {
     const info = latestByUnit[u];
     return Object.assign({
       donVi: u,
       coDuLieu: !!info,
       ngayGanNhat: info ? utils.formatDate(info.ngay) : "",
+      // ISO của ngayGanNhat (mục AI, v2026.8.18) - dùng để so khớp ĐÚNG
+      // NGÀY với "Ngày cân đối" ở khối "Cân đối xuất hàng" (xem
+      // layCanDoiBDMTDungNgayMoiDonVi_).
+      ngayGanNhatISO: info ? utils.formatDateISO(info.ngay) : "",
       tonCK: info ? info.tonCK : 0,
       doAm: info ? info.doAm : 0,
+      doKho: info ? info.doKho : 0,
+      dinhMuc: info ? info.dinhMuc : 0,
       nhapGo: info ? info.nhapGo : 0,
-      daBaoCaoHomNay: info ? info.daBaoCaoHomNay : false
+      // Quy đổi BDMT cho "Nhập gỗ keo" (mục AF, v2026.8.18) - THEO XÁC
+      // NHẬN của người dùng: dùng "Độ khô TB Kho Nhà máy" CÙNG dòng/CÙNG
+      // đơn vị đó (không có cột Độ ẩm/Độ khô riêng cho gỗ nhập).
+      nhapGoBDMT: info ? (info.nhapGo * info.doKho) : 0,
+      daBaoCaoHomNay: info ? info.daBaoCaoHomNay : false,
+      kiemKeVetBai: info ? info.kiemKeVetBai : false,
+      thoiDiemVetBai: info ? info.thoiDiemVetBai : "",
+      klUocTinhConLai: info ? info.klUocTinhConLai : 0,
+      chenhLechVetBai: info ? info.chenhLechVetBai : 0
     }, info ? {
       hoaNhonMT: info.hoaNhonMT, hoaNhonBDMT: info.hoaNhonBDMT,
       queSonMT: info.queSonMT, queSonBDMT: info.queSonBDMT,
@@ -1136,9 +2425,20 @@ function getDashboardStats() {
       hakqnMT: info.hakqnMT, hakqnBDMT: info.hakqnBDMT,
       congMT: info.congMT, congBDMT: info.congBDMT,
       tienSaMT: info.tienSaMT, tienSaBDMT: info.tienSaBDMT,
-      dungQuatMT: info.dungQuatMT, dungQuatBDMT: info.dungQuatBDMT
+      dungQuatMT: info.dungQuatMT, dungQuatBDMT: info.dungQuatBDMT,
+      doAmTienSa: info.doAmTienSa, doKhoTienSa: info.doKhoTienSa,
+      doAmDungQuat: info.doAmDungQuat, doKhoDungQuat: info.doKhoDungQuat
     } : ZERO_KHO);
   });
+
+  // THEO YÊU CẦU MỚI (mục AB, v2026.8.17): người dùng chỉ được cấp
+  // quyền (Nhập/Sửa hoặc Xem) cho 1 vài Đơn vị (không phải Admin) CHỈ
+  // được thấy đúng những Đơn vị đó ở Trang chủ - lọc NGAY tại server
+  // (không chỉ dựa vào giao diện) trước khi tính mọi số liệu tổng hợp
+  // bên dưới, để không lộ số liệu Đơn vị khác qua các thẻ KPI/bảng Kho
+  // Nhà máy/Kho Xuất Hàng.
+  const allowedUnits = donViChoPhepCuaToi_(email);
+  const units = allowedUnits ? unitsAll.filter(u => allowedUnits.includes(u.donVi)) : unitsAll;
 
   const tongTonCK = units.reduce((s, u) => s + u.tonCK, 0);
   // THEO YÊU CẦU MỚI (mục U, v2026.8.17): Trang chủ (và ảnh báo cáo
@@ -1149,8 +2449,72 @@ function getDashboardStats() {
   // ngày lịch giữa các đơn vị - "ngày gần nhất" là gần nhất CỦA TỪNG đơn
   // vị, đúng khái niệm units[].nhapGo đã dùng ở toàn Trang chủ).
   const tongNhapGo = units.reduce((s, u) => s + (Number(u.nhapGo) || 0), 0);
+  // BDMT tương ứng của "Tổng lượng gỗ keo nhập" (mục AF, v2026.8.18) -
+  // cộng dồn nhapGoBDMT (đã quy đổi theo Độ khô cùng dòng) của từng đơn
+  // vị, cùng cách "gần nhất của từng đơn vị" như tongNhapGo ở trên.
+  const tongNhapGoBDMT = units.reduce((s, u) => s + (Number(u.nhapGoBDMT) || 0), 0);
   const soDonViChuaBaoCaoHomNay = units.filter(u => !u.daBaoCaoHomNay).length;
+  // THEO YÊU CẦU MỚI (mục W, v2026.8.17): thẻ KPI "Số lượng nhà máy vét
+  // bãi" - đếm số đơn vị có "Kiểm kê vét bãi" = Có ở bản ghi GẦN NHẤT
+  // (đồng nhất với cách tính u.nhapGo/u.tonCK - "gần nhất của từng đơn
+  // vị", không nhất thiết cùng 1 ngày lịch) + chi tiết từng đơn vị để
+  // hiển thị ngay dưới thẻ KPI trên Trang chủ và trong ảnh Telegram.
+  const donViVetBai = units.filter(u => u.kiemKeVetBai);
+  const soLuongVetBai = donViVetBai.length;
+  const vetBaiDetail = donViVetBai.map(u => ({
+    donVi: u.donVi, ngayGanNhat: u.ngayGanNhat, thoiDiemVetBai: u.thoiDiemVetBai,
+    klUocTinhConLai: u.klUocTinhConLai, chenhLechVetBai: u.chenhLechVetBai
+  }));
   const sumKho = key => units.reduce((s, u) => s + u[key], 0);
+  // "Tổng lượng tồn kho" quy đổi BDMT + "Độ ẩm trung bình" (mục AF,
+  // v2026.8.18) - tongTonCKBDMT tính CÙNG CÔNG THỨC với tongTonCK (mục
+  // H: Cộng MT + Kho Tiên Sa MT + Kho Dung Quất MT) nhưng cộng cột BDMT;
+  // doAmTrungBinh tính THEO TRỌNG SỐ khối lượng tồn kho (không phải
+  // trung bình cộng đơn giản giữa các đơn vị) = 1 - (tổng BDMT / tổng
+  // MT), nhất quán với đúng số BDMT/MT đang hiển thị.
+  const tongTonCKBDMT = sumKho('congBDMT') + sumKho('tienSaBDMT') + sumKho('dungQuatBDMT');
+  const doAmTrungBinh = tongTonCK > 0 ? Math.max(0, 1 - (tongTonCKBDMT / tongTonCK)) : 0;
+
+  // Độ ẩm/Độ khô của "Tổng lượng gỗ keo nhập hàng ngày" (mục AI,
+  // v2026.8.18 - THEO YÊU CẦU MỚI, dùng cho BOT Telegram) - CÙNG CÔNG
+  // THỨC doAmTrungBinh ở trên: Độ khô = Tổng BDMT / Tổng MT × 100%, Độ
+  // ẩm = 100% - Độ khô (KHÔNG phải trung bình cộng - tính trên TỔNG để
+  // nhất quán với 2 số tongNhapGo/tongNhapGoBDMT đang hiển thị).
+  const doKhoNhapTB = tongNhapGo > 0 ? Math.min(1, tongNhapGoBDMT / tongNhapGo) : 0;
+  const doAmNhapTB = tongNhapGo > 0 ? Math.max(0, 1 - doKhoNhapTB) : 0;
+
+  // Độ ẩm/Độ khô TRUNG BÌNH riêng của khối "Tồn kho tại Cảng" (mục AH,
+  // v2026.8.18) - CÙNG NGUYÊN TẮC mục O/Q ở Báo Cáo Tổng Hợp: chỉ
+  // AVERAGE (trung bình cộng đơn giản, KHÔNG theo trọng số) trên đơn vị
+  // THỰC SỰ có tồn ở đúng kho đó (MT > 0), bỏ qua đơn vị không xuất qua
+  // kho này (Độ ẩm/Độ khô ghi là 0/rác, kéo lệch số trung bình).
+  const donViCoTonTienSa = units.filter(u => u.tienSaMT > 0);
+  const donViCoTonDungQuat = units.filter(u => u.dungQuatMT > 0);
+  const doAmTienSaTB = avg_(donViCoTonTienSa.map(u => u.doAmTienSa));
+  const doKhoTienSaTB = avg_(donViCoTonTienSa.map(u => u.doKhoTienSa));
+  const doAmDungQuatTB = avg_(donViCoTonDungQuat.map(u => u.doAmDungQuat));
+  const doKhoDungQuatTB = avg_(donViCoTonDungQuat.map(u => u.doKhoDungQuat));
+  // Độ ẩm/Độ khô TỔNG của khối "Tồn kho tại Cảng" gộp cả Tiên Sa + Dung
+  // Quất (mục AI, v2026.8.18 - THEO YÊU CẦU MỚI: "BDMT/MT*100%= Độ khô,
+  // 100%- Độ khô = Độ ẩm" - CÙNG CÔNG THỨC trên TỔNG, thay cho khoảng
+  // trống "–" ở dòng Tổng cộng trước đây).
+  const tongCangMT = sumKho('tienSaMT') + sumKho('dungQuatMT');
+  const tongCangBDMT = sumKho('tienSaBDMT') + sumKho('dungQuatBDMT');
+  const doKhoCangTong = tongCangMT > 0 ? Math.min(1, tongCangBDMT / tongCangMT) : 0;
+  const doAmCangTong = tongCangMT > 0 ? Math.max(0, 1 - doKhoCangTong) : 0;
+
+  // Khối "Cân đối xuất hàng" (mục AH/AI, v2026.8.18) - THEO YÊU CẦU MỚI
+  // (SỬA LẠI ở mục AI): hiện chi tiết LỆCH MT/BDMT (Điều chỉnh
+  // MT/Điều chỉnh BDMT) của cân đối ĐÚNG "ngày báo kho" (= ngày báo cáo
+  // tồn kho gần nhất, u.ngayGanNhatISO) mỗi nhà máy - KHÔNG phải lần cân
+  // đối gần nhất bất kỳ nữa (xem layCanDoiBDMTDungNgayMoiDonVi_); đơn vị
+  // không có cân đối đúng ngày đó -> coCanDoi=false ("Chưa cân đối xuất
+  // hàng", KHÔNG bị lọc bỏ khỏi danh sách như bản trước). Chỉ lấy đúng
+  // những đơn vị đang được phép xem (units, đã lọc theo Phân quyền).
+  const donViNgayBaoKhoMap = {};
+  units.forEach(function (u) { donViNgayBaoKhoMap[u.donVi] = u.ngayGanNhatISO || null; });
+  const canDoiBDMTMap = layCanDoiBDMTDungNgayMoiDonVi_(donViNgayBaoKhoMap);
+  const canDoiBDMTList = units.map(u => canDoiBDMTMap[u.donVi]).filter(Boolean);
 
   let tongSoDongFormRaw = 0;
   try { tongSoDongFormRaw = readAllData_().data.length; } catch (e) { /* bỏ qua nếu lỗi đọc */ }
@@ -1159,10 +2523,23 @@ function getDashboardStats() {
     isAdmin: utils.isAdmin(email),
     units,
     tongTonCK,
+    tongTonCKBDMT,
+    doAmTrungBinh,
     tongNhapGo,
+    tongNhapGoBDMT,
+    doAmNhapTB, doKhoNhapTB, // mục AI: Độ ẩm/Độ khô của tổng lượng nhập hàng ngày
     soDonViChuaBaoCaoHomNay,
+    soLuongVetBai,
+    vetBaiDetail,
     tongSoDongChitiet: data.length,      // số (Đơn vị+Ngày) duy nhất đã có trong Chitiettonkho
     tongSoDongFormRaw,                    // tổng số lượt nộp thô (kể cả nộp lại/trùng) ở Form Responses 1
+    // mục AH (v2026.8.18): Độ ẩm/Độ khô TRUNG BÌNH riêng khối "Tồn kho
+    // tại Cảng" + chi tiết lệch MT/BDMT lần cân đối xuất hàng gần nhất
+    // mỗi nhà máy. mục AI: bổ sung Độ ẩm/Độ khô TỔNG (không phải trung
+    // bình cộng) cho dòng Tổng cộng.
+    doAmTienSaTB, doKhoTienSaTB, doAmDungQuatTB, doKhoDungQuatTB,
+    doAmCangTong, doKhoCangTong, tongCangMT, tongCangBDMT,
+    canDoiBDMTList,
     khoTotal: {
       hoaNhonMT: sumKho('hoaNhonMT'), hoaNhonBDMT: sumKho('hoaNhonBDMT'),
       queSonMT: sumKho('queSonMT'), queSonBDMT: sumKho('queSonBDMT'),
@@ -1175,7 +2552,219 @@ function getDashboardStats() {
   };
 }
 
+/** BIẾN THỂ CỦA getDashboardStats() CHO 1 NGÀY LẬP BÁO CÁO CỤ THỂ (mục
+ * Y, v2026.8.17) - THEO YÊU CẦU MỚI: nút "Gửi báo cáo Telegram" (ảnh) ở
+ * Cài đặt > Công cụ Admin trước đây LUÔN dùng số liệu MỚI NHẤT (giống
+ * getDashboardStats gốc) - đôi lúc Admin cần GỬI LẠI báo cáo của 1 NGÀY
+ * TRƯỚC ĐÓ (không phải ngày hiện tại). Hàm này CỐ Ý viết RIÊNG (không
+ * sửa/dùng chung getDashboardStats gốc) để KHÔNG rủi ro ảnh hưởng luồng
+ * mặc định (Trang chủ tương tác + lịch tự động 16h) - đã hoạt động ổn
+ * định, không muốn refactor chung rồi lỡ gây lệch hành vi.
+ * Với mỗi Đơn vị: lấy bản ghi Chitiettonkho GẦN NHẤT có Ngày tồn kho <=
+ * ngayISO (CHỈ xét báo cáo ĐÚNG ngày hoặc TRƯỚC ngày được chọn - bỏ qua
+ * báo cáo SAU đó, đúng ngữ cảnh "gửi lại báo cáo của 1 ngày cũ", không
+ * lộ số liệu của những ngày mới hơn ngày đang muốn gửi lại). Trường
+ * `daBaoCaoHomNay` ở đây đổi nghĩa thành "có báo cáo ĐÚNG ngày được
+ * chọn" (không phải nghĩa gốc "nộp trong hôm nay theo lịch thật) - ẢNH
+ * + CAPTION (taoAnhBaoCaoTrangChu_/soanCaptionBaoCaoTrangChu_) tự đổi
+ * nhãn cho khớp khi thấy có `ngayBaoCaoDisplay` trong kết quả trả về. */
+function getDashboardStatsForDate_(ngayISO) {
+  const { data } = readAllChitietData_();
+  const email = utils.normEmail(getCurrentUserEmail_());
+
+  const latestByUnit = {};
+  CFG.UNITS.forEach(u => { latestByUnit[u] = null; });
+
+  data.forEach(r => {
+    const donVi = String(r[COL.DON_VI] || "").trim();
+    if (!donVi) return;
+    const ngay = r[COL.NGAY_TON_KHO];
+    if (!(ngay instanceof Date)) return;
+    const rISO = utils.formatDateISO(ngay);
+    if (!rISO || rISO > ngayISO) return; // bỏ qua báo cáo SAU ngày được chọn gửi lại
+    const cur = latestByUnit[donVi];
+    if (!cur || ngay.getTime() > cur.ngay.getTime()) {
+      latestByUnit[donVi] = {
+        ngay,
+        tonCK: utils.parseNum(r[COL.TON_CK]),
+        congMT: utils.parseNum(r[COL.CONG_MT]),
+        congBDMT: utils.parseNum(r[COL.CONG_BDMT]),
+        doAm: utils.parseNum(r[COL.DO_AM]),
+        doKho: utils.parseNum(r[COL.DO_KHO]), // dùng để quy đổi nhapGo -> BDMT (mục AF)
+        nhapGo: utils.parseNum(r[COL.NHAP_GO]),
+        doAmTienSa: utils.parseNum(r[COL.DO_AM_TIEN_SA]), doKhoTienSa: utils.parseNum(r[COL.DO_KHO_TIEN_SA]), // mục AH
+        doAmDungQuat: utils.parseNum(r[COL.DO_AM_DUNG_QUAT]), doKhoDungQuat: utils.parseNum(r[COL.DO_KHO_DUNG_QUAT]), // mục AH
+        daBaoCaoHomNay: rISO === ngayISO, // nghĩa riêng cho hàm này - xem docstring
+        kiemKeVetBai: String(r[COL.KIEM_KE_VET_BAI] || "") === "Có",
+        thoiDiemVetBai: utils.formatDate(r[COL.THOI_DIEM_VET_BAI]),
+        klUocTinhConLai: utils.parseNum(r[COL.KL_UOC_TINH_CON_LAI]),
+        chenhLechVetBai: utils.parseNum(r[COL.CHENH_LECH_VET_BAI]),
+        hoaNhonMT: utils.parseNum(r[COL.HOA_NHON_MT]), hoaNhonBDMT: utils.parseNum(r[COL.HOA_NHON_BDMT]),
+        queSonMT: utils.parseNum(r[COL.QUE_SON_MT]), queSonBDMT: utils.parseNum(r[COL.QUE_SON_BDMT]),
+        daiHiepMT: utils.parseNum(r[COL.DAI_HIEP_MT]), daiHiepBDMT: utils.parseNum(r[COL.DAI_HIEP_BDMT]),
+        hakqnMT: utils.parseNum(r[COL.HAKQN_MT]), hakqnBDMT: utils.parseNum(r[COL.HAKQN_BDMT]),
+        tienSaMT: utils.parseNum(r[COL.TIEN_SA_MT]), tienSaBDMT: utils.parseNum(r[COL.TIEN_SA_BDMT]),
+        dungQuatMT: utils.parseNum(r[COL.DUNG_QUAT_MT]), dungQuatBDMT: utils.parseNum(r[COL.DUNG_QUAT_BDMT])
+      };
+    }
+  });
+
+  const ZERO_KHO = {
+    hoaNhonMT:0, hoaNhonBDMT:0, queSonMT:0, queSonBDMT:0, daiHiepMT:0, daiHiepBDMT:0,
+    hakqnMT:0, hakqnBDMT:0, congMT:0, congBDMT:0, tienSaMT:0, tienSaBDMT:0, dungQuatMT:0, dungQuatBDMT:0,
+    doAmTienSa:0, doKhoTienSa:0, doAmDungQuat:0, doKhoDungQuat:0
+  };
+  const units = Object.keys(latestByUnit).map(u => {
+    const info = latestByUnit[u];
+    return Object.assign({
+      donVi: u,
+      coDuLieu: !!info,
+      ngayGanNhat: info ? utils.formatDate(info.ngay) : "",
+      ngayGanNhatISO: info ? utils.formatDateISO(info.ngay) : "", // mục AI
+      tonCK: info ? info.tonCK : 0,
+      doAm: info ? info.doAm : 0,
+      doKho: info ? info.doKho : 0,
+      nhapGo: info ? info.nhapGo : 0,
+      nhapGoBDMT: info ? (info.nhapGo * info.doKho) : 0, // mục AF
+      daBaoCaoHomNay: info ? info.daBaoCaoHomNay : false,
+      kiemKeVetBai: info ? info.kiemKeVetBai : false,
+      thoiDiemVetBai: info ? info.thoiDiemVetBai : "",
+      klUocTinhConLai: info ? info.klUocTinhConLai : 0,
+      chenhLechVetBai: info ? info.chenhLechVetBai : 0
+    }, info ? {
+      hoaNhonMT: info.hoaNhonMT, hoaNhonBDMT: info.hoaNhonBDMT,
+      queSonMT: info.queSonMT, queSonBDMT: info.queSonBDMT,
+      daiHiepMT: info.daiHiepMT, daiHiepBDMT: info.daiHiepBDMT,
+      hakqnMT: info.hakqnMT, hakqnBDMT: info.hakqnBDMT,
+      congMT: info.congMT, congBDMT: info.congBDMT,
+      tienSaMT: info.tienSaMT, tienSaBDMT: info.tienSaBDMT,
+      dungQuatMT: info.dungQuatMT, dungQuatBDMT: info.dungQuatBDMT,
+      doAmTienSa: info.doAmTienSa, doKhoTienSa: info.doKhoTienSa,
+      doAmDungQuat: info.doAmDungQuat, doKhoDungQuat: info.doKhoDungQuat
+    } : ZERO_KHO);
+  });
+
+  const tongTonCK = units.reduce((s, u) => s + u.tonCK, 0);
+  const tongNhapGo = units.reduce((s, u) => s + (Number(u.nhapGo) || 0), 0);
+  const tongNhapGoBDMT = units.reduce((s, u) => s + (Number(u.nhapGoBDMT) || 0), 0); // mục AF
+  const soDonViChuaBaoCaoHomNay = units.filter(u => !u.daBaoCaoHomNay).length;
+  const donViVetBai = units.filter(u => u.kiemKeVetBai);
+  const soLuongVetBai = donViVetBai.length;
+  const vetBaiDetail = donViVetBai.map(u => ({
+    donVi: u.donVi, ngayGanNhat: u.ngayGanNhat, thoiDiemVetBai: u.thoiDiemVetBai,
+    klUocTinhConLai: u.klUocTinhConLai, chenhLechVetBai: u.chenhLechVetBai
+  }));
+  const sumKho = key => units.reduce((s, u) => s + u[key], 0);
+  // mục AF: Tổng tồn kho BDMT + Độ ẩm trung bình theo trọng số tồn kho.
+  const tongTonCKBDMT = sumKho('congBDMT') + sumKho('tienSaBDMT') + sumKho('dungQuatBDMT');
+  const doAmTrungBinh = tongTonCK > 0 ? Math.max(0, 1 - (tongTonCKBDMT / tongTonCK)) : 0;
+  // mục AI: Độ ẩm/Độ khô của tổng lượng gỗ keo nhập hàng ngày.
+  const doKhoNhapTB = tongNhapGo > 0 ? Math.min(1, tongNhapGoBDMT / tongNhapGo) : 0;
+  const doAmNhapTB = tongNhapGo > 0 ? Math.max(0, 1 - doKhoNhapTB) : 0;
+  // mục AH: Độ ẩm/Độ khô TRUNG BÌNH riêng khối "Tồn kho tại Cảng".
+  const donViCoTonTienSa = units.filter(u => u.tienSaMT > 0);
+  const donViCoTonDungQuat = units.filter(u => u.dungQuatMT > 0);
+  const doAmTienSaTB = avg_(donViCoTonTienSa.map(u => u.doAmTienSa));
+  const doKhoTienSaTB = avg_(donViCoTonTienSa.map(u => u.doKhoTienSa));
+  const doAmDungQuatTB = avg_(donViCoTonDungQuat.map(u => u.doAmDungQuat));
+  const doKhoDungQuatTB = avg_(donViCoTonDungQuat.map(u => u.doKhoDungQuat));
+  // mục AI: Độ ẩm/Độ khô TỔNG (không phải trung bình cộng) khối "Tồn
+  // kho tại Cảng".
+  const tongCangMT = sumKho('tienSaMT') + sumKho('dungQuatMT');
+  const tongCangBDMT = sumKho('tienSaBDMT') + sumKho('dungQuatBDMT');
+  const doKhoCangTong = tongCangMT > 0 ? Math.min(1, tongCangBDMT / tongCangMT) : 0;
+  const doAmCangTong = tongCangMT > 0 ? Math.max(0, 1 - doKhoCangTong) : 0;
+  // mục AI: khối "Cân đối xuất hàng" đúng "ngày báo kho" mỗi nhà máy.
+  const donViNgayBaoKhoMap = {};
+  units.forEach(function (u) { donViNgayBaoKhoMap[u.donVi] = u.ngayGanNhatISO || null; });
+  const canDoiBDMTMap = layCanDoiBDMTDungNgayMoiDonVi_(donViNgayBaoKhoMap);
+  const canDoiBDMTList = units.map(u => canDoiBDMTMap[u.donVi]).filter(Boolean);
+
+  let tongSoDongFormRaw = 0;
+  try { tongSoDongFormRaw = readAllData_().data.length; } catch (e) { /* bỏ qua nếu lỗi đọc */ }
+
+  const p = ngayISO.split("-");
+  const ngayBaoCaoDisplay = p.length === 3 ? (p[2] + "/" + p[1] + "/" + p[0]) : ngayISO;
+
+  return {
+    isAdmin: utils.isAdmin(email),
+    units,
+    tongTonCK,
+    tongTonCKBDMT,
+    doAmTrungBinh,
+    tongNhapGo,
+    tongNhapGoBDMT,
+    doAmNhapTB, doKhoNhapTB,
+    soDonViChuaBaoCaoHomNay,
+    soLuongVetBai,
+    vetBaiDetail,
+    tongSoDongChitiet: data.length,
+    tongSoDongFormRaw,
+    doAmTienSaTB, doKhoTienSaTB, doAmDungQuatTB, doKhoDungQuatTB,
+    doAmCangTong, doKhoCangTong, tongCangMT, tongCangBDMT,
+    canDoiBDMTList,
+    khoTotal: {
+      hoaNhonMT: sumKho('hoaNhonMT'), hoaNhonBDMT: sumKho('hoaNhonBDMT'),
+      queSonMT: sumKho('queSonMT'), queSonBDMT: sumKho('queSonBDMT'),
+      daiHiepMT: sumKho('daiHiepMT'), daiHiepBDMT: sumKho('daiHiepBDMT'),
+      hakqnMT: sumKho('hakqnMT'), hakqnBDMT: sumKho('hakqnBDMT'),
+      congMT: sumKho('congMT'), congBDMT: sumKho('congBDMT'),
+      tienSaMT: sumKho('tienSaMT'), tienSaBDMT: sumKho('tienSaBDMT'),
+      dungQuatMT: sumKho('dungQuatMT'), dungQuatBDMT: sumKho('dungQuatBDMT')
+    },
+    // 2 trường CHỈ CÓ ở biến thể theo ngày này (getDashboardStats gốc
+    // KHÔNG có) - taoAnhBaoCaoTrangChu_/soanCaptionBaoCaoTrangChu_ dùng
+    // để biết cần đổi nhãn "hôm nay" -> ngày cụ thể.
+    ngayBaoCaoISO: ngayISO,
+    ngayBaoCaoDisplay
+  };
+}
+
 function getUnitList() { return CFG.UNITS; }
+
+/** Trả về URL Google Sheet gốc (file dữ liệu thật đứng sau Web App này)
+ * - THEO YÊU CẦU MỚI (mục AA, v2026.8.17): thêm nút "Mở file dữ liệu
+ * gốc" ở Cài đặt > Công cụ Admin, để Admin mở thẳng file Sheet (xem
+ * trực tiếp Form Responses 1/Chitiettonkho/PhanQuyen/DieuKienDuyet/
+ * Audit...) khi cần tra soát sâu hơn giao diện Web App cho phép. CHỈ
+ * Admin gọi được (dù URL này không phải bí mật tuyệt đối - file Sheet
+ * vẫn tự áp dụng đúng quyền chia sẻ Google Drive của người mở link -
+ * nhưng vẫn chặn ở đây cho nhất quán với các công cụ Admin khác). */
+function getSpreadsheetUrl() {
+  const email = getCurrentUserEmail_();
+  if (!utils.isAdmin(email)) return { allowed: false, url: "" };
+  return { allowed: true, url: SpreadsheetApp.getActive().getUrl() };
+}
+
+/** Công cụ Admin gửi 1 email THỬ tới địa chỉ tự nhập, KHÔNG dùng
+ * guiEmailAnToan_ (cố ý để LỘ RA nguyên văn lỗi thật ngay trên Web App
+ * thay vì chỉ ghi Audit) - dùng để rà nhanh vì sao email cảnh báo/duyệt
+ * không tới nơi (mục AE, v2026.8.18 - THEO PHẢN HỒI người dùng "đã
+ * test và KHÔNG nhận được email"). Nguyên nhân thường gặp nếu lỗi ở
+ * đây: hết quota MailApp trong ngày (tài khoản Gmail cá nhân ~100
+ * mail/ngày, Google Workspace ~1500 mail/ngày - xem lại ở
+ * script.google.com > Executions/Quotas), hoặc "to" không phải email
+ * hợp lệ. Nếu hàm này gửi được nhưng người nhận vẫn báo không thấy,
+ * khả năng cao email đã rơi vào mục Spam/Quảng cáo - nhờ người nhận
+ * kiểm tra lại thư mục đó. */
+function guiEmailThuNghiem(toEmail) {
+  const email = getCurrentUserEmail_();
+  if (!utils.isAdmin(email)) return { success: false, message: "❌ Chỉ Admin mới dùng được công cụ này." };
+  const to = utils.normEmail(toEmail);
+  if (!to) return { success: false, message: "❌ Vui lòng nhập email cần gửi thử." };
+  try {
+    MailApp.sendEmail({
+      to: to,
+      subject: "✅ Email thử nghiệm - Web App Quản Lý Tồn Kho Dăm",
+      body: "Đây là email THỬ NGHIỆM gửi lúc " + utils.formatDate(new Date()) + " để kiểm tra MailApp có gửi được từ Web App tới địa chỉ này hay không.\n\n" +
+        "Nếu bạn nhận được email này, hệ thống gửi mail đang hoạt động bình thường - các email cảnh báo/duyệt khác không tới có thể do rơi vào mục Spam, hoặc do người nộp dùng email khác với email đang kiểm tra ở đây.\n\n(Email tự động từ Web App Quản Lý Tồn Kho Dăm - HAK Group)"
+    });
+    const soConLai = MailApp.getRemainingDailyQuota();
+    return { success: true, message: "✅ Đã gửi email thử tới " + to + ". Số email còn gửi được hôm nay (quota MailApp): " + soConLai + ". Nếu người nhận không thấy, nhờ kiểm tra thư mục Spam/Quảng cáo." };
+  } catch (err) {
+    return { success: false, message: "❌ GỬI THẤT BẠI - lỗi thật từ Google: " + err.toString() };
+  }
+}
 
 /**
  * Dùng cho màn "Nhập Tồn Kho": kiểm tra xem (Đơn vị, Ngày tồn kho) đã
@@ -1224,6 +2813,77 @@ function getPreviousDayCongMT(donVi, ngayISO) {
   };
 }
 
+/** Chuyển "Ngày cân đối" đọc từ sheet CanDoiBDMT (được ghi bằng
+ * utils.formatDate() - chuỗi "dd/MM/yyyy" - ở logCanDoiBDMT_, có thể bị
+ * Sheets tự nhận dạng thành Date hoặc giữ nguyên dạng text tùy locale)
+ * về "yyyy-MM-dd" để so sánh nhất quán với ngayISO dùng ở nơi khác. */
+function ngayCanDoiToISO_(v) {
+  if (v instanceof Date) return utils.formatDateISO(v);
+  const s = String(v || "").trim();
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!m) return "";
+  const dd = m[1], MM = m[2], yyyy = m[3];
+  return yyyy + "-" + String(MM).padStart(2, "0") + "-" + String(dd).padStart(2, "0");
+}
+
+/** Tổng "Điều chỉnh MT" (sheet CanDoiBDMT, mục K) của 1 Đơn vị - CHỈ
+ * TÍNH các dòng có "Ngày cân đối" TRÙNG ĐÚNG ngayISO đang xét (mục AD,
+ * v2026.8.18 - THEO YÊU CẦU MỚI, đã xác nhận với người dùng: KHÔNG
+ * "mang sang" từ lần cân đối cũ hơn nếu đúng ngày đang xét không có cân
+ * đối nào - khi đó coi Điều chỉnh MT = 0). CỘNG DỒN nếu có nhiều dòng
+ * cùng ngày (VD cân đối cả Kho Tiên Sa lẫn Kho Dung Quất trong cùng 1
+ * lần nộp báo cáo). */
+function tongDieuChinhMTCanDoiDungNgay_(donVi, ngayISO) {
+  donVi = String(donVi || "").trim();
+  if (!donVi || !ngayISO) return 0;
+  const sh = getOrCreateCanDoiBDMTSheet_();
+  const lastRow = sh.getLastRow();
+  if (lastRow < 2) return 0;
+  const data = sh.getRange(2, 1, lastRow - 1, 18).getValues();
+  let tong = 0;
+  data.forEach(r => {
+    if (String(r[15] || "").trim() !== donVi) return; // cột P "Đơn vị nhập"
+    if (ngayCanDoiToISO_(r[0]) !== ngayISO) return;    // cột A "Ngày cân đối"
+    tong += utils.parseNum(r[13]);                      // cột N "Điều chỉnh MT"
+  });
+  return tong;
+}
+
+/** "Đầu kỳ DỰ KIẾN" của 1 Đơn vị, tính từ bản ghi CHÍNH THỨC
+ * (Chitiettonkho - đã tự động loại "Chờ duyệt"/"Từ chối", xem
+ * syncChitietTonKhoForKey_) GẦN NHẤT TRƯỚC ngayISO - dùng để phát hiện
+ * "báo cáo lệch đầu kỳ" khi nộp mới (mục X, v2026.8.17; SỬA LẠI công
+ * thức ở mục AD, v2026.8.18 THEO YÊU CẦU MỚI của người dùng):
+ *   Đầu kỳ dự kiến = TON_CK của bản ghi đó (đã sẵn = Cộng MT Kho Nhà
+ *     máy + Kho Tiên Sa MT + Kho Dung Quất MT - công thức Sheet có sẵn,
+ *     xem ghi chú mục H đầu file) + "Điều chỉnh MT" (Cân đối BDMT xuất
+ *     hàng, mục K) NẾU CÓ cân đối ĐÚNG NGÀY của bản ghi đó (không có =
+ *     cộng thêm 0, KHÔNG lấy tạm lần cân đối cũ hơn).
+ * Trả về null nếu Đơn vị đó CHƯA TỪNG có báo cáo chính thức nào trước
+ * ngày này (VD ngày đầu tiên mở sổ) - khi đó không có gì để so sánh,
+ * không coi là lệch. */
+function timTonCuoiKyTruoc_(donVi, ngayISO) {
+  donVi = String(donVi || "").trim();
+  if (!donVi || !ngayISO) return null;
+  const { data } = readAllChitietData_();
+  let best = null, bestISO = null;
+  data.forEach(r => {
+    if (String(r[COL.DON_VI] || "").trim() !== donVi) return;
+    const rISO = utils.formatDateISO(r[COL.NGAY_TON_KHO]);
+    if (!rISO || rISO >= ngayISO) return;
+    if (!bestISO || rISO > bestISO) { bestISO = rISO; best = utils.parseNum(r[COL.TON_CK]); }
+  });
+  if (best === null) return null;
+  const dieuChinhMT = tongDieuChinhMTCanDoiDungNgay_(donVi, bestISO);
+  return {
+    ngayISO: bestISO,
+    ngayDisplay: utils.formatDate(new Date(bestISO)),
+    tonCK: best,
+    dieuChinhMT,
+    tonCuoiKyDuKien: best + dieuChinhMT
+  };
+}
+
 // ============================================================
 // LỊCH SỬ NHẬP KHO
 // ============================================================
@@ -1234,6 +2894,8 @@ function rowToHistoryItem_(r, rowIndex, isLatest) {
     isLatest: !!isLatest,
     timestamp: utils.formatDate(r[COL.TIMESTAMP]),
     email: String(r[COL.EMAIL] || ""),
+    trangThaiDuyet: String(r[COL.TRANG_THAI_DUYET] || ""),
+    lyDoChoDuyet: String(r[COL.LY_DO_CHO_DUYET] || ""),
     donVi: String(r[COL.DON_VI] || ""),
     ngayTonKho: utils.formatDate(r[COL.NGAY_TON_KHO]),
     ngayTonKhoISO: utils.formatDateISO(r[COL.NGAY_TON_KHO]),
@@ -1259,19 +2921,55 @@ function rowToHistoryItem_(r, rowIndex, isLatest) {
   };
 }
 
+/** Đếm nhanh số dòng "Chờ duyệt" (đã lọc theo đúng phạm vi Đơn vị được
+ * phép xem của người gọi - giống getHistoryList) - dùng cho số badge ở
+ * menu "Lịch Sử" trên Index.html (mục AD, v2026.8.18). Nhẹ hơn
+ * getHistoryList vì không cần dựng object đầy đủ cho từng dòng, và
+ * không cần so khớp Chitiettonkho (không quan tâm "Đang áp dụng"/"Đã bị
+ * thay thế" ở đây). */
+function getSoLuongChoDuyet() {
+  const { data } = readAllData_();
+  const allowedUnits = donViChoPhepCuaToi_(utils.normEmail(getCurrentUserEmail_()));
+  let count = 0;
+  data.forEach(r => {
+    if (utils.isBlank(r[COL.DON_VI])) return;
+    if (String(r[COL.TRANG_THAI_DUYET] || "") !== "Chờ duyệt") return;
+    if (allowedUnits && allowedUnits.indexOf(String(r[COL.DON_VI]).trim()) === -1) return;
+    count++;
+  });
+  return count;
+}
+
 function getHistoryList(filters) {
   filters = filters || {};
   const { data, headerRow } = readAllData_();
   let items = data.map((r, i) => ({ r, rowIndex: i })).filter(x => !utils.isBlank(x.r[COL.DON_VI]));
 
+  // THEO YÊU CẦU MỚI (mục AB, v2026.8.17): CHẶN Ở SERVER cho người
+  // không phải Admin - chỉ thấy đúng những Đơn vị mình được cấp quyền
+  // (Nhập/Sửa hoặc Xem), kể cả khi bộ lọc Đơn vị để trống ("Tất cả").
+  const allowedUnits = donViChoPhepCuaToi_(utils.normEmail(getCurrentUserEmail_()));
+  if (allowedUnits) items = items.filter(x => allowedUnits.includes(String(x.r[COL.DON_VI]).trim()));
+
   if (filters.donVi) items = items.filter(x => String(x.r[COL.DON_VI]).trim() === filters.donVi);
-  if (filters.fromDate) {
-    const f = filters.fromDate;
-    items = items.filter(x => x.r[COL.NGAY_TON_KHO] instanceof Date && utils.formatDateISO(x.r[COL.NGAY_TON_KHO]) >= f);
-  }
-  if (filters.toDate) {
-    const t = filters.toDate;
-    items = items.filter(x => x.r[COL.NGAY_TON_KHO] instanceof Date && utils.formatDateISO(x.r[COL.NGAY_TON_KHO]) <= t);
+  // THEO YÊU CẦU MỚI (mục X, v2026.8.17; MỞ RỘNG cho MỌI người dùng -
+  // không riêng Admin - ở mục AD, v2026.8.18): nút "Chỉ hiện Chờ duyệt"
+  // ở Lịch Sử, MẶC ĐỊNH BẬT - BỎ QUA bộ lọc ngày khi bật, để không lỡ
+  // ẩn mất báo cáo chờ duyệt nằm ngoài khoảng ngày mặc định (mặc định
+  // Lịch Sử chỉ lọc trong "hôm nay"). An toàn cho người dùng thường vì
+  // đã lọc allowedUnits ở trên - không lộ thêm Đơn vị nào ngoài phạm vi
+  // được phép.
+  if (filters.chiChoDuyet) {
+    items = items.filter(x => String(x.r[COL.TRANG_THAI_DUYET] || "") === "Chờ duyệt");
+  } else {
+    if (filters.fromDate) {
+      const f = filters.fromDate;
+      items = items.filter(x => x.r[COL.NGAY_TON_KHO] instanceof Date && utils.formatDateISO(x.r[COL.NGAY_TON_KHO]) >= f);
+    }
+    if (filters.toDate) {
+      const t = filters.toDate;
+      items = items.filter(x => x.r[COL.NGAY_TON_KHO] instanceof Date && utils.formatDateISO(x.r[COL.NGAY_TON_KHO]) <= t);
+    }
   }
 
   // So khớp với Chitiettonkho để biết dòng nào trong Lịch Sử ĐANG là
@@ -1402,6 +3100,122 @@ function deleteEntry(rowIndex) {
 }
 
 // ============================================================
+// PHÊ DUYỆT "BÁO CÁO LỆCH ĐẦU KỲ" TẠI LỊCH SỬ (mục X, v2026.8.17) -
+// CHỈ ADMIN. rowIndex lấy trực tiếp từ dòng đang xem ở bảng Lịch Sử
+// (giống cơ chế Sửa/Xóa sẵn có) - KHÔNG tự tìm lại theo (Đơn vị,Ngày)
+// để tránh duyệt nhầm dòng khác nếu có nhiều lần nộp trùng khóa.
+// ============================================================
+function duyetBaoCao(rowIndex, chapNhan) {
+  let lock;
+  try {
+    lock = LockService.getScriptLock();
+    lock.waitLock(30000);
+    const email = getCurrentUserEmail_();
+    if (!utils.isAdmin(email)) return { success: false, message: "❌ Chỉ Admin mới được duyệt báo cáo." };
+
+    const sh = getResponsesSheet_();
+    if (rowIndex < 2 || rowIndex > sh.getLastRow()) return { success: false, message: "❌ Dòng không hợp lệ." };
+    const r = sh.getRange(rowIndex, 1, 1, CFG.TOTAL_COL_COUNT).getValues()[0];
+    const trangThai = String(r[COL.TRANG_THAI_DUYET] || "");
+    if (trangThai !== "Chờ duyệt") return { success: false, message: "❌ Báo cáo này không ở trạng thái Chờ duyệt (hiện tại: " + (trangThai || "bình thường") + ")." };
+
+    const donVi = String(r[COL.DON_VI] || "").trim();
+    const ngayISO = utils.formatDateISO(r[COL.NGAY_TON_KHO]);
+    const ngayDisplay = utils.formatDate(r[COL.NGAY_TON_KHO]);
+    // Mục AD (v2026.8.18): đọc lại lý do đã ghi lúc nộp (COL.LY_DO_CHO_DUYET)
+    // thay vì hardcode "lệch đầu kỳ" như trước - vì 1 dòng có thể bị Chờ
+    // duyệt do lệch đầu kỳ, lệch định mức, hoặc cả 2.
+    const lyDoChoDuyet = String(r[COL.LY_DO_CHO_DUYET] || "").trim();
+    const newStatus = chapNhan ? "Đã duyệt" : "Từ chối";
+    sh.getRange(rowIndex, COL.TRANG_THAI_DUYET + 1).setValue(newStatus);
+    SpreadsheetApp.flush();
+    logAudit_(email, donVi, ngayDisplay, (chapNhan ? "Duyệt" : "Từ chối") + " báo cáo Chờ duyệt (dòng " + rowIndex + ")" + (lyDoChoDuyet ? " - " + lyDoChoDuyet : ""));
+    // Đồng bộ lại Chitiettonkho cho khóa này - nếu Duyệt, dòng vừa duyệt
+    // (nếu vẫn là lần nộp mới nhất khớp khóa) sẽ trở thành chính thức;
+    // nếu Từ chối, dòng này vẫn bị loại như "Chờ duyệt" (xem
+    // syncChitietTonKhoForKey_), khóa quay lại bản chính thức gần nhất
+    // trước đó (hoặc trống nếu chưa từng có).
+    syncChitietTonKhoForKey_(donVi, ngayISO);
+
+    const r2 = sh.getRange(rowIndex, 1, 1, CFG.TOTAL_COL_COUNT).getValues()[0];
+    const submitterEmail = String(r2[COL.EMAIL] || "");
+    if (submitterEmail) {
+      guiEmailAnToan_({
+        to: submitterEmail,
+        subject: (chapNhan ? "✅ Báo cáo đã được DUYỆT" : "❌ Báo cáo bị TỪ CHỐI") + " - " + donVi + " ngày " + ngayDisplay,
+        body: "Báo cáo tồn kho đơn vị \"" + donVi + "\" ngày " + ngayDisplay + " bạn nộp (đang \"Chờ duyệt\"" + (lyDoChoDuyet ? " vì: " + lyDoChoDuyet : "") + ") đã được Admin " +
+          (chapNhan ? "DUYỆT - đã cập nhật vào Chitiettonkho/Dashboard/Báo cáo." : "TỪ CHỐI - vui lòng kiểm tra lại số liệu và nộp lại.") +
+          "\n\n(Email tự động từ Web App Quản Lý Tồn Kho Dăm - HAK Group)"
+      }, (chapNhan ? "duyệt" : "từ chối") + " - " + donVi);
+    }
+
+    return {
+      success: true,
+      message: chapNhan
+        ? "✅ Đã duyệt báo cáo \"" + donVi + "\" ngày " + ngayDisplay + " - đã cập nhật vào Chitiettonkho."
+        : "✅ Đã từ chối báo cáo \"" + donVi + "\" ngày " + ngayDisplay + " - KHÔNG đưa vào Chitiettonkho (người nộp cần nộp lại)."
+    };
+  } catch (err) {
+    return { success: false, message: "❌ Lỗi: " + err.toString() };
+  } finally {
+    if (lock) lock.releaseLock();
+  }
+}
+
+/** CHẠY 1 LẦN (Apps Script Editor > chọn hàm này ở thanh công cụ >
+ * Run) SAU KHI cập nhật code có thêm cột "Trạng thái duyệt" (mục X,
+ * v2026.8.17, cột thứ 42 = AP, nối cuối cùng phương án với Kho Dung
+ * Quất ở mục H) - thêm nhãn tiêu đề cho cột mới vào CẢ 2 sheet "Form
+ * Responses 1" và "Chitiettonkho" nếu chưa có (KHÔNG ảnh hưởng dữ liệu
+ * ở các cột khác). Chạy lại nhiều lần không sao (chỉ ghi đè đúng 1 ô
+ * tiêu đề bằng cùng 1 giá trị). CŨNG tạo sẵn 2 sheet mới "PhanQuyen" +
+ * "DieuKienDuyet" (nếu chưa có) để Admin vào thẳng Cài đặt cấu hình
+ * ngay, không cần đợi lần đọc/ghi đầu tiên tự tạo. */
+function DAM_BAO_COT_TRANG_THAI_DUYET() {
+  const ss = SpreadsheetApp.getActive();
+  [CFG.SHEET_RESPONSES, CFG.SHEET_CHITIET].forEach(function (name) {
+    const sh = ss.getSheetByName(name);
+    if (!sh) return;
+    const headerRow = name === CFG.SHEET_RESPONSES ? findHeaderRow_(sh) : 1;
+    sh.getRange(headerRow, COL.TRANG_THAI_DUYET + 1).setValue("Trạng thái duyệt").setFontWeight("bold");
+    // v2026.8.18 (mục AD): +1 cột "Lý do chờ duyệt" - hàm này ĐÃ được
+    // thiết kế để chạy lại an toàn nhiều lần nên tiện thể thêm luôn ở
+    // đây thay vì tạo 1 hàm setup mới riêng.
+    sh.getRange(headerRow, COL.LY_DO_CHO_DUYET + 1).setValue("Lý do chờ duyệt").setFontWeight("bold");
+  });
+  getOrCreatePhanQuyenSheet_();
+  getOrCreateDieuKienDuyetSheet_();
+  SpreadsheetApp.flush();
+  return "✅ Đã thêm cột 'Trạng thái duyệt' + 'Lý do chờ duyệt' (nếu chưa có) vào Form Responses 1 + Chitiettonkho, và tạo sẵn 2 sheet PhanQuyen/DieuKienDuyet.";
+}
+
+/** CHẠY 1 LẦN NẾU CẦN (Apps Script Editor > chọn hàm này > Run) - NÂNG
+ * CẤP sheet "DieuKienDuyet" từ cấu trúc BẢN ĐẦU (mục X, 5 cột: Đơn vị |
+ * Định mức tối thiểu | Định mức tối đa | Cập nhật lúc | Cập nhật bởi,
+ * KHÔNG có khoảng ngày áp dụng) sang cấu trúc MỚI (mục Z, THÊM 2 cột
+ * "Từ ngày"/"Đến ngày" ngay sau "Đơn vị") - CHỈ CẦN chạy nếu sheet
+ * "DieuKienDuyet" đã được tạo TỪ TRƯỚC khi có mục Z (đã lỡ nhập vài
+ * dòng cấu hình theo cấu trúc cũ). Nếu sheet chưa từng tồn tại hoặc đã
+ * đúng cấu trúc mới rồi thì hàm này KHÔNG làm gì (an toàn khi chạy
+ * nhầm/chạy lại nhiều lần). Các dòng cấu hình cũ sau khi nâng cấp sẽ có
+ * "Từ ngày"/"Đến ngày" TRỐNG = hiểu là "không giới hạn ngày" (áp dụng
+ * mọi lúc, giữ nguyên hành vi như trước khi nâng cấp) cho tới khi Admin
+ * tự sửa lại khoảng ngày cụ thể ở Cài đặt > Điều kiện kiểm tra duyệt. */
+function NANG_CAP_DIEUKIENDUYET_THEM_KHOANG_NGAY() {
+  const ss = SpreadsheetApp.getActive();
+  const sh = ss.getSheetByName(CFG.SHEET_DIEUKIENDUYET);
+  if (!sh) { getOrCreateDieuKienDuyetSheet_(); return "✅ Sheet DieuKienDuyet chưa tồn tại - đã tạo mới đúng cấu trúc mới (7 cột, có khoảng ngày áp dụng)."; }
+  const headerB = String(sh.getRange(1, 2).getValue() || "");
+  if (headerB.indexOf("Từ ngày") === 0) return "✅ Sheet DieuKienDuyet đã đúng cấu trúc mới (có cột Từ ngày/Đến ngày) - không cần nâng cấp.";
+  sh.insertColumnsAfter(1, 2); // chèn 2 cột trống ngay sau cột A (Đơn vị), dời "Định mức..." cũ về cột D/E
+  sh.getRange(1, 2).setValue("Từ ngày (để trống = không giới hạn)");
+  sh.getRange(1, 3).setValue("Đến ngày (để trống = không giới hạn)");
+  sh.getRange(1, 1, 1, 7).setFontWeight("bold").setBackground("#d9ead3");
+  SpreadsheetApp.flush();
+  return "✅ Đã nâng cấp sheet DieuKienDuyet lên cấu trúc mới - các dòng cấu hình cũ giữ nguyên Định mức, coi như 'không giới hạn ngày' cho tới khi Admin sửa lại khoảng ngày cụ thể.";
+}
+
+// ============================================================
 // NHẬT KÝ (AUDIT) - CHỈ ADMIN
 // ============================================================
 function getAuditLog(filters) {
@@ -1436,6 +3250,10 @@ function getReportSummary(fDate, tDate, donViFilter) {
   const { data } = readAllChitietData_();
 
   let items = data.filter(r => !utils.isBlank(r[COL.DON_VI]) && r[COL.NGAY_TON_KHO] instanceof Date);
+  // THEO YÊU CẦU MỚI (mục AB, v2026.8.17): CHẶN Ở SERVER - xem ghi chú
+  // donViChoPhepCuaToi_ (áp dụng đồng bộ với getHistoryList/getDashboardStats).
+  const allowedUnits = donViChoPhepCuaToi_(utils.normEmail(getCurrentUserEmail_()));
+  if (allowedUnits) items = items.filter(r => allowedUnits.includes(String(r[COL.DON_VI]).trim()));
   if (donViFilter) items = items.filter(r => String(r[COL.DON_VI]).trim() === donViFilter);
   if (fDate) items = items.filter(r => utils.formatDateISO(r[COL.NGAY_TON_KHO]) >= fDate);
   if (tDate) items = items.filter(r => utils.formatDateISO(r[COL.NGAY_TON_KHO]) <= tDate);
@@ -1505,9 +3323,85 @@ function getReportSummary(fDate, tDate, donViFilter) {
   };
 }
 
+// Bản đồ 4 NHÀ MÁY (nguồn nhập gỗ vào từng kho, KHÁC với 4 "Đơn vị" pháp
+// nhân ở CFG.UNITS - xem giải thích ở mục V bên dưới) sang cột MT/BDMT
+// tương ứng trong Chitiettonkho.
+const NHA_MAY_MAP = {
+  hoaNhon: { label: "Hòa Nhơn", mt: COL.HOA_NHON_MT, bdmt: COL.HOA_NHON_BDMT },
+  queSon: { label: "Quế Sơn", mt: COL.QUE_SON_MT, bdmt: COL.QUE_SON_BDMT },
+  daiHiep: { label: "Đại Hiệp", mt: COL.DAI_HIEP_MT, bdmt: COL.DAI_HIEP_BDMT },
+  hakqn: { label: "HAKQN", mt: COL.HAKQN_MT, bdmt: COL.HAKQN_BDMT }
+};
+
+/** Báo cáo CHI TIẾT THEO TỪNG NGÀY (không gộp về đầu/cuối kỳ như
+ * getReportSummary), lọc được theo NHÀ MÁY (nguồn nhập) - THEO YÊU CẦU
+ * MỚI (mục V, v2026.8.17): "Báo Cáo Tổng Hợp" trước đây chỉ lọc được
+ * theo Đơn vị (4 pháp nhân) và chỉ có số liệu cuối kỳ (1 dòng/đơn vị) -
+ * không có cách xem diễn biến từng ngày của riêng 1 nhà máy (Hòa Nhơn /
+ * Quế Sơn / Đại Hiệp / HAKQN). Hàm này trả về 1 DÒNG/NGÀY/ĐƠN VỊ trong
+ * khoảng lọc, kèm cột MT/BDMT của (các) nhà máy được chọn.
+ * nhaMay: '' hoặc bỏ trống = hiển thị cả 4 nhà máy cạnh nhau; hoặc 1
+ * trong các khóa của NHA_MAY_MAP ('hoaNhon'|'queSon'|'daiHiep'|'hakqn')
+ * = chỉ hiển thị đúng nhà máy đó. */
+function getNhaMayDetailReport(fDate, tDate, donViFilter, nhaMay) {
+  const { data } = readAllChitietData_();
+  let items = data.filter(r => !utils.isBlank(r[COL.DON_VI]) && r[COL.NGAY_TON_KHO] instanceof Date);
+  // THEO YÊU CẦU MỚI (mục AB, v2026.8.17): CHẶN Ở SERVER - xem ghi chú
+  // donViChoPhepCuaToi_ (áp dụng đồng bộ với getHistoryList/getReportSummary).
+  const allowedUnits = donViChoPhepCuaToi_(utils.normEmail(getCurrentUserEmail_()));
+  if (allowedUnits) items = items.filter(r => allowedUnits.includes(String(r[COL.DON_VI]).trim()));
+  if (donViFilter) items = items.filter(r => String(r[COL.DON_VI]).trim() === donViFilter);
+  if (fDate) items = items.filter(r => utils.formatDateISO(r[COL.NGAY_TON_KHO]) >= fDate);
+  if (tDate) items = items.filter(r => utils.formatDateISO(r[COL.NGAY_TON_KHO]) <= tDate);
+
+  items.sort((a, b) => {
+    const du = String(a[COL.DON_VI]).trim().localeCompare(String(b[COL.DON_VI]).trim());
+    if (du !== 0) return du;
+    return a[COL.NGAY_TON_KHO] - b[COL.NGAY_TON_KHO];
+  });
+
+  const factoryKeys = (nhaMay && NHA_MAY_MAP[nhaMay]) ? [nhaMay] : Object.keys(NHA_MAY_MAP);
+
+  const rows = items.map(r => {
+    const row = {
+      donVi: String(r[COL.DON_VI]).trim(),
+      ngay: utils.formatDate(r[COL.NGAY_TON_KHO]),
+      ngayISO: utils.formatDateISO(r[COL.NGAY_TON_KHO]),
+      tonCK: utils.parseNum(r[COL.TON_CK]),
+      doAm: utils.parseNum(r[COL.DO_AM])
+    };
+    let congMT = 0, congBDMT = 0;
+    factoryKeys.forEach(k => {
+      const mt = utils.parseNum(r[NHA_MAY_MAP[k].mt]);
+      const bdmt = utils.parseNum(r[NHA_MAY_MAP[k].bdmt]);
+      row[k + "MT"] = mt; row[k + "BDMT"] = bdmt;
+      congMT += mt; congBDMT += bdmt;
+    });
+    row.congMT = congMT; row.congBDMT = congBDMT;
+    return row;
+  });
+
+  const total = { congMT: sum_(rows.map(r => r.congMT)), congBDMT: sum_(rows.map(r => r.congBDMT)) };
+  factoryKeys.forEach(k => {
+    total[k + "MT"] = sum_(rows.map(r => r[k + "MT"]));
+    total[k + "BDMT"] = sum_(rows.map(r => r[k + "BDMT"]));
+  });
+
+  return {
+    rows,
+    total,
+    factories: factoryKeys.map(k => ({ key: k, label: NHA_MAY_MAP[k].label })),
+    soDong: rows.length
+  };
+}
+
 /** Bảng chi tiết theo NGÀY cho 1 đơn vị (để vẽ biểu đồ / xem diễn biến) -
  * đọc từ Chitiettonkho để mỗi ngày chỉ có đúng 1 điểm dữ liệu. */
 function getUnitTimeline(donVi, fDate, tDate) {
+  // THEO YÊU CẦU MỚI (mục AB, v2026.8.17): CHẶN Ở SERVER - không phải
+  // Admin thì chỉ xem được đúng Đơn vị mình được cấp quyền.
+  const allowedUnits = donViChoPhepCuaToi_(utils.normEmail(getCurrentUserEmail_()));
+  if (allowedUnits && allowedUnits.indexOf(donVi) === -1) return [];
   const { data } = readAllChitietData_();
   let items = data.filter(r => String(r[COL.DON_VI] || "").trim() === donVi && r[COL.NGAY_TON_KHO] instanceof Date);
   if (fDate) items = items.filter(r => utils.formatDateISO(r[COL.NGAY_TON_KHO]) >= fDate);
@@ -1951,6 +3845,11 @@ function xayHtmlBaoCaoTonKhoDamgo_(res) {
   }
 
   return "<html><head><meta charset=\"UTF-8\"><style>" +
+    // KHỔ NGANG (landscape) mặc định cho PDF xuất qua Telegram (mục V,
+    // v2026.8.17) - bảng "Nhà máy" có tới 10 cột nên khổ dọc hay bị
+    // tràn/cắt cột; dịch vụ convert HTML->PDF của Apps Script
+    // (Blob.getAs("application/pdf")) đọc @page size giống trình duyệt.
+    "@page{size:A4 landscape;margin:10mm}" +
     "body{font-family:Arial,sans-serif;font-size:11px;color:#222} h1{font-size:16px;margin-bottom:4px} h2{font-size:13px;color:#b03a2e;text-transform:uppercase;margin-top:18px}" +
     "table{border-collapse:collapse;width:100%;margin-bottom:6px} th,td{border:1px solid #ccc;padding:4px 6px;text-align:right} th:first-child,td:first-child{text-align:left}" +
     "th{background:#eee} .tot{font-weight:bold;background:#f6f6e8} .warn{background:#fdf1dc;color:#8c511f;padding:6px 8px;border-radius:4px;margin:4px 0}" +
@@ -2077,31 +3976,82 @@ function taoAnhBaoCaoTrangChu_(stats) {
 
     addRect_(slide, 0, 0, CF.W, CF.H, CF.BG, null);
 
+    // THEO YÊU CẦU MỚI (mục Y, v2026.8.17): khi gửi lại báo cáo cho 1
+    // ngày cũ (stats.ngayBaoCaoDisplay có giá trị - xem
+    // getDashboardStatsForDate_), đổi dòng phụ đề + nhãn KPI liên quan
+    // cho khớp ngữ cảnh "ngày lập báo cáo", thay vì luôn ghi "hôm nay".
+    const laNgayTuyChon = !!stats.ngayBaoCaoDisplay;
+    const dongPhuDe = laNgayTuyChon
+      ? "Báo cáo cho ngày " + stats.ngayBaoCaoDisplay + " · gửi lúc " + Utilities.formatDate(new Date(), "GMT+7", "HH:mm dd/MM/yyyy")
+      : "Trang chủ · " + Utilities.formatDate(new Date(), "GMT+7", "HH:mm dd/MM/yyyy");
+    const nhanChuaBaoCao = laNgayTuyChon ? "ĐƠN VỊ CHƯA BÁO CÁO ĐÚNG NGÀY NÀY" : "ĐƠN VỊ CHƯA BÁO CÁO HÔM NAY";
+
     addText_(slide, CF.M, 22, CF.W - 2 * CF.M, 34, "📦 BÁO CÁO TỒN KHO DĂM - HAK GROUP", { size: 22, bold: true, color: CF.TEXT });
-    addText_(slide, CF.M, 56, CF.W - 2 * CF.M, 20, "Trang chủ · " + Utilities.formatDate(new Date(), "GMT+7", "HH:mm dd/MM/yyyy"), { size: 11, color: CF.SUB });
+    addText_(slide, CF.M, 56, CF.W - 2 * CF.M, 20, dongPhuDe, { size: 11, color: CF.SUB });
+
+    // mục AR (v2026.8.18) - THEO YÊU CẦU MỚI: tính TRƯỚC tổng "Cân đối
+    // kho xuất hàng" (cộng theo Kho, CÙNG LOGIC dash-candoi-wrap/mục AM)
+    // để dùng cho thẻ KPI thay thế "TỔNG LƯỢT NỘP FORM" ngay dưới đây.
+    const cdByKhoKpi = { "Kho Tiên Sa": { mt: 0, bdmt: 0 }, "Kho Dung Quất": { mt: 0, bdmt: 0 } };
+    (stats.canDoiBDMTList || []).forEach(function (c) {
+      if (c.coCanDoi && cdByKhoKpi[c.kho]) {
+        cdByKhoKpi[c.kho].mt += Number(c.dieuChinhMT) || 0;
+        cdByKhoKpi[c.kho].bdmt += Number(c.dieuChinhBDMT) || 0;
+      }
+    });
+    const tongDieuChinhMT = cdByKhoKpi["Kho Tiên Sa"].mt + cdByKhoKpi["Kho Dung Quất"].mt;
+    const tongDieuChinhBDMT = cdByKhoKpi["Kho Tiên Sa"].bdmt + cdByKhoKpi["Kho Dung Quất"].bdmt;
 
     // Hàng thẻ KPI (giống các thẻ trên cùng của Trang chủ - THÊM thẻ
-    // "Tổng lượng gỗ keo nhập trong ngày" theo yêu cầu mới, mục U)
+    // "Tổng lượng gỗ keo nhập trong ngày" theo yêu cầu mới, mục U). Thẻ 1
+    // và 2 THÊM dòng "sub" là số BDMT tương ứng (mục AF, v2026.8.18 -
+    // BDMT quy đổi theo Độ khô TB Kho Nhà máy cùng ngày/đơn vị). mục AR
+    // (v2026.8.18) - THEO YÊU CẦU MỚI: thẻ "TỔNG LƯỢT NỘP FORM" ĐỔI
+    // THÀNH "CÂN ĐỐI KHO XUẤT HÀNG" (value=Tổng Điều chỉnh MT, sub=Tổng
+    // Điều chỉnh BDMT, NGẮN GỌN - không kèm diễn giải chữ/danh sách chưa
+    // cân đối như bản thẻ card cũ ở mục AQ, đã BỎ).
     const kpis = [
-      { label: "TỔNG TỒN KHO CUỐI (4 ĐƠN VỊ)", value: fmtNumVN_(stats.tongTonCK) + " MT", color: CF.ACCENT_DARK },
-      { label: "TỔNG GỖ KEO NHẬP (NGÀY GẦN NHẤT)", value: fmtNumVN_(stats.tongNhapGo) + " MT", color: CF.ACCENT_DARK },
-      { label: "ĐƠN VỊ CHƯA BÁO CÁO HÔM NAY", value: stats.soDonViChuaBaoCaoHomNay + " / " + stats.units.length, color: stats.soDonViChuaBaoCaoHomNay > 0 ? CF.DANGER : CF.ACCENT_DARK },
-      { label: "SỐ NGÀY ĐÃ GHI NHẬN (CHITIETTONKHO)", value: String(stats.tongSoDongChitiet), color: CF.ACCENT_DARK },
-      { label: "TỔNG LƯỢT NỘP FORM", value: String(stats.tongSoDongFormRaw), color: CF.ACCENT_DARK }
+      { label: "TỔNG TỒN KHO CUỐI (4 ĐƠN VỊ)", value: fmtNumVN_(stats.tongTonCK) + " MT", sub: fmtNumVN_(stats.tongTonCKBDMT) + " BDMT", color: CF.ACCENT_DARK },
+      { label: "TỔNG GỖ KEO NHẬP (NGÀY GẦN NHẤT)", value: fmtNumVN_(stats.tongNhapGo) + " MT", sub: fmtNumVN_(stats.tongNhapGoBDMT) + " BDMT", color: CF.ACCENT_DARK },
+      { label: nhanChuaBaoCao, value: stats.soDonViChuaBaoCaoHomNay + " / " + stats.units.length, color: stats.soDonViChuaBaoCaoHomNay > 0 ? CF.DANGER : CF.ACCENT_DARK },
+      // THEO YÊU CẦU MỚI (mục W, v2026.8.17): đổi thẻ "Số ngày đã ghi
+      // nhận" thành "Số lượng nhà máy vét bãi" (đếm đơn vị có Kiểm kê
+      // vét bãi = Có ở bản ghi gần nhất - xem soLuongVetBai).
+      { label: "SỐ LƯỢNG NHÀ MÁY VÉT BÃI", value: String(stats.soLuongVetBai) + " / " + stats.units.length, color: stats.soLuongVetBai > 0 ? CF.ROSE : CF.ACCENT_DARK },
+      { label: "CÂN ĐỐI KHO XUẤT HÀNG", value: "MT " + fmtNumVN_(tongDieuChinhMT), sub: "BDMT " + fmtNumVN_(tongDieuChinhBDMT), color: CF.ACCENT_DARK }
     ];
-    const kpiY = 92, kpiH = 92, kpiGap = 14, kpiW = (CF.W - 2 * CF.M - (kpis.length - 1) * kpiGap) / kpis.length;
+    const kpiY = 92, kpiH = 108, kpiGap = 14, kpiW = (CF.W - 2 * CF.M - (kpis.length - 1) * kpiGap) / kpis.length;
     kpis.forEach(function (k, i) {
       const x = CF.M + i * (kpiW + kpiGap);
       addRect_(slide, x, kpiY, kpiW, kpiH, CF.CARD, CF.BORDER);
       addText_(slide, x + 10, kpiY + 10, kpiW - 20, 34, k.label, { size: 8, bold: true, color: CF.SUB });
-      addText_(slide, x + 10, kpiY + 46, kpiW - 20, 34, k.value, { size: 17, bold: true, color: k.color });
+      addText_(slide, x + 10, kpiY + 46, kpiW - 20, 24, k.value, { size: 15, bold: true, color: k.color });
+      if (k.sub) addText_(slide, x + 10, kpiY + 72, kpiW - 20, 24, k.sub, { size: 9.5, bold: false, color: CF.SUB });
     });
 
-    // Thẻ "Tình trạng theo đơn vị" (giống 4 thẻ đơn vị của Trang chủ)
-    let y = kpiY + kpiH + 26;
+    // Dòng "Độ ẩm trung bình" (mục AF, v2026.8.18) - tính theo TRỌNG SỐ
+    // khối lượng tồn kho toàn công ty, đặt ngay dưới hàng thẻ KPI. Mục
+    // AI (v2026.8.18): THÊM dòng Độ ẩm/Độ khô của tổng lượng gỗ keo
+    // nhập hàng ngày (CÙNG CÔNG THỨC BDMT/MT×100%).
+    let y = kpiY + kpiH + 8;
+    addText_(slide, CF.M, y, CF.W - 2 * CF.M, 18,
+      "💧 Độ ẩm trung bình toàn công ty (theo khối lượng tồn kho): " + fmtPctVN_(stats.doAmTrungBinh),
+      { size: 10, bold: true, color: CF.ACCENT_DARK });
+    y += 18;
+    addText_(slide, CF.M, y, CF.W - 2 * CF.M, 18,
+      "🪵 Độ ẩm/Độ khô tổng lượng gỗ keo nhập hàng ngày: Độ ẩm " + fmtPctVN_(stats.doAmNhapTB) + " / Độ khô " + fmtPctVN_(stats.doKhoNhapTB),
+      { size: 10, bold: true, color: CF.ACCENT_DARK });
+    y += 24;
+
+    // Thẻ "Tình trạng theo đơn vị" (giống 4 thẻ đơn vị của Trang chủ).
+    // mục AR (v2026.8.18) - THEO YÊU CẦU MỚI: BỎ thẻ riêng "ĐỊNH MỨC
+    // TIÊU HAO" (mục AQ) - THÊM 1 dòng "Định mức" vào MỖI thẻ đơn vị ở
+    // đây (thay vì 1 khối riêng) - cardH tăng 150->162 + dòng cách nhau
+    // 18 (thay vì 20) để vừa 5 dòng trong thẻ mà KHÔNG tăng quá nhiều
+    // chiều cao (đã tính lại ngân sách y cho các khối bên dưới).
     addText_(slide, CF.M, y, 400, 20, "TÌNH TRẠNG THEO ĐƠN VỊ", { size: 12, bold: true, color: CF.ROSE });
     y += 26;
-    const cardH = 150, cardGap = 16, cardW = (CF.W - 2 * CF.M - 3 * cardGap) / 4;
+    const cardH = 162, cardGap = 16, cardW = (CF.W - 2 * CF.M - 3 * cardGap) / 4;
     stats.units.forEach(function (u, i) {
       const x = CF.M + i * (cardW + cardGap);
       addRect_(slide, x, y, cardW, cardH, CF.CARD, CF.BORDER);
@@ -2111,18 +4061,19 @@ function taoAnhBaoCaoTrangChu_(stats) {
         ["Ngày gần nhất", u.ngayGanNhat || "-"],
         ["Tồn kho cuối", fmtNumVN_(u.tonCK) + " MT"],
         ["Nhập gỗ keo", fmtNumVN_(u.nhapGo) + " MT"],
-        ["Độ ẩm", fmtPctVN_(u.doAm)]
+        ["Độ ẩm", fmtPctVN_(u.doAm)],
+        ["Định mức", fmtPctVN_(u.dinhMuc)]
       ];
       let ry = y + 64;
       rows.forEach(function (r) {
         addText_(slide, x + 12, ry, (cardW - 24) / 2, 16, r[0], { size: 8.5, color: CF.SUB });
         addText_(slide, x + 12 + (cardW - 24) / 2, ry, (cardW - 24) / 2, 16, r[1], { size: 9.5, bold: true, color: CF.TEXT, align: "RIGHT" });
-        ry += 20;
+        ry += 18;
       });
     });
 
     // Bảng "Kho Nhà máy"
-    y += cardH + 30;
+    y += cardH + 24;
     addText_(slide, CF.M, y, 400, 20, "KHO NHÀ MÁY", { size: 12, bold: true, color: CF.ROSE });
     y += 26;
     const nmCols = [
@@ -2134,15 +4085,23 @@ function taoAnhBaoCaoTrangChu_(stats) {
     ];
     y = addDataTable_(slide, CF, CF.M, y, CF.W - 2 * CF.M, nmCols, stats.units, stats.khoTotal);
 
-    // Bảng "Kho Xuất Hàng"
-    y += 30;
+    // mục AR (v2026.8.18) - THEO YÊU CẦU MỚI: BỎ khối "Kho xuất hàng"
+    // dạng thẻ tóm tắt (mục AQ) - QUAY LẠI bảng CHI TIẾT THEO ĐƠN VỊ
+    // (addDataTable_, CÙNG CÁCH "KHO NHÀ MÁY" phía trên) - giống bảng
+    // "Kho Xuất Hàng" cũ ở Trang chủ (Index.html, mục dash-xuathang-wrap)
+    // mà người dùng gửi ảnh chụp làm mẫu - "Định mức tiêu hao" và "Cân
+    // đối kho xuất hàng" KHÔNG còn là khối riêng nữa (đã gộp vào thẻ
+    // "Tình trạng theo đơn vị" và thẻ KPI "Cân đối kho xuất hàng" ở
+    // trên).
+    y += 24;
     addText_(slide, CF.M, y, 400, 20, "KHO XUẤT HÀNG", { size: 12, bold: true, color: CF.ROSE });
-    y += 26;
+    y += 22;
     const xhCols = [
-      ["Đơn vị", "donVi"], ["Kho Tiên Sa MT", "tienSaMT"], ["Kho Tiên Sa BDMT", "tienSaBDMT"],
+      ["Đơn vị", "donVi"],
+      ["Kho Tiên Sa MT", "tienSaMT"], ["Kho Tiên Sa BDMT", "tienSaBDMT"],
       ["Kho Dung Quất MT", "dungQuatMT"], ["Kho Dung Quất BDMT", "dungQuatBDMT"]
     ];
-    addDataTable_(slide, CF, CF.M, y, CF.W - 2 * CF.M, xhCols, stats.units, stats.khoTotal);
+    y = addDataTable_(slide, CF, CF.M, y, CF.W - 2 * CF.M, xhCols, stats.units, stats.khoTotal);
 
     pres.saveAndClose();
 
@@ -2262,14 +4221,41 @@ function XEM_THU_ANH_BAO_CAO_TRANG_CHU() {
  * chưa báo cáo hôm nay...) vì bảng ảnh (Charts service) không dựng được
  * kiểu thẻ nhiều màu như giao diện thật (mục S). */
 function soanCaptionBaoCaoTrangChu_(stats) {
+  // THEO YÊU CẦU MỚI (mục Y, v2026.8.17): xem ghi chú tương ứng ở
+  // taoAnhBaoCaoTrangChu_ - gửi lại báo cáo cho 1 ngày cũ thì đổi dòng
+  // thời gian + nhãn "chưa báo cáo hôm nay" cho khớp ngữ cảnh.
+  const laNgayTuyChon = !!stats.ngayBaoCaoDisplay;
   const lines = [];
   lines.push("📦 BÁO CÁO TỒN KHO DĂM - HAK GROUP (Trang chủ)");
-  lines.push("🗓 " + Utilities.formatDate(new Date(), "GMT+7", "HH:mm dd/MM/yyyy"));
+  lines.push(laNgayTuyChon
+    ? "🗓 Báo cáo cho ngày " + stats.ngayBaoCaoDisplay + " · gửi lúc " + Utilities.formatDate(new Date(), "GMT+7", "HH:mm dd/MM/yyyy")
+    : "🗓 " + Utilities.formatDate(new Date(), "GMT+7", "HH:mm dd/MM/yyyy"));
   lines.push("");
-  lines.push("📊 Tổng tồn kho cuối (4 đơn vị): " + fmtNumVN_(stats.tongTonCK) + " MT");
-  lines.push("🪵 Tổng gỗ keo nhập (ngày gần nhất mỗi đơn vị): " + fmtNumVN_(stats.tongNhapGo) + " MT");
-  lines.push("📥 Số ngày đã ghi nhận (Chitiettonkho): " + stats.tongSoDongChitiet);
-  lines.push("⚠️ Đơn vị chưa báo cáo hôm nay: " + stats.soDonViChuaBaoCaoHomNay + "/" + stats.units.length);
+  lines.push("📊 Tổng tồn kho cuối (4 đơn vị): " + fmtNumVN_(stats.tongTonCK) + " MT / " + fmtNumVN_(stats.tongTonCKBDMT) + " BDMT");
+  lines.push("💧 Độ ẩm trung bình toàn công ty (theo khối lượng tồn kho): " + fmtPctVN_(stats.doAmTrungBinh));
+  lines.push("🪵 Tổng gỗ keo nhập (ngày gần nhất mỗi đơn vị): " + fmtNumVN_(stats.tongNhapGo) + " MT / " + fmtNumVN_(stats.tongNhapGoBDMT) + " BDMT (quy đổi theo Độ khô TB Kho Nhà máy cùng ngày)");
+  // mục AI (v2026.8.18): THEO YÊU CẦU MỚI - bổ sung Độ ẩm/Độ khô của
+  // tổng lượng gỗ keo nhập hàng ngày.
+  lines.push("   Độ ẩm " + fmtPctVN_(stats.doAmNhapTB) + " / Độ khô " + fmtPctVN_(stats.doKhoNhapTB));
+  // mục AN/AO (v2026.8.18) - THEO YÊU CẦU MỚI: BỎ khối "Định mức tiêu
+  // hao" và "Cân đối kho xuất hàng" khỏi CAPTION Telegram (thêm ở mục AM
+  // nhưng người dùng thấy caption quá dài, dễ bị Telegram cắt bớt - giới
+  // hạn 1024 ký tự ở guiAnhTelegram_) - CHỈ giữ lại "Kho xuất hàng".
+  // LÀM RÕ ở mục AO: người dùng CHỈ muốn bỏ 2 khối này khỏi CAPTION (chữ
+  // đi kèm ảnh) - ẢNH (taoAnhBaoCaoTrangChu_, KHÔNG bị giới hạn ký tự
+  // như caption) đã KHÔI PHỤC LẠI đủ 2 khối này ở mục AO. Trang chủ
+  // (Index.html, mục AM) vẫn giữ nguyên đủ 3 khối như từ đầu, không đổi.
+  lines.push("🚢 Kho xuất hàng:");
+  lines.push("   Kho Tiên Sa: " + fmtNumVN_(stats.khoTotal.tienSaMT) + " MT / " + fmtNumVN_(stats.khoTotal.tienSaBDMT) + " BDMT — " + fmtPctVN_(stats.doKhoTienSaTB));
+  lines.push("   Kho Dung Quất: " + fmtNumVN_(stats.khoTotal.dungQuatMT) + " MT / " + fmtNumVN_(stats.khoTotal.dungQuatBDMT) + " BDMT — " + fmtPctVN_(stats.doKhoDungQuatTB));
+  // THEO YÊU CẦU MỚI (mục W, v2026.8.17): thay dòng "Số ngày đã ghi
+  // nhận" bằng "Số lượng nhà máy vét bãi" + chi tiết từng đơn vị.
+  lines.push("🔍 Số lượng nhà máy vét bãi (bản ghi gần nhất): " + stats.soLuongVetBai + "/" + stats.units.length);
+  (stats.vetBaiDetail || []).forEach(function (d) {
+    lines.push("   • " + d.donVi + " (ngày " + d.ngayGanNhat + "): thời điểm vét bãi " + (d.thoiDiemVetBai || "?") +
+      ", KL ước tính còn lại " + fmtNumVN_(d.klUocTinhConLai) + " MT, chênh lệch sau vét bãi " + fmtNumVN_(d.chenhLechVetBai) + " MT");
+  });
+  lines.push((laNgayTuyChon ? "⚠️ Đơn vị chưa báo cáo đúng ngày này: " : "⚠️ Đơn vị chưa báo cáo hôm nay: ") + stats.soDonViChuaBaoCaoHomNay + "/" + stats.units.length);
   const chua = stats.units.filter(function (u) { return !u.daBaoCaoHomNay; });
   if (chua.length) lines.push("   (" + chua.map(function (u) { return u.donVi; }).join(", ") + ")");
   return lines.join("\n");
@@ -2279,9 +4265,15 @@ function soanCaptionBaoCaoTrangChu_(stats) {
  * Telegram - dùng chung cho cả gửi tự động theo lịch
  * (BAO_CAO_TON_KHO_TELEGRAM_HANG_NGAY_), gửi thử thủ công
  * (GUI_BAO_CAO_TON_KHO_TELEGRAM_NGAY) lẫn gửi đột xuất từ nút "Gửi báo
- * cáo Telegram" trên Web App (guiBaoCaoTelegramTuWebApp, mục S). */
-function guiBaoCaoTrangChuTelegram_(chatIdRieng) {
-  const stats = getDashboardStats();
+ * cáo Telegram" trên Web App (guiBaoCaoTelegramTuWebApp, mục S).
+ * `ngayISO` (mục Y, v2026.8.17, THÊM MỚI, TÙY CHỌN): nếu có giá trị,
+ * dựng báo cáo cho ĐÚNG ngày đó (dùng getDashboardStatsForDate_) thay
+ * vì số liệu mới nhất mặc định - dùng khi Admin cần GỬI LẠI báo cáo của
+ * 1 ngày trước đó. Bỏ trống/không truyền = giữ nguyên hành vi gốc (số
+ * liệu mới nhất) - lịch tự động 16h và gửi thử KHÔNG truyền tham số này
+ * nên KHÔNG bị ảnh hưởng. */
+function guiBaoCaoTrangChuTelegram_(chatIdRieng, ngayISO) {
+  const stats = ngayISO ? getDashboardStatsForDate_(ngayISO) : getDashboardStats();
   const anh = taoAnhBaoCaoTrangChu_(stats);
   const caption = soanCaptionBaoCaoTrangChu_(stats);
   guiAnhTelegram_(anh, caption, chatIdRieng);
@@ -2306,18 +4298,23 @@ function GUI_BAO_CAO_TON_KHO_TELEGRAM_NGAY() {
 }
 
 /** Gửi ĐỘT XUẤT (ngoài lịch 16h tự động) từ nút "Gửi báo cáo Telegram"
- * trên Web App (Trang chủ > khối "Công cụ Admin", mục S) - LUÔN gửi ảnh
- * theo số liệu MỚI NHẤT (giống hệt Trang chủ đang xem, không cần chọn
- * ngày/chế độ như báo cáo Tonkho_Damgo trước đây). Chỉ Admin được gửi
+ * trên Web App (Cài đặt > Công cụ Admin, mục S/Y). Chỉ Admin được gửi
  * (nút đã ẩn với người dùng thường ở Index.html, nhưng vẫn kiểm tra lại
  * quyền ở đây - không tin riêng vào việc ẩn nút trên giao diện, cùng
- * nguyên tắc với rebuildAllChitietTonKho). */
-function guiBaoCaoTelegramTuWebApp() {
+ * nguyên tắc với rebuildAllChitietTonKho).
+ * `ngayISO` (mục Y, v2026.8.17, THÊM MỚI, TÙY CHỌN): cho phép Admin
+ * CHỌN NGÀY LẬP BÁO CÁO thay vì luôn gửi số liệu mới nhất - ĐÚNG YÊU
+ * CẦU MỚI "đôi lúc gửi báo cáo ngày trước đó, không phải ngày hiện
+ * tại". Bỏ trống = giữ hành vi gốc (số liệu mới nhất). */
+function guiBaoCaoTelegramTuWebApp(ngayISO) {
   try {
     const email = getCurrentUserEmail_();
     if (!utils.isAdmin(email)) return { success: false, message: "❌ Chỉ Admin mới được gửi báo cáo Telegram." };
-    guiBaoCaoTrangChuTelegram_();
-    return { success: true, message: "✅ Đã gửi ảnh báo cáo Trang chủ vào Telegram." };
+    guiBaoCaoTrangChuTelegram_(null, ngayISO || null);
+    return {
+      success: true,
+      message: ngayISO ? "✅ Đã gửi ảnh báo cáo cho ngày " + ngayISO + " vào Telegram." : "✅ Đã gửi ảnh báo cáo Trang chủ (số liệu mới nhất) vào Telegram."
+    };
   } catch (err) {
     return { success: false, message: "❌ Lỗi gửi Telegram: " + err.toString() };
   }

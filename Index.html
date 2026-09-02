@@ -1765,6 +1765,8 @@ function renderReport(){
     <div class="card no-print" style="padding:8px;display:flex;gap:6px">
       <button class="btn sm report-tab-btn ${state.reportTab==='period'?'primary':''}" data-tab="period" onclick="switchReportTab('period')">📅 Theo khoảng thời gian</button>
       <button class="btn sm report-tab-btn ${state.reportTab==='tonkhodamgo'?'primary':''}" data-tab="tonkhodamgo" onclick="switchReportTab('tonkhodamgo')">📄 Theo mẫu Tonkho_Damgo</button>
+      <button class="btn sm report-tab-btn ${state.reportTab==='candoibdmt'?'primary':''}" data-tab="candoibdmt" onclick="switchReportTab('candoibdmt')">⚖️ Cân đối BDMT xuất hàng</button>
+      <button class="btn sm report-tab-btn ${state.reportTab==='testkho'?'primary':''}" data-tab="testkho" onclick="switchReportTab('testkho')">🧪 Test Kho</button>
     </div>
 
     <div id="report-period-section" class="${state.reportTab==='period'?'':'hidden'}">
@@ -1811,6 +1813,36 @@ function renderReport(){
         <div class="hint-text">Dựng lại đúng cấu trúc bảng của sheet "Tonkho_Damgo" (NHÀ MÁY / KHO XUẤT HÀNG / ĐỊNH MỨC SX) cho 1 ngày cụ thể, dữ liệu lấy từ Chitiettonkho. "Theo thực tế" (mặc định) - đơn vị chưa báo cáo đúng ngày này hiển thị 0. "Đầy đủ số liệu" - đơn vị chưa báo cáo đúng ngày này tự lấy tạm số liệu ngày gần nhất trước đó, có ghi chú rõ ràng. Nút "Gửi báo cáo Telegram" (chỉ Admin) gửi ngay báo cáo của đúng ngày + chế độ đang xem vào Telegram (kèm 2 file PDF - Theo thực tế và Đầy đủ số liệu, mẫu cũ) - khác với ảnh tóm tắt Trang chủ (nút riêng ở Trang chủ > Công cụ Admin, chỉ gửi tự động 16h hoặc bấm thủ công ở đó).</div>
       </div>
       <div class="card" id="tkd-wrap"><div class="empty"><div class="ic">📄</div>Chọn ngày rồi bấm "Xem báo cáo".</div></div>
+    </div>
+
+    <div id="report-candoibdmt-section" class="${state.reportTab==='candoibdmt'?'':'hidden'}">
+      <div class="card no-print">
+        <div class="grid cols-4">
+          <div class="field"><label>Đơn vị</label>
+            <select id="cd-donVi"><option value="" ${defaultDonVi?'':'selected'}>-- Tất cả --</option>${unitOptions.map(u=>`<option value="${esc(u)}" ${u===defaultDonVi?'selected':''}>${esc(u)}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label>Từ ngày (Ngày cân đối)</label><input type="date" id="cd-from"></div>
+          <div class="field"><label>Đến ngày (Ngày cân đối)</label><input type="date" id="cd-to"></div>
+          <div class="field" style="display:flex;align-items:flex-end"><button class="btn primary" onclick="loadCanDoiBDMTReport()">🔍 Xem báo cáo</button></div>
+        </div>
+        <div class="hint-text">Lịch sử toàn bộ các lần "Tất toán Cân đối BDMT xuất hàng" (tab ⚖️ ở màn "Nhập Tồn Kho", mục K) - dữ liệu lấy từ sheet riêng "CanDoiBDMT". Mỗi lần nộp lại cho ĐÚNG cùng Ngày cân đối + Kho + Đơn vị sẽ GHI ĐÈ lên dòng cũ (không tạo dòng trùng). Bỏ trống khoảng ngày để xem tất cả.</div>
+      </div>
+      <div class="card" id="cd-wrap"><div class="empty"><div class="ic">⚖️</div>Bấm "Xem báo cáo" để xem lịch sử cân đối BDMT.</div></div>
+    </div>
+
+    <div id="report-testkho-section" class="${state.reportTab==='testkho'?'':'hidden'}">
+      <div class="card no-print">
+        <div class="grid cols-4">
+          <div class="field"><label>Đơn vị</label>
+            <select id="tk-donVi"><option value="" ${defaultDonVi?'':'selected'}>-- Tất cả --</option>${unitOptions.map(u=>`<option value="${esc(u)}" ${u===defaultDonVi?'selected':''}>${esc(u)}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label>Từ ngày</label><input type="date" id="tk-from" value="${toISO(today)}"></div>
+          <div class="field"><label>Đến ngày</label><input type="date" id="tk-to" value="${toISO(today)}"></div>
+          <div class="field" style="display:flex;align-items:flex-end"><button class="btn primary" onclick="loadKiemTraDauKyReport()">🔍 Kiểm tra</button></div>
+        </div>
+        <div class="hint-text">Với mỗi báo cáo trong khoảng lọc, tính lại "Đầu kỳ dự kiến" từ báo cáo CHÍNH THỨC ngày liền trước cùng đơn vị (gọi là "Ngày trước"): <b>Tồn CK hôm trước − Khối lượng thực tế MT (Cân đối BDMT, nếu có tất toán ĐÚNG "Ngày trước") +/− Điều chỉnh MT (Cân đối BDMT, cùng điều kiện) − Mượn/trả hôm trước (trừ luôn, kể cả Mượn/trả ≤ 0 - âm thì tự cộng ngược lại)</b>. Riêng khoản Điều chỉnh MT: nếu Điều chỉnh MT &gt; 0 (kho thực tế nhiều hơn sổ sách, hiểu là "lượng MT cần xuất thêm") thì <b>TRỪ</b> khoản đó; nếu Điều chỉnh MT ≤ 0 thì vẫn <b>CỘNG</b> như trước. Rồi so với "Tồn kho đầu ngày" ĐÃ NHẬP của chính báo cáo đó, hiện rõ Chênh lệch gồm đúng những khoản nào. Khác với cảnh báo lúc nộp báo cáo (chỉ chạy 1 lần, không áp dụng cho Admin) - tab này xem lại được mọi lúc, cho mọi báo cáo.</div>
+      </div>
+      <div class="card" id="tk-wrap"><div class="empty"><div class="ic">🧪</div>Chọn bộ lọc rồi bấm "Kiểm tra".</div></div>
     </div>`;
 
   if (!state.units.length) call('getUnitList', [], null).then(list => { state.units = list; });
@@ -1825,6 +1857,8 @@ function switchReportTab(tab){
   state.reportTab = tab;
   document.getElementById('report-period-section').classList.toggle('hidden', tab!=='period');
   document.getElementById('report-tonkhodamgo-section').classList.toggle('hidden', tab!=='tonkhodamgo');
+  document.getElementById('report-candoibdmt-section').classList.toggle('hidden', tab!=='candoibdmt');
+  document.getElementById('report-testkho-section').classList.toggle('hidden', tab!=='testkho');
   document.querySelectorAll('.report-tab-btn').forEach(b => b.classList.toggle('primary', b.dataset.tab===tab));
   // SỬA LỖI (mục R, v2026.8.17): trước đây CHỈ tải lại báo cáo nếu chưa
   // từng tải trong phiên làm việc (!state.tonkhoDamgoReport) - nên nếu
@@ -1833,6 +1867,9 @@ function switchReportTab(tab){
   // mới từ Chitiettonkho. LUÔN tải lại mỗi khi vào tab này để đảm bảo
   // luôn đúng dữ liệu mới nhất (chi phí gọi lại rất nhẹ - chỉ 1 ngày).
   if (tab === 'tonkhodamgo') loadTonkhoDamgoReport();
+  // mục AS: tab mới "Cân đối BDMT xuất hàng" - LUÔN tải lại mỗi khi vào
+  // tab (cùng lý do như trên), chi phí nhẹ vì chỉ đọc 1 sheet log riêng.
+  if (tab === 'candoibdmt') loadCanDoiBDMTReport();
 }
 
 /** Đổi chế độ hiển thị "Theo thực tế" / "Đầy đủ số liệu" cho báo cáo
@@ -1978,6 +2015,117 @@ function renderNhaMayDetailTable(){
     <tr style="font-weight:700;background:var(--moss-light)"><td colspan="2">Tổng cộng (${res.soDong} dòng)</td>${cols.map(c=>`<td class="num">${fmtNum(res.total[c.key])}</td>`).join('')}<td></td></tr>
     </tbody></table>`;
   host.innerHTML = `<div class="section-title">Chi tiết theo Nhà máy (từng ngày)</div><div style="overflow-x:auto">${html}</div>`;
+}
+
+/* ------------------------------------------------------------
+ * BÁO CÁO "CÂN ĐỐI BDMT XUẤT HÀNG" (mục AS ở đầu Code.gs) - tab mới
+ * hiển thị lại lịch sử các lần "Tất toán Cân đối BDMT xuất hàng" (sheet
+ * CanDoiBDMT) - trước đây KHÔNG có màn nào xem lại được trong Web App.
+ * ------------------------------------------------------------ */
+function loadCanDoiBDMTReport(){
+  const donVi = document.getElementById('cd-donVi').value;
+  const f = document.getElementById('cd-from').value, t = document.getElementById('cd-to').value;
+  call('getCanDoiBDMTReport', [donVi, f, t], 'Đang tải báo cáo Cân đối BDMT...').then(res => {
+    state.canDoiBDMTReport = res;
+    renderCanDoiBDMTReportTable();
+  });
+}
+
+// Các cột % ở sheet CanDoiBDMT lưu SỐ PHẦN TRĂM THUẦN (vd 51.19 nghĩa là
+// 51,19%) - KHÁC quy ước phân số 0..1 dùng cho Độ ẩm/Độ khô/Định mức ở
+// chỗ khác trong hệ thống (xem mục K) - nên KHÔNG dùng fmtPct() (nhân
+// 100) ở bảng này, chỉ format số + gắn "%".
+function fmtPctPlain_(n){ return fmtNum(n) + '%'; }
+
+function renderCanDoiBDMTReportTable(){
+  const wrap = document.getElementById('cd-wrap');
+  const res = state.canDoiBDMTReport;
+  if (!res || !res.rows.length) { wrap.innerHTML = '<div class="empty"><div class="ic">📭</div>Chưa có lần cân đối BDMT nào khớp bộ lọc này.</div>'; return; }
+  const dieuChinhCell = (v, dienGiai) => `<td class="num" title="${esc(dienGiai)}">${fmtNum(v)}</td>`;
+  wrap.innerHTML = `<div style="overflow-x:auto"><table><thead><tr>
+      <th>Ngày cân đối</th><th>Kho</th><th>Đơn vị</th>
+      <th class="num">MT kho</th><th class="num">BDMT kho</th>
+      <th class="num">Độ ẩm kho</th><th class="num">Độ khô kho</th>
+      <th class="num">Độ ẩm cân đối</th><th class="num">Độ khô cân đối</th>
+      <th class="num">KL thực tế MT</th><th class="num">KL thực tế BDMT</th>
+      <th class="num">Độ khô TB Kho NM</th>
+      <th class="num">Điều chỉnh MT</th><th class="num">Điều chỉnh BDMT</th>
+      <th>Người nộp</th><th>Thời gian ghi</th>
+    </tr></thead><tbody>
+    ${res.rows.map(r => `<tr>
+      <td>${esc(r.ngayCanDoi)}</td><td>${esc(r.kho)}</td><td>${esc(r.donVi)}</td>
+      <td class="num">${fmtNum(r.mtKho)}</td><td class="num">${fmtNum(r.bdmtKho)}</td>
+      <td class="num">${fmtPctPlain_(r.doAmKhoPct)}</td><td class="num">${fmtPctPlain_(r.doKhoKhoPct)}</td>
+      <td class="num">${fmtPctPlain_(r.doAmCanDoi)}</td><td class="num">${fmtPctPlain_(r.doKhoCanDoi)}</td>
+      <td class="num">${fmtNum(r.mtThucTe)}</td><td class="num">${fmtNum(r.klThucTeBDMT)}</td>
+      <td class="num">${fmtPctPlain_(r.doKhoTBNhaMayPct)}</td>
+      ${dieuChinhCell(r.dieuChinhMT, r.dienGiaiMT)}${dieuChinhCell(r.dieuChinhBDMT, r.dienGiaiBDMT)}
+      <td>${esc(r.email)}</td><td>${esc(r.thoiGianGhi)}</td>
+    </tr>`).join('')}
+    </tbody>
+    <tfoot><tr><td colspan="12" style="text-align:right">TỔNG CỘNG (${res.soDong} lần cân đối)</td>
+      <td class="num">${fmtNum(res.total.dieuChinhMT)}</td><td class="num">${fmtNum(res.total.dieuChinhBDMT)}</td>
+      <td></td><td></td></tr></tfoot>
+    </table></div>`;
+}
+
+/* ------------------------------------------------------------
+ * "TEST KHO" (mục AT ở đầu Code.gs) - kiểm tra Tồn kho đầu ngày đã nhập
+ * của mỗi báo cáo so với "Đầu kỳ dự kiến" tính từ báo cáo chính thức
+ * ngày liền trước - hiện rõ từng thành phần của công thức để tự tra
+ * chênh lệch (nếu có) gồm đúng những khoản nào.
+ * ------------------------------------------------------------ */
+function loadKiemTraDauKyReport(){
+  const donVi = document.getElementById('tk-donVi').value;
+  const f = document.getElementById('tk-from').value, t = document.getElementById('tk-to').value;
+  call('getKiemTraDauKyReport', [donVi, f, t], 'Đang kiểm tra đầu kỳ...').then(res => {
+    state.kiemTraDauKyReport = res;
+    renderKiemTraDauKyReportTable();
+  });
+}
+
+function renderKiemTraDauKyReportTable(){
+  const wrap = document.getElementById('tk-wrap');
+  const res = state.kiemTraDauKyReport;
+  if (!res || !res.rows.length) { wrap.innerHTML = '<div class="empty"><div class="ic">📭</div>Không có báo cáo nào khớp bộ lọc này.</div>'; return; }
+  const rowsHtml = res.rows.map(r => {
+    if (!r.coDuLieuTruoc) {
+      return `<tr><td>${esc(r.donVi)}</td><td>${esc(r.ngay)}</td><td colspan="6" class="muted">Chưa có báo cáo chính thức ngày nào trước đó (ngày đầu mở sổ) - không có gì để so sánh.</td><td class="num">${fmtNum(r.tonDauNgayThucTe)}</td><td class="num">–</td></tr>`;
+    }
+    const rowBg = r.khop ? '' : 'style="background:var(--rose-light,#fbeaea)"';
+    // Mỗi cột hiện ĐÚNG khoản ĐÃ ĐÓNG GÓP vào tổng (kèm dấu +/− thật, tự
+    // đảo dấu khi số gốc âm - VD Mượn/trả âm thì "− (âm)" = tự CỘNG
+    // ngược lại, hiện "+ X" cho dễ đọc thay vì "− -X" gây hiểu lầm).
+    const signed = v => { const n = Number(v) || 0; return n > 0 ? '+ ' + fmtNum(n) : (n < 0 ? '− ' + fmtNum(Math.abs(n)) : '0'); };
+    // mục AX (v2026.8.24): BỎ HẲN 2 cột "Chở ra Tiên Sa"/"Chở ra Dung
+    // Quất" (mục AU/AV/AW đã gỡ bỏ theo yêu cầu người dùng "bỏ Kho Tiên
+    // Sa và Dung Quất ra, để lại như cũ"). Cột "Điều chỉnh MT" giờ hiện
+    // ĐÚNG khoản THỰC SỰ dùng trong công thức (dieuChinhMTTerm, server đã
+    // tự đổi dấu: Điều chỉnh MT > 0 thì TRỪ - hiểu là "lượng MT cần xuất
+    // thêm phải trừ ra"; Điều chỉnh MT <= 0 thì vẫn CỘNG như cũ) - tooltip
+    // hiện rõ giá trị Điều chỉnh MT GỐC (trước khi đổi dấu) để đối chiếu.
+    const dieuChinhTitle = r.dieuChinhMT > 0
+      ? `Điều chỉnh MT gốc ${fmtNum(r.dieuChinhMT)} MT (dương - kho thực tế nhiều hơn sổ sách, hiểu là "cần xuất thêm") → TRỪ vào Đầu kỳ dự kiến`
+      : `Điều chỉnh MT gốc ${fmtNum(r.dieuChinhMT)} MT (≤ 0) → vẫn CỘNG vào Đầu kỳ dự kiến như công thức cũ`;
+    return `<tr ${rowBg}>
+      <td>${esc(r.donVi)}</td><td>${esc(r.ngay)}</td><td>${esc(r.ngayTruoc)}</td>
+      <td class="num">${fmtNum(r.tonCKTruoc)}</td>
+      <td class="num">${signed(-r.khoiLuongThucTeMT)}</td>
+      <td class="num" title="${dieuChinhTitle}">${signed(r.dieuChinhMTTerm)}</td>
+      <td class="num">${signed(-r.muonTraTru)}</td>
+      <td class="num"><b>${fmtNum(r.tonCuoiKyDuKien)}</b></td>
+      <td class="num">${fmtNum(r.tonDauNgayThucTe)}</td>
+      <td class="num">${r.khop ? '✅ 0' : '⚠️ '+fmtNum(r.chenhLech)}</td>
+    </tr>`;
+  }).join('');
+  wrap.innerHTML = `
+    <div class="hint-text" style="margin-bottom:8px">${res.soDongLech ? `⚠️ Có <b>${res.soDongLech}</b>/${res.soDong} báo cáo lệch đầu kỳ trong khoảng lọc này.` : `✅ Không có báo cáo nào lệch đầu kỳ trong khoảng lọc này (${res.soDong} báo cáo).`}</div>
+    <div style="overflow-x:auto"><table><thead><tr>
+        <th>Đơn vị</th><th>Ngày báo cáo</th><th>Ngày trước</th>
+        <th class="num">Tồn CK trước</th><th class="num">Khối lượng thực tế MT</th>
+        <th class="num">Điều chỉnh MT</th><th class="num">Mượn/trả</th>
+        <th class="num">= Đầu kỳ dự kiến</th><th class="num">Đầu kỳ đã nhập</th><th class="num">Chênh lệch</th>
+      </tr></thead><tbody>${rowsHtml}</tbody></table></div>`;
 }
 
 /* ------------------------------------------------------------

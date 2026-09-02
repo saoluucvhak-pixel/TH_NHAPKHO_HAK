@@ -1086,6 +1086,194 @@
  *     (soanCaptionBaoCaoTrangChu_) KHÔNG đổi gì - vẫn chỉ có "Kho xuất
  *     hàng" như mục AN. Trang chủ (Index.html) KHÔNG đổi gì - vẫn giữ
  *     nguyên các khối hiện có.
+ *  AS) SỬA LỖI TRÙNG DÒNG "CÂN ĐỐI BDMT" + THÊM MÀN "BÁO CÁO CÂN ĐỐI
+ *     BDMT XUẤT HÀNG" (v2026.8.23) - THEO 2 PHẢN ÁNH CỦA NGƯỜI DÙNG:
+ *     1. "bấm nhiều lần cân đối bdmt thì sẽ có nhiều dòng dù chỉ 1
+ *        ngày" - SỬA logCanDoiBDMT_: TRƯỚC ĐÂY luôn appendRow (sheet
+ *        CanDoiBDMT bị coi như log thuần túy) - giờ tìm dòng CŨ khớp
+ *        ĐÚNG (Ngày cân đối, Kho, Đơn vị nhập), nếu có thì GHI ĐÈ lên
+ *        đúng dòng đó thay vì thêm dòng mới; chưa có mới appendRow. Mỗi
+ *        tổ hợp (ngày, kho, đơn vị) giờ LUÔN chỉ có đúng 1 dòng.
+ *     2. "muốn xem báo cáo cân đối bdmt thì chưa có mẫu" - THÊM MỚI hàm
+ *        getCanDoiBDMTReport(donVi, tuNgay, denNgay) đọc lại toàn bộ
+ *        sheet CanDoiBDMT, lọc theo Đơn vị + khoảng "Ngày cân đối" (CHẶN
+ *        Ở SERVER theo donViChoPhepCuaToi_, đồng bộ quyền xem với các
+ *        báo cáo khác) - và THÊM tab thứ 3 "⚖️ Cân đối BDMT xuất hàng"
+ *        ở trang "Báo Cáo Tổng Hợp" (Index.html) hiển thị bảng chi tiết
+ *        từng lần cân đối (Ngày/Kho/Đơn vị/MT kho/BDMT kho/Độ ẩm-Độ khô
+ *        kho/Độ ẩm-Độ khô cân đối/Khối lượng thực tế MT-BDMT/Độ khô TB
+ *        Kho Nhà máy/Điều chỉnh MT-BDMT + diễn giải) kèm dòng Tổng cộng
+ *        Điều chỉnh MT/BDMT - để không còn phải mở trực tiếp Google
+ *        Sheet mới xem lại được.
+ *  AT) SỬA CÔNG THỨC "ĐẦU KỲ DỰ KIẾN" (LẦN 2) + THÊM "TEST KHO"
+ *     (v2026.8.23) - THEO YÊU CẦU MỚI, đã hỏi lại và xác nhận với người
+ *     dùng qua AskUserQuestion:
+ *     1. CÔNG THỨC "Đầu kỳ dự kiến" (xem timTonCuoiKyTruoc_) - THÊM 2
+ *        khoản mới vào công thức mục AD:
+ *          Đầu kỳ dự kiến = Tồn CK (ngày liền trước, Cộng MT Kho Nhà
+ *            máy + Kho Tiên Sa MT + Kho Dung Quất MT)
+ *            − Khối lượng thực tế MT (ô nhập tay ở Cân đối BDMT xuất
+ *              hàng, mục K, NẾU CÓ cân đối đúng ngày đó, không có = trừ
+ *              0) - xem tongKhoiLuongThucTeMTCanDoiDungNgay_ (HÀM MỚI)
+ *            + Điều chỉnh MT (Cân đối BDMT xuất hàng, mục K, như công
+ *              thức cũ mục AD - CẢ 2 khoản này ĐỀU tính, KHÔNG phải
+ *              chọn 1 trong 2, đã xác nhận rõ qua AskUserQuestion)
+ *            − Mượn/trả CỦA CHÍNH báo cáo ngày liền trước đó (đã xác
+ *              nhận "ngày hôm trước", không phải ngày đang nộp) - TRỪ
+ *              LUÔN, KỂ CẢ KHI Mượn/trả <= 0 (SỬA LẠI ngay sau đó, cùng
+ *              ngày: bản đầu chỉ trừ khi > 0, người dùng yêu cầu đổi lại
+ *              trừ trực tiếp bất kể dấu - Mượn/trả âm thì phép trừ tự
+ *              CỘNG NGƯỢC LẠI, đúng bản chất số học của phép trừ 1 số
+ *              âm, KHÔNG có điều kiện > 0 nữa).
+ *        Ảnh hưởng: cảnh báo "Lệch đầu kỳ" lúc nộp báo cáo (lyDoLechDauKy)
+ *        cũng hiện đủ breakdown mới (3 khoản: Khối lượng thực tế MT,
+ *        Điều chỉnh MT, Mượn/trả) thay vì chỉ Điều chỉnh MT như trước.
+ *     2. "TEST KHO" (THÊM MỚI, hàm getKiemTraDauKyReport) - tab thứ 4
+ *        "🧪 Test Kho" ở trang "Báo Cáo Tổng Hợp" (Index.html): với MỌI
+ *        báo cáo trong khoảng ngày/Đơn vị đã lọc, tính lại "Đầu kỳ dự
+ *        kiến" (công thức trên) từ báo cáo CHÍNH THỨC ngày liền trước,
+ *        so với "Tồn kho đầu ngày" ĐÃ NHẬP của chính báo cáo đó - liệt
+ *        kê RÕ TỪNG THÀNH PHẦN (Tồn CK trước/− Khối lượng thực tế MT/+
+ *        Điều chỉnh MT/− Mượn/trả/= Đầu kỳ dự kiến) + Chênh lệch, đánh
+ *        dấu ✅ Khớp hoặc ⚠️ Lệch - để tự tra được CHÊNH LỆCH GỒM NHỮNG
+ *        KHOẢN GÌ, thay vì chỉ biết "có lệch" như cảnh báo lúc nộp (chỉ
+ *        chạy 1 lần, chỉ áp dụng người không phải Admin) - báo cáo này
+ *        xem lại được MỌI LÚC, cho MỌI báo cáo (kể cả do Admin nộp).
+ *  AU) THÊM CỘT "KHỐI LƯỢNG CHỞ RA TIÊN SA TRONG NGÀY" VÀO CÔNG THỨC
+ *     "ĐẦU KỲ DỰ KIẾN"/TEST KHO (v2026.8.23) - THEO YÊU CẦU MỚI, đã hỏi
+ *     lại và xác nhận với người dùng qua AskUserQuestion:
+ *       Khối lượng chở ra Tiên Sa trong ngày
+ *         = Khối lượng thực tế MT (Cân đối BDMT xuất hàng, Kho = "Kho
+ *           Tiên Sa", khớp ĐÚNG "Ngày cân đối" = ngày CỦA CHÍNH báo cáo
+ *           đang xét - KHÁC với Khối lượng thực tế MT/Điều chỉnh MT ở
+ *           mục AT đang khớp ngày HÔM TRƯỚC - xem
+ *           timKhoiLuongThucTeMTTheoKhoDungNgay_, HÀM MỚI)
+ *         − Khối lượng Tiên Sa MT của báo cáo NGÀY HÔM TRƯỚC (cột
+ *           TIEN_SA_MT của bestRow, Chitiettonkho - CÙNG báo cáo hôm
+ *           trước đang dùng cho Tồn CK/Mượn trả ở mục AT).
+ *     CHỈ tính (cộng vào) khi CÓ ĐÚNG 1 lần cân đối BDMT Kho Tiên Sa của
+ *     NGÀY ĐANG XÉT (timKhoiLuongThucTeMTTheoKhoDungNgay_ trả về null
+ *     nếu không có dòng nào khớp) - không có thì = 0, KHÔNG cộng gì cả
+ *     (đã xác nhận rõ qua AskUserQuestion, phân biệt với "có cân đối
+ *     nhưng giá trị đúng bằng 0"). Khoản này CỘNG THẲNG vào công thức
+ *     "Đầu kỳ dự kiến" (khoản thứ 4, sau Mượn/trả - xác nhận qua
+ *     AskUserQuestion là cộng vào công thức, KHÔNG chỉ là cột hiển thị
+ *     tham khảo):
+ *       Đầu kỳ dự kiến = Tồn CK hôm trước − Khối lượng thực tế MT (mục
+ *         AT) + Điều chỉnh MT (mục AT) − Mượn/trả (mục AT) + Khối lượng
+ *         chở ra Tiên Sa trong ngày (mục AU, MỚI).
+ *     Ảnh hưởng: cảnh báo "Lệch đầu kỳ" lúc nộp báo cáo (lyDoLechDauKy)
+ *     và tab "🧪 Test Kho" đều hiện đủ breakdown mới (4 khoản). Test Kho
+ *     hiện thêm 3 cột: "KL thực tế MT Tiên Sa (hôm nay)"/"KL Tiên Sa hôm
+ *     trước"/"Chở ra Tiên Sa" (Index.html, renderKiemTraDauKyReportTable).
+ *  AV) BỔ SUNG KHO DUNG QUẤT VÀO CÔNG THỨC "ĐẦU KỲ DỰ KIẾN" - Y HỆT KHO
+ *     TIÊN SA (v2026.8.23), THEO YÊU CẦU MỚI ("bổ sung Kho Dung Quất như
+ *     Tiên Sa"): thêm khoản thứ 5 - "Khối lượng chở ra Dung Quất trong
+ *     ngày", CÙNG CÔNG THỨC/CÙNG ĐIỀU KIỆN như mục AU nhưng đổi Kho:
+ *       Khối lượng chở ra Dung Quất trong ngày
+ *         = Khối lượng thực tế MT (Cân đối BDMT xuất hàng, Kho = "Kho
+ *           Dung Quất", khớp ĐÚNG "Ngày cân đối" = ngày CỦA CHÍNH báo
+ *           cáo đang xét - dùng lại timKhoiLuongThucTeMTTheoKhoDungNgay_
+ *           mục AU, chỉ đổi tham số `kho`)
+ *         − Khối lượng Dung Quất MT của báo cáo NGÀY HÔM TRƯỚC (cột
+ *           DUNG_QUAT_MT của bestRow, Chitiettonkho).
+ *     CHỈ tính khi CÓ ĐÚNG 1 lần cân đối BDMT Kho Dung Quất của NGÀY
+ *     ĐANG XÉT - không có thì = 0, KHÔNG cộng gì cả (cùng nguyên tắc mục
+ *     AU). CỘNG THẲNG vào Đầu kỳ dự kiến (khoản thứ 5, sau Chở ra Tiên
+ *     Sa):
+ *       Đầu kỳ dự kiến = Tồn CK hôm trước − Khối lượng thực tế MT +
+ *         Điều chỉnh MT − Mượn/trả + Khối lượng chở ra Tiên Sa trong
+ *         ngày (mục AU) + Khối lượng chở ra Dung Quất trong ngày (mục
+ *         AV, MỚI).
+ *     NHÂN TIỆN SỬA LỖI: getKiemTraDauKyReport (Test Kho) TRƯỚC ĐÓ (mục
+ *     AU) CHƯA trả về tienSaThucTeMTHomNay/tienSaMTHomTruoc trong từng
+ *     dòng (chỉ có ở timTonCuoiKyTruoc_, không được map ra ngoài) - nên
+ *     tooltip cột "Chở ra Tiên Sa" ở Index.html trước đó sẽ hiện
+ *     "undefined" thay vì đúng số - ĐÃ BỔ SUNG map đầy đủ cả 2 khoản Tiên
+ *     Sa VÀ Dung Quất vào rows trả về.
+ *     Test Kho (Index.html) thêm cột "Chở ra Dung Quất" y hệt cột "Chở ra
+ *     Tiên Sa" (cùng cách hiện dấu +/−, cùng tooltip, cùng "–" khi không
+ *     có cân đối đúng ngày).
+ *  AW) SỬA LỖI CHÊNH NGÀY ở "Khối lượng chở ra Tiên Sa/Dung Quất trong
+ *     ngày" (mục AU/AV) (v2026.8.23) - người dùng phát hiện qua ảnh chụp
+ *     tab Test Kho thực tế: "bị chênh ngày rồi, ngày tính chở đi phải là
+ *     ngày có dữ liệu cân đối BDMT, lấy số MT thực tế đó trừ cho kho xuất
+ *     hàng ngày trước đó tương ứng với kho trước đó". Bản đầu mục AU/AV
+ *     khớp cân đối BDMT theo NGÀY CỦA CHÍNH báo cáo đang xét (ngayISO,
+ *     "hôm nay" của dòng Test Kho) và trừ cho Kho Tiên Sa/Dung Quất MT
+ *     CỦA CHÍNH bestRow (ngày liền trước ngayISO) - SAI vì "Điều chỉnh
+ *     MT" (mục K, computeCanDoiBDMT_) vốn LUÔN so cân đối ngày N với sổ
+ *     sách NHẬP CÙNG báo cáo ngày N (mtKho = Kho Tiên Sa/Dung Quất MT của
+ *     CHÍNH báo cáo ngày N) - nên 1 lần cân đối BDMT "Ngày cân đối" = N
+ *     LUÔN LUÔN gắn với báo cáo Chitiettonkho ngày N, tức "ngày HÔM TRƯỚC"
+ *     của báo cáo N+1 - GIỐNG HỆT cách "Khối lượng thực tế MT"/"Điều
+ *     chỉnh MT" (mục AT) đã khớp (khớp bestISO, không phải ngayISO). Đã
+ *     hỏi lại xác nhận qua AskUserQuestion: cân đối BDMT của ngày N phải
+ *     cộng vào Đầu kỳ dự kiến của ngày N+1 (ngày SAU) - xác nhận ĐÚNG với
+ *     cách mục AT đang làm, tức mục AU/AV bị lệch 1 ngày so với mục AT.
+ *     SỬA: trong timTonCuoiKyTruoc_, sau khi tìm được bestRow/bestISO
+ *     (ngày liền trước ngayISO, dùng cho Tồn CK/Khối lượng thực tế MT/Điều
+ *     chỉnh MT/Mượn trả - KHÔNG đổi), tìm THÊM prevRow/prevISO = báo cáo
+ *     CHÍNH THỨC gần nhất TRƯỚC bestISO (vòng quét Chitiettonkho thứ 2).
+ *     Rồi đổi:
+ *       Khối lượng chở ra Tiên Sa trong ngày
+ *         = Khối lượng thực tế MT (Cân đối BDMT, Kho Tiên Sa, khớp ĐÚNG
+ *           "Ngày cân đối" = bestISO - KHÔNG PHẢI ngayISO như bản đầu)
+ *         − Khối lượng Tiên Sa MT của báo cáo prevRow (ngày TRƯỚC bestISO
+ *           - KHÔNG PHẢI bestRow như bản đầu; nếu không có prevRow thì
+ *           coi mốc so sánh = 0).
+ *     Tương tự cho Khối lượng chở ra Dung Quất trong ngày (đổi Kho Tiên
+ *     Sa → Kho Dung Quất, TIEN_SA_MT → DUNG_QUAT_MT). Điều kiện "chỉ tính
+ *     khi có cân đối BDMT đúng ngày đó" (mục AT/AU/AV) GIỮ NGUYÊN, chỉ đổi
+ *     "ngày đó" từ ngayISO → bestISO. Công thức Đầu kỳ dự kiến (tổng 5
+ *     khoản, thứ tự) KHÔNG đổi - chỉ đổi CÁCH TÍNH của khoản 4 và 5.
+ *     Index.html (renderKiemTraDauKyReportTable, hint-text tab Test Kho):
+ *     sửa lại tooltip/chú thích cột "Chở ra Tiên Sa"/"Chở ra Dung Quất"
+ *     cho khớp ngày mới (so với cột "Ngày trước" thay vì "Ngày báo cáo").
+ *  AX) GỠ BỎ HOÀN TOÀN khoản "Chở ra Tiên Sa/Dung Quất trong ngày" (mục
+ *     AU/AV/AW) + ĐỔI công thức "Điều chỉnh MT" (v2026.8.24) - THEO YÊU
+ *     CẦU MỚI của người dùng: "BỎ KHO TIÊN SA VÀ DUNG QUẤT RA, ĐỂ LẠI NHƯ
+ *     CŨ, ĐỒNG THỜI LƯỢNG MT CẦN XUẤT THÊM THÌ PHẢI TRỪ RA" - đã hỏi lại
+ *     và xác nhận qua AskUserQuestion (2 vòng):
+ *       1) Xóa hẳn khoản "Khối lượng chở ra Tiên Sa trong ngày" và "Khối
+ *          lượng chở ra Dung Quất trong ngày" (mục AU/AV, đã sửa lỗi ngày
+ *          ở mục AW) khỏi công thức "Đầu kỳ dự kiến" VÀ khỏi bảng Test
+ *          Kho - quay lại đúng công thức mục AT (3 khoản: Khối lượng
+ *          thực tế MT, Điều chỉnh MT, Mượn/trả) - xác nhận "Đúng, bỏ hẳn
+ *          2 khoản đó". Đã xóa hàm timKhoiLuongThucTeMTTheoKhoDungNgay_
+ *          (không còn nơi nào gọi), xóa vòng tìm prevRow/prevISO trong
+ *          timTonCuoiKyTruoc_ (chỉ mục AU/AV/AW cần, giờ không cần nữa).
+ *       2) "Lượng MT cần xuất thêm thì phải trừ ra" = khoản này LẤY TỪ
+ *          "Điều chỉnh MT" (Cân đối BDMT xuất hàng, mục K) - xác nhận qua
+ *          AskUserQuestion "Từ Điều chỉnh MT (Cân đối BDMT)", cụ thể: NẾU
+ *          Điều chỉnh MT > 0 (kho thực tế NHIỀU HƠN sổ sách - hiểu là
+ *          "cần xuất thêm" để khớp) thì TRỪ khoản đó (thay vì CỘNG như
+ *          công thức mục AT cũ); NẾU Điều chỉnh MT <= 0 thì VẪN CỘNG như
+ *          cũ (không đổi) - đã hỏi lại LẦN 2 để chốt rõ công thức, xác
+ *          nhận đúng phương án "CHỈ trừ khi Điều chỉnh MT > 0, còn ≤ 0
+ *          vẫn cộng như cũ" (KHÁC với phương án "luôn trừ bất kể dấu" và
+ *          phương án "≤0 thì bỏ qua, không cộng không trừ" - 2 phương án
+ *          này người dùng KHÔNG chọn). Áp dụng vào ĐÚNG công thức "Đầu kỳ
+ *          dự kiến" (Test Kho) - xác nhận "Công thức Đầu kỳ dự kiến (Test
+ *          Kho)".
+ *     Công thức "Đầu kỳ dự kiến" SAU mục AX (timTonCuoiKyTruoc_):
+ *       dieuChinhMTTerm = Điều chỉnh MT > 0 ? −(Điều chỉnh MT) : Điều
+ *         chỉnh MT (tức luôn CỘNG khi <=0, luôn TRỪ khi >0 - về mặt số
+ *         học tương đương −|Điều chỉnh MT| trong cả 2 trường hợp, nhưng
+ *         viết dạng điều kiện cho khớp đúng lời người dùng xác nhận).
+ *       Đầu kỳ dự kiến = Tồn CK hôm trước − Khối lượng thực tế MT +
+ *         dieuChinhMTTerm − Mượn/trả hôm trước (mục AT, không đổi).
+ *     Ảnh hưởng: timTonCuoiKyTruoc_ (bỏ hẳn phần Tiên Sa/Dung Quất, đổi
+ *     dấu Điều chỉnh MT), getKiemTraDauKyReport (bỏ map các trường
+ *     coChoRaTienSa/khoiLuongChoRaTienSa/tienSaThucTeMTHomNay/
+ *     tienSaMTHomTruoc/coChoRaDungQuat/khoiLuongChoRaDungQuat/
+ *     dungQuatThucTeMTHomNay/dungQuatMTHomTruoc/ngayTruocNua, thêm
+ *     dieuChinhMTTerm), lyDoLechDauKy (bỏ 2 dòng Chở ra Tiên Sa/Dung
+ *     Quất, đổi hiển thị Điều chỉnh MT theo dấu dieuChinhMTTerm),
+ *     Index.html renderKiemTraDauKyReportTable (bỏ hẳn 2 cột "Chở ra
+ *     Tiên Sa"/"Chở ra Dung Quất", cột "Điều chỉnh MT" đổi sang hiện
+ *     dieuChinhMTTerm với tooltip giải thích dấu +/−) + hint-text tab
+ *     Test Kho (viết lại mô tả công thức, bỏ đoạn "chở ra").
  * ============================================================
  */
 
@@ -1769,14 +1957,50 @@ function computeCanDoiBDMT_(sh, newRowIndex, kho, mtKho, bdmtKho, doAmCanDoi, mt
   };
 }
 
+/** GHI (hoặc GHI ĐÈ) 1 dòng "Cân đối BDMT xuất hàng" vào sheet CanDoiBDMT
+ * - mục AS (v2026.8.23), SỬA LỖI: TRƯỚC ĐÂY luôn appendRow (coi
+ * CanDoiBDMT như 1 sheet log thuần túy, giống sheet "Audit") - nên nếu
+ * người dùng tick + nộp lại "Cân đối BDMT xuất hàng" nhiều lần cho CÙNG
+ * 1 ngày cân đối (vd sửa lại số liệu Kho Tiên Sa/Dung Quất rồi nộp lại
+ * báo cáo tồn kho, hoặc bấm nộp nhầm 2 lần) sẽ bị TẠO THÊM DÒNG MỚI mỗi
+ * lần, dù thực chất chỉ là 1 lần cân đối/ngày - THEO ĐÚNG PHẢN ÁNH của
+ * người dùng ("bấm nhiều lần cân đối bdmt thì sẽ có nhiều dòng dù chỉ 1
+ * ngày"). SỬA: tìm dòng CŨ khớp ĐÚNG cả 3: "Ngày cân đối" (cột A) + "Kho"
+ * (cột B) + "Đơn vị nhập" (cột P) - nếu có, GHI ĐÈ lên đúng dòng đó thay
+ * vì thêm dòng mới (cùng nguyên tắc "nộp lại = cập nhật" đã áp dụng cho
+ * báo cáo tồn kho chính, xem duplicateUnitDate/checkDuplicates_); nếu
+ * chưa có mới appendRow như cũ. Nhờ vậy mỗi tổ hợp (ngày, kho, đơn vị)
+ * LUÔN chỉ có đúng 1 dòng trong sheet - vẫn tương thích với cách
+ * layCanDoiBDMTDungNgayMoiDonVi_ đang lấy "lần ghi sau cùng" (giờ sẽ
+ * chính là dòng duy nhất đó). */
 function logCanDoiBDMT_(r) {
   const sh = getOrCreateCanDoiBDMTSheet_();
-  sh.appendRow([
+  const rowValues = [
     r.ngayCanDoi, r.kho, r.mtKho, r.bdmtKho, r.doKhoKhoPct, r.doAmKhoPct,
     r.doAmCanDoi, r.doKhoCanDoi, r.mtThucTe, r.klThucTeBDMT, r.doKhoTBNhaMayPct,
     r.dieuChinhBDMT, r.dienGiaiBDMT, r.dieuChinhMT, r.dienGiaiMT,
     r.donVi, r.email, new Date()
-  ]);
+  ];
+  const lastRow = sh.getLastRow();
+  let existingRow = -1;
+  if (lastRow >= 2) {
+    const targetISO = ngayCanDoiToISO_(r.ngayCanDoi);
+    const data = sh.getRange(2, 1, lastRow - 1, 18).getValues();
+    for (let i = 0; i < data.length; i++) {
+      const rowDonVi = String(data[i][15] || "").trim(); // P Đơn vị nhập
+      const rowKho = String(data[i][1] || "").trim();     // B Kho
+      const rowISO = ngayCanDoiToISO_(data[i][0]);         // A Ngày cân đối
+      if (rowDonVi === r.donVi && rowKho === r.kho && rowISO === targetISO) {
+        existingRow = i + 2; // +2: bù dòng tiêu đề (dòng 1) + index 0-based -> 1-based
+        break;
+      }
+    }
+  }
+  if (existingRow > 0) {
+    sh.getRange(existingRow, 1, 1, rowValues.length).setValues([rowValues]);
+  } else {
+    sh.appendRow(rowValues);
+  }
 }
 
 /** Lấy LẦN CÂN ĐỐI BDMT XUẤT HÀNG đúng "ngày báo kho" (= ngày báo cáo
@@ -2140,9 +2364,16 @@ function submitInventoryEntry(payload) {
       dauKyInfo = timTonCuoiKyTruoc_(donVi, utils.formatDateISO(ngayTonKho));
       if (dauKyInfo !== null && Math.abs(utils.parseNum(payload.tonDauNgay) - dauKyInfo.tonCuoiKyDuKien) > 0.01) {
         lechDauKy = true;
+        // mục AT (v2026.8.23; SỬA LẠI Mượn/trả trừ luôn kể cả <=0); mục AX
+        // (v2026.8.24, BỎ khoản Chở ra Tiên Sa/Dung Quất, ĐỔI Điều chỉnh
+        // MT thành trừ khi > 0 - xem timTonCuoiKyTruoc_): breakdown ĐẦY ĐỦ
+        // các khoản của công thức (Khối lượng thực tế MT trừ, Điều chỉnh
+        // MT +/− tùy dấu, Mượn/trả trừ LUÔN bất kể dấu).
         lyDoLechDauKy = "Lệch đầu kỳ: Tồn kho đầu ngày nhập (" + fmtNumVN_(payload.tonDauNgay) + " MT) không khớp Đầu kỳ dự kiến (" +
           fmtNumVN_(dauKyInfo.tonCuoiKyDuKien) + " MT) tính từ báo cáo chính thức ngày " + dauKyInfo.ngayDisplay + " = Tồn CK " + fmtNumVN_(dauKyInfo.tonCK) + " MT" +
-          (dauKyInfo.dieuChinhMT ? " + Điều chỉnh MT (Cân đối BDMT xuất hàng cùng ngày) " + fmtNumVN_(dauKyInfo.dieuChinhMT) + " MT" : "") + ".";
+          (dauKyInfo.khoiLuongThucTeMT ? " − Khối lượng thực tế MT (Cân đối BDMT xuất hàng cùng ngày) " + fmtNumVN_(dauKyInfo.khoiLuongThucTeMT) + " MT" : "") +
+          (dauKyInfo.dieuChinhMTTerm ? (dauKyInfo.dieuChinhMTTerm > 0 ? " + " : " − ") + "Điều chỉnh MT (Cân đối BDMT xuất hàng cùng ngày) " + fmtNumVN_(Math.abs(dauKyInfo.dieuChinhMTTerm)) + " MT" : "") +
+          (dauKyInfo.muonTraTru ? " − Mượn/trả (ngày đó) " + fmtNumVN_(dauKyInfo.muonTraTru) + " MT" : "") + ".";
       }
     }
     row[COL.TRANG_THAI_DUYET] = lechDauKy ? "Chờ duyệt" : "";
@@ -2849,16 +3080,65 @@ function tongDieuChinhMTCanDoiDungNgay_(donVi, ngayISO) {
   return tong;
 }
 
+/** Tổng "Khối lượng thực tế MT" (sheet CanDoiBDMT, mục K - ô nhập tay ở
+ * tab "Cân đối BDMT xuất hàng", TRƯỚC KHI quy đổi ra Điều chỉnh MT/BDMT)
+ * của 1 Đơn vị - mục AT (v2026.8.23), THÊM MỚI theo yêu cầu sửa công
+ * thức "Đầu kỳ dự kiến" bên dưới. CHỈ TÍNH các dòng có "Ngày cân đối"
+ * TRÙNG ĐÚNG ngayISO đang xét (cùng nguyên tắc "không mang sang từ lần
+ * cân đối cũ hơn" như tongDieuChinhMTCanDoiDungNgay_) - CỘNG DỒN nếu có
+ * nhiều dòng cùng ngày (VD cân đối cả Kho Tiên Sa lẫn Kho Dung Quất). */
+function tongKhoiLuongThucTeMTCanDoiDungNgay_(donVi, ngayISO) {
+  donVi = String(donVi || "").trim();
+  if (!donVi || !ngayISO) return 0;
+  const sh = getOrCreateCanDoiBDMTSheet_();
+  const lastRow = sh.getLastRow();
+  if (lastRow < 2) return 0;
+  const data = sh.getRange(2, 1, lastRow - 1, 18).getValues();
+  let tong = 0;
+  data.forEach(r => {
+    if (String(r[15] || "").trim() !== donVi) return; // cột P "Đơn vị nhập"
+    if (ngayCanDoiToISO_(r[0]) !== ngayISO) return;    // cột A "Ngày cân đối"
+    tong += utils.parseNum(r[8]);                       // cột I "Khối lượng thực tế MT"
+  });
+  return tong;
+}
+
 /** "Đầu kỳ DỰ KIẾN" của 1 Đơn vị, tính từ bản ghi CHÍNH THỨC
  * (Chitiettonkho - đã tự động loại "Chờ duyệt"/"Từ chối", xem
  * syncChitietTonKhoForKey_) GẦN NHẤT TRƯỚC ngayISO - dùng để phát hiện
  * "báo cáo lệch đầu kỳ" khi nộp mới (mục X, v2026.8.17; SỬA LẠI công
- * thức ở mục AD, v2026.8.18 THEO YÊU CẦU MỚI của người dùng):
- *   Đầu kỳ dự kiến = TON_CK của bản ghi đó (đã sẵn = Cộng MT Kho Nhà
- *     máy + Kho Tiên Sa MT + Kho Dung Quất MT - công thức Sheet có sẵn,
- *     xem ghi chú mục H đầu file) + "Điều chỉnh MT" (Cân đối BDMT xuất
- *     hàng, mục K) NẾU CÓ cân đối ĐÚNG NGÀY của bản ghi đó (không có =
- *     cộng thêm 0, KHÔNG lấy tạm lần cân đối cũ hơn).
+ * thức ở mục AD, v2026.8.18; SỬA LẠI LẦN NỮA ở mục AT, v2026.8.23; THÊM
+ * mục AU/AV (Chở ra Tiên Sa/Dung Quất), SỬA LỖI CHÊNH NGÀY ở mục AW - CẢ
+ * 3 mục AU/AV/AW SAU ĐÓ ĐÃ BỊ GỠ BỎ HOÀN TOÀN ở mục AX (v2026.8.24), xem
+ * chú thích mục AX ở đầu file để biết lý do và công thức "Điều chỉnh MT"
+ * mới):
+ *   Đầu kỳ dự kiến
+ *     = TON_CK của bản ghi CHÍNH THỨC ngày liền trước (đã sẵn = Cộng MT
+ *       Kho Nhà máy + Kho Tiên Sa MT + Kho Dung Quất MT - công thức
+ *       Sheet có sẵn, xem ghi chú mục H đầu file)
+ *     − "Khối lượng thực tế MT" (ô nhập tay ở Cân đối BDMT xuất hàng,
+ *       mục K) NẾU CÓ cân đối ĐÚNG NGÀY của bản ghi đó (không có = trừ
+ *       0) - xem tongKhoiLuongThucTeMTCanDoiDungNgay_.
+ *     +/− "Điều chỉnh MT" (Cân đối BDMT xuất hàng, mục K) NẾU CÓ cân đối
+ *       ĐÚNG NGÀY của bản ghi đó (không có = 0), ÁP DỤNG mục AX
+ *       (v2026.8.24 - THEO YÊU CẦU MỚI, đã hỏi lại và xác nhận qua
+ *       AskUserQuestion): NẾU Điều chỉnh MT > 0 ("kho thực tế nhiều hơn
+ *       sổ sách", hiểu là cần xuất thêm bù) thì TRỪ khoản đó; NẾU Điều
+ *       chỉnh MT <= 0 thì vẫn CỘNG như công thức mục AT cũ (không đổi).
+ *       Xem tongDieuChinhMTCanDoiDungNgay_ + biến dieuChinhMTTerm bên
+ *       dưới. Khối lượng thực tế MT và Điều chỉnh MT ĐỀU đến từ CÙNG 1
+ *       lần tất toán Cân đối BDMT (nếu có) - KHÔNG phải 1 trong 2.
+ *     − "Mượn/trả" của CHÍNH bản ghi ngày liền trước đó - TRỪ LUÔN, KỂ
+ *       CẢ KHI Mượn/trả <= 0 (mục AT: TRƯỚC ĐÂY chỉ trừ khi > 0, giờ trừ
+ *       trực tiếp giá trị Mượn/trả bất kể dấu - Mượn/trả âm thì phép trừ
+ *       sẽ tự CỘNG NGƯỢC LẠI, đúng bản chất số học của phép trừ 1 số
+ *       âm).
+ * KHÔNG còn khoản "Khối lượng chở ra Tiên Sa/Dung Quất trong ngày" (mục
+ * AU/AV/AW) - ĐÃ GỠ BỎ HOÀN TOÀN ở mục AX theo đúng yêu cầu người dùng
+ * "BỎ KHO TIÊN SA VÀ DUNG QUẤT RA, ĐỂ LẠI NHƯ CŨ".
+ * KHÔNG dùng lại giá trị TON_CK đã lưu sẵn trong biến cục bộ cũ (best) -
+ * đổi sang giữ nguyên `bestRow` để đọc thêm được cột MUON_TRA của CHÍNH
+ * dòng đó (đỡ phải quét lại Chitiettonkho 1 lần nữa).
  * Trả về null nếu Đơn vị đó CHƯA TỪNG có báo cáo chính thức nào trước
  * ngày này (VD ngày đầu tiên mở sổ) - khi đó không có gì để so sánh,
  * không coi là lệch. */
@@ -2866,21 +3146,92 @@ function timTonCuoiKyTruoc_(donVi, ngayISO) {
   donVi = String(donVi || "").trim();
   if (!donVi || !ngayISO) return null;
   const { data } = readAllChitietData_();
-  let best = null, bestISO = null;
+  let bestRow = null, bestISO = null;
   data.forEach(r => {
     if (String(r[COL.DON_VI] || "").trim() !== donVi) return;
     const rISO = utils.formatDateISO(r[COL.NGAY_TON_KHO]);
     if (!rISO || rISO >= ngayISO) return;
-    if (!bestISO || rISO > bestISO) { bestISO = rISO; best = utils.parseNum(r[COL.TON_CK]); }
+    if (!bestISO || rISO > bestISO) { bestISO = rISO; bestRow = r; }
   });
-  if (best === null) return null;
+  if (!bestRow) return null;
+  const tonCK = utils.parseNum(bestRow[COL.TON_CK]);
+  const khoiLuongThucTeMT = tongKhoiLuongThucTeMTCanDoiDungNgay_(donVi, bestISO);
   const dieuChinhMT = tongDieuChinhMTCanDoiDungNgay_(donVi, bestISO);
+  const muonTra = utils.parseNum(bestRow[COL.MUON_TRA]);
+  const muonTraTru = muonTra; // mục AT (sửa lại): trừ luôn, kể cả <= 0 (âm thì tự cộng ngược lại)
+  // mục AX (v2026.8.24), THEO YÊU CẦU MỚI ("lượng MT cần xuất thêm thì
+  // phải trừ ra", đã hỏi lại và xác nhận qua AskUserQuestion): Điều
+  // chỉnh MT > 0 (kho thực tế nhiều hơn sổ sách - hiểu là "cần xuất
+  // thêm") thì TRỪ khoản đó thay vì CỘNG; Điều chỉnh MT <= 0 thì vẫn
+  // CỘNG như cũ (không đổi so với mục AT).
+  const dieuChinhMTTerm = dieuChinhMT > 0 ? -dieuChinhMT : dieuChinhMT;
   return {
     ngayISO: bestISO,
     ngayDisplay: utils.formatDate(new Date(bestISO)),
-    tonCK: best,
+    tonCK,
+    khoiLuongThucTeMT,
     dieuChinhMT,
-    tonCuoiKyDuKien: best + dieuChinhMT
+    dieuChinhMTTerm,
+    muonTra,
+    muonTraTru,
+    tonCuoiKyDuKien: tonCK - khoiLuongThucTeMT + dieuChinhMTTerm - muonTraTru
+  };
+}
+
+/** Báo cáo "Test Kho" (mục AT, v2026.8.23), THÊM MỚI theo yêu cầu: kiểm
+ * tra Tồn kho đầu ngày ĐÃ NHẬP của mỗi báo cáo so với "Đầu kỳ dự kiến"
+ * tính từ báo cáo CHÍNH THỨC ngày liền trước cùng Đơn vị (xem
+ * timTonCuoiKyTruoc_) - liệt kê RÕ TỪNG THÀNH PHẦN của công thức (Tồn CK
+ * hôm trước, − Khối lượng thực tế MT, + Điều chỉnh MT, − Mượn/trả) để
+ * người dùng tự thấy CHÊNH LỆCH (nếu có) đến từ đâu, thay vì chỉ biết
+ * "có lệch" như cảnh báo lúc nộp báo cáo (mục AD/lyDoLechDauKy). KHÁC
+ * với cảnh báo lúc nộp báo cáo (chỉ chạy 1 lần đúng lúc nộp, chỉ áp
+ * dụng người không phải Admin) - báo cáo này XEM LẠI ĐƯỢC MỌI LÚC, MỌI
+ * NGÀY (kể cả báo cáo do Admin nộp) - dùng để tra cứu/đối chiếu chủ
+ * động, không phải cơ chế chặn duyệt. CHẶN Ở SERVER theo
+ * donViChoPhepCuaToi_ (đồng bộ quyền xem với các báo cáo khác). */
+function getKiemTraDauKyReport(donViFilter, fDate, tDate) {
+  const { data } = readAllChitietData_();
+  let items = data.filter(r => !utils.isBlank(r[COL.DON_VI]) && r[COL.NGAY_TON_KHO] instanceof Date);
+  const allowedUnits = donViChoPhepCuaToi_(utils.normEmail(getCurrentUserEmail_()));
+  if (allowedUnits) items = items.filter(r => allowedUnits.includes(String(r[COL.DON_VI]).trim()));
+  if (donViFilter) items = items.filter(r => String(r[COL.DON_VI]).trim() === donViFilter);
+  if (fDate) items = items.filter(r => utils.formatDateISO(r[COL.NGAY_TON_KHO]) >= fDate);
+  if (tDate) items = items.filter(r => utils.formatDateISO(r[COL.NGAY_TON_KHO]) <= tDate);
+
+  items.sort(function (a, b) {
+    const du = String(a[COL.DON_VI]).trim().localeCompare(String(b[COL.DON_VI]).trim());
+    if (du !== 0) return du;
+    return b[COL.NGAY_TON_KHO] - a[COL.NGAY_TON_KHO]; // mới nhất lên đầu trong cùng đơn vị
+  });
+
+  const rows = items.map(function (r) {
+    const donVi = String(r[COL.DON_VI]).trim();
+    const ngayISO = utils.formatDateISO(r[COL.NGAY_TON_KHO]);
+    const tonDauNgayThucTe = utils.parseNum(r[COL.TON_DAU_NGAY]);
+    const info = timTonCuoiKyTruoc_(donVi, ngayISO);
+    if (!info) {
+      return { donVi, ngay: utils.formatDate(r[COL.NGAY_TON_KHO]), ngayISO, tonDauNgayThucTe, coDuLieuTruoc: false };
+    }
+    const chenhLech = tonDauNgayThucTe - info.tonCuoiKyDuKien;
+    return {
+      donVi, ngay: utils.formatDate(r[COL.NGAY_TON_KHO]), ngayISO, coDuLieuTruoc: true,
+      ngayTruoc: info.ngayDisplay, tonCKTruoc: info.tonCK,
+      khoiLuongThucTeMT: info.khoiLuongThucTeMT, dieuChinhMT: info.dieuChinhMT,
+      // mục AX: khoản Điều chỉnh MT THỰC SỰ dùng trong công thức (đã áp
+      // dụng dấu +/− tùy Điều chỉnh MT dương/âm - xem timTonCuoiKyTruoc_).
+      dieuChinhMTTerm: info.dieuChinhMTTerm,
+      muonTraTruoc: info.muonTra, muonTraTru: info.muonTraTru,
+      tonCuoiKyDuKien: info.tonCuoiKyDuKien,
+      tonDauNgayThucTe, chenhLech,
+      khop: Math.abs(chenhLech) <= 0.01
+    };
+  });
+
+  return {
+    rows,
+    soDong: rows.length,
+    soDongLech: rows.filter(function (r) { return r.coDuLieuTruoc && !r.khop; }).length
   };
 }
 
@@ -3391,6 +3742,63 @@ function getNhaMayDetailReport(fDate, tDate, donViFilter, nhaMay) {
     rows,
     total,
     factories: factoryKeys.map(k => ({ key: k, label: NHA_MAY_MAP[k].label })),
+    soDong: rows.length
+  };
+}
+
+/** Báo cáo TRA CỨU lịch sử "Cân đối BDMT xuất hàng" (sheet CanDoiBDMT,
+ * mục K) - mục AS (v2026.8.23), THÊM MỚI: trước đây dữ liệu cân đối BDMT
+ * chỉ được GHI vào sheet log riêng (xem logCanDoiBDMT_) nhưng KHÔNG có
+ * màn hình nào trong Web App để XEM LẠI - phải tự mở trực tiếp Google
+ * Sheet mới thấy được (đúng phản ánh của người dùng: "muốn xem báo cáo
+ * cân đối bdmt thì chưa có mẫu"). Hàm này đọc lại TOÀN BỘ sheet
+ * CanDoiBDMT, lọc theo Đơn vị + khoảng ngày "Ngày cân đối" (cùng kiểu
+ * filter với getReportSummary/getNhaMayDetailReport), CHẶN Ở SERVER theo
+ * donViChoPhepCuaToi_ (đồng bộ quyền xem với các báo cáo khác - đơn vị
+ * thường chỉ thấy đúng Đơn vị mình được cấp quyền, Admin xem hết). Trả
+ * về mới nhất lên đầu (sort theo Ngày cân đối giảm dần). */
+function getCanDoiBDMTReport(donViFilter, fDate, tDate) {
+  const sh = getOrCreateCanDoiBDMTSheet_();
+  const lastRow = sh.getLastRow();
+  if (lastRow < 2) return { rows: [], total: { dieuChinhMT: 0, dieuChinhBDMT: 0 }, soDong: 0 };
+
+  const allowedUnits = donViChoPhepCuaToi_(utils.normEmail(getCurrentUserEmail_()));
+  const data = sh.getRange(2, 1, lastRow - 1, 18).getValues();
+  let rows = data.map(function (r) {
+    const ngayISO = ngayCanDoiToISO_(r[0]);
+    return {
+      ngayCanDoi: ngayISO ? utils.formatDate(new Date(ngayISO + "T00:00:00")) : String(r[0] || ""),
+      ngayCanDoiISO: ngayISO,
+      kho: String(r[1] || "").trim(),
+      mtKho: utils.parseNum(r[2]), bdmtKho: utils.parseNum(r[3]),
+      doKhoKhoPct: utils.parseNum(r[4]), doAmKhoPct: utils.parseNum(r[5]),
+      doAmCanDoi: utils.parseNum(r[6]), doKhoCanDoi: utils.parseNum(r[7]),
+      mtThucTe: utils.parseNum(r[8]), klThucTeBDMT: utils.parseNum(r[9]),
+      doKhoTBNhaMayPct: utils.parseNum(r[10]),
+      dieuChinhBDMT: utils.parseNum(r[11]), dienGiaiBDMT: String(r[12] || ""),
+      dieuChinhMT: utils.parseNum(r[13]), dienGiaiMT: String(r[14] || ""),
+      donVi: String(r[15] || "").trim(), email: String(r[16] || ""),
+      thoiGianGhi: r[17] instanceof Date
+        ? (utils.formatDate(r[17]) + " " + Utilities.formatDate(r[17], "GMT+7", "HH:mm:ss"))
+        : String(r[17] || "")
+    };
+  });
+
+  if (allowedUnits) rows = rows.filter(function (r) { return allowedUnits.includes(r.donVi); });
+  if (donViFilter) rows = rows.filter(function (r) { return r.donVi === donViFilter; });
+  if (fDate) rows = rows.filter(function (r) { return r.ngayCanDoiISO && r.ngayCanDoiISO >= fDate; });
+  if (tDate) rows = rows.filter(function (r) { return r.ngayCanDoiISO && r.ngayCanDoiISO <= tDate; });
+
+  rows.sort(function (a, b) {
+    return (b.ngayCanDoiISO || "").localeCompare(a.ngayCanDoiISO || "") || a.donVi.localeCompare(b.donVi) || a.kho.localeCompare(b.kho);
+  });
+
+  return {
+    rows,
+    total: {
+      dieuChinhMT: sum_(rows.map(function (r) { return r.dieuChinhMT; })),
+      dieuChinhBDMT: sum_(rows.map(function (r) { return r.dieuChinhBDMT; }))
+    },
     soDong: rows.length
   };
 }

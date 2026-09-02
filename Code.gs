@@ -1333,6 +1333,29 @@
  *     theo quyền nhap_sua của người dùng, hoặc mọi Đơn vị nếu Admin),
  *     bảng "Dư nợ lũy kế" theo Đơn vị, và bảng chi tiết từng giao dịch
  *     (nút Xóa chỉ Admin thấy).
+ *  BA) "ĐỐI TƯỢNG" Ở SỔ MƯỢN TRẢ ĐỔI SANG CHỌN CỐ ĐỊNH (v2026.9.2),
+ *     THEO YÊU CẦU MỚI ("sao biết mượn trả với ai") - người dùng chỉ ra
+ *     đúng: "Đối tượng" ở mục AZ là Ô GÕ TAY TỰ DO, hệ thống KHÔNG tự
+ *     biết mượn/trả với ai - phụ thuộc hoàn toàn vào người ghi gõ đúng
+ *     và NHẤT QUÁN chính tả; gõ lệch nhau (VD "Kho Tiên Sa" vs "kho tiên
+ *     sa" vs "Tiên Sa") sẽ bị tính thành nhiều đối tượng khác nhau,
+ *     không gộp đúng được "đang nợ AI bao nhiêu".
+ *     SỬA (Index.html): đổi ô "Đối tượng" từ `<input type="text">` sang
+ *     `<select>` liệt kê CỐ ĐỊNH: 4 Đơn vị (state.units) + "Kho Tiên
+ *     Sa" + "Kho Dung Quất" (ĐÚNG tên đã dùng ở tab Cân đối BDMT xuất
+ *     hàng, mục K, để nhất quán toàn hệ thống) + "Khác (tự nhập)..." -
+ *     chọn "Khác" mới hiện thêm 1 ô text tự do (`mt-f-doiTuongKhac`,
+ *     toggle qua toggleSoMuonTraDoiTuongKhac_()) cho trường hợp thực sự
+ *     không có trong danh sách. KHÔNG bắt buộc phải chọn Đối tượng (vẫn
+ *     cho để trống như trước).
+ *     Code.gs: getSoMuonTraList() THÊM trả về `summaryByDoiTuong` - Dư
+ *     nợ lũy kế GỘP THEO (Đơn vị, Đối tượng) THAY VÌ chỉ theo Đơn vị
+ *     như `summary` cũ (mục AZ) - CÙNG nguyên tắc "tính đến đúng tDate"
+ *     (không giới hạn bởi fDate). Index.html: thêm bảng "Dư nợ lũy kế
+ *     theo Đối tượng" (renderSoMuonTraSummaryByDoiTuong, khối
+ *     #mt-summary-doituong-wrap) ngay dưới bảng "Dư nợ lũy kế theo Đơn
+ *     vị" cũ - đây mới là bảng TRẢ LỜI TRỰC TIẾP câu "đang nợ ai bao
+ *     nhiêu".
  * ============================================================
  */
 
@@ -3409,7 +3432,36 @@ function getSoMuonTraList(donViFilter, fDate, tDate) {
     return { donVi, tongMuon, tongTra, duNo: tongMuon - tongTra };
   });
 
-  return { rows, summary, soDong: rows.length };
+  // mục BA (v2026.9.2), THEO YÊU CẦU MỚI ("sao biết mượn trả với ai"):
+  // Dư nợ lũy kế GỘP THEO ĐƠN VỊ ở `summary` trên không cho biết đang nợ
+  // AI - vì "Đối tượng" trước đây là ô gõ tay tự do, dễ gõ lệch nhau
+  // (không gộp được để tính đúng). Từ khi "Đối tượng" đổi sang chọn từ
+  // danh sách CỐ ĐỊNH ở Index.html (mục BA), tên luôn nhất quán, nên
+  // thêm `summaryByDoiTuong` = Dư nợ lũy kế GỘP THEO (Đơn vị, Đối
+  // tượng) - CÙNG nguyên tắc tính "tính đến đúng tDate" như `summary`
+  // trên, chỉ khác chiều nhóm.
+  const doiTuongKeySet = new Set();
+  all.forEach(function (r) {
+    if (donViFilter && r.donVi !== donViFilter) return;
+    if (!r.doiTuong) return;
+    doiTuongKeySet.add(r.donVi + "\u0001" + r.doiTuong);
+  });
+  const summaryByDoiTuong = Array.from(doiTuongKeySet).map(function (key) {
+    const parts = key.split("\u0001");
+    const donVi = parts[0], doiTuong = parts[1];
+    let tongMuon = 0, tongTra = 0;
+    all.forEach(function (r) {
+      if (r.donVi !== donVi || r.doiTuong !== doiTuong) return;
+      if (tDate && r.ngayISO > tDate) return;
+      if (r.loai === "Mượn") tongMuon += r.soLuong;
+      else if (r.loai === "Trả") tongTra += r.soLuong;
+    });
+    return { donVi, doiTuong, tongMuon, tongTra, duNo: tongMuon - tongTra };
+  }).sort(function (a, b) {
+    return a.donVi === b.donVi ? a.doiTuong.localeCompare(b.doiTuong) : a.donVi.localeCompare(b.donVi);
+  });
+
+  return { rows, summary, summaryByDoiTuong, soDong: rows.length };
 }
 
 /** Xóa 1 dòng Sổ Mượn Trả - CHỈ ADMIN (cùng nguyên tắc với xóaDuLieu ở

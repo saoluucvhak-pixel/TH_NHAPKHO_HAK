@@ -1864,11 +1864,20 @@ function renderReport(){
           <div class="field"><label>Số lượng (MT)</label><input type="text" inputmode="decimal" class="num-fmt" id="mt-f-soLuong" value=""></div>
         </div>
         <div class="grid cols-4">
-          <div class="field" style="grid-column:span 2"><label>Đối tượng (mượn của ai/cho ai mượn)</label><input type="text" id="mt-f-doiTuong" placeholder="VD: Kho Tiên Sa, Đơn vị X..."></div>
+          <div class="field"><label>Đối tượng (mượn của ai/cho ai mượn)</label>
+            <select id="mt-f-doiTuong" onchange="toggleSoMuonTraDoiTuongKhac_()">
+              <option value="">-- Chọn --</option>
+              ${(state.units.length?state.units:[]).map(u=>`<option value="${esc(u)}">${esc(u)}</option>`).join('')}
+              <option value="Kho Tiên Sa">Kho Tiên Sa</option>
+              <option value="Kho Dung Quất">Kho Dung Quất</option>
+              <option value="__khac__">Khác (tự nhập)...</option>
+            </select>
+          </div>
+          <div class="field hidden" id="mt-f-doiTuongKhac-wrap"><label>Đối tượng khác (ghi rõ)</label><input type="text" id="mt-f-doiTuongKhac" placeholder="VD: Anh A, Doanh nghiệp B..."></div>
           <div class="field" style="grid-column:span 2"><label>Ghi chú</label><input type="text" id="mt-f-ghiChu"></div>
         </div>
         <button class="btn primary" onclick="submitSoMuonTra()">💾 Lưu giao dịch</button>
-        <div class="hint-text" style="margin-top:8px">Sổ này TÁCH BIỆT với cột "Mượn/trả" trong báo cáo tồn kho hàng ngày (cột đó vẫn là số gộp mỗi ngày, tiếp tục dùng cho công thức Tồn CK/"Đầu kỳ dự kiến" như cũ) - dùng để theo dõi CHI TIẾT từng giao dịch mượn/trả và biết Dư nợ lũy kế hiện đang là bao nhiêu.</div>
+        <div class="hint-text" style="margin-top:8px">Sổ này TÁCH BIỆT với cột "Mượn/trả" trong báo cáo tồn kho hàng ngày (cột đó vẫn là số gộp mỗi ngày, tiếp tục dùng cho công thức Tồn CK/"Đầu kỳ dự kiến" như cũ) - dùng để theo dõi CHI TIẾT từng giao dịch mượn/trả và biết Dư nợ lũy kế hiện đang là bao nhiêu. "Đối tượng" chọn từ danh sách CỐ ĐỊNH (thay vì gõ tay tự do) để tên luôn nhất quán - có thể tính đúng "đang nợ AI bao nhiêu" ở bảng bên dưới.</div>
       </div>
 
       <div class="card no-print">
@@ -1883,6 +1892,7 @@ function renderReport(){
         <div class="hint-text">"Dư nợ lũy kế" = Tổng Mượn − Tổng Trả CỦA MỌI GIAO DỊCH từ trước tới đúng "Đến ngày" (không giới hạn bởi "Từ ngày" - đó chỉ để lọc bảng chi tiết bên dưới). Bỏ trống "Đến ngày" để tính dư nợ tới hiện tại.</div>
       </div>
       <div class="card" id="mt-summary-wrap"><div class="empty"><div class="ic">💰</div>Bấm "Xem báo cáo" để xem Dư nợ lũy kế.</div></div>
+      <div class="card" id="mt-summary-doituong-wrap"></div>
       <div class="card" id="mt-wrap"></div>
     </div>`;
 
@@ -2116,26 +2126,38 @@ function renderCanDoiBDMTReportTable(){
 }
 
 /* ------------------------------------------------------------
- * "SỔ MƯỢN TRẢ" (mục AZ ở đầu Code.gs) - sổ chi tiết từng giao dịch
+ * "SỔ MƯỢN TRẢ" (mục AZ/BA ở đầu Code.gs) - sổ chi tiết từng giao dịch
  * mượn/trả, TÁCH BIỆT với cột "Mượn/trả" gộp theo ngày trong báo cáo
- * tồn kho hàng ngày - dùng để xem Dư nợ lũy kế theo Đơn vị.
+ * tồn kho hàng ngày - dùng để xem Dư nợ lũy kế theo Đơn vị VÀ theo
+ * Đối tượng (mục BA: "Đối tượng" chọn từ danh sách CỐ ĐỊNH thay vì gõ
+ * tay tự do, để tên luôn nhất quán - mới gộp đúng được "đang nợ AI").
  * ------------------------------------------------------------ */
+function toggleSoMuonTraDoiTuongKhac_(){
+  const isKhac = document.getElementById('mt-f-doiTuong').value === '__khac__';
+  document.getElementById('mt-f-doiTuongKhac-wrap').classList.toggle('hidden', !isKhac);
+}
+
 function submitSoMuonTra(){
+  const doiTuongSel = document.getElementById('mt-f-doiTuong').value;
+  const doiTuong = doiTuongSel === '__khac__' ? document.getElementById('mt-f-doiTuongKhac').value.trim() : doiTuongSel;
   const payload = {
     donVi: document.getElementById('mt-f-donVi').value,
     ngayGiaoDich: document.getElementById('mt-f-ngay').value,
     loai: document.getElementById('mt-f-loai').value,
     soLuong: getNumFieldValue_('mt-f-soLuong'),
-    doiTuong: document.getElementById('mt-f-doiTuong').value,
+    doiTuong: doiTuong,
     ghiChu: document.getElementById('mt-f-ghiChu').value
   };
   if (!payload.donVi) { toast('Vui lòng chọn Đơn vị.', 'warn'); return; }
   if (!payload.ngayGiaoDich) { toast('Vui lòng chọn Ngày giao dịch.', 'warn'); return; }
   if (payload.soLuong === '' || !(Number(payload.soLuong) > 0)) { toast('Vui lòng nhập Số lượng (MT) lớn hơn 0.', 'warn'); return; }
+  if (doiTuongSel === '__khac__' && !doiTuong) { toast('Vui lòng ghi rõ "Đối tượng khác".', 'warn'); return; }
   call('ghiSoMuonTra', [payload], 'Đang lưu giao dịch...').then(res => {
     if (handleResult(res)) {
       document.getElementById('mt-f-soLuong').value = '';
       document.getElementById('mt-f-doiTuong').value = '';
+      document.getElementById('mt-f-doiTuongKhac').value = '';
+      document.getElementById('mt-f-doiTuongKhac-wrap').classList.add('hidden');
       document.getElementById('mt-f-ghiChu').value = '';
       loadSoMuonTraReport();
     }
@@ -2148,6 +2170,7 @@ function loadSoMuonTraReport(){
   call('getSoMuonTraList', [donVi, f, t], 'Đang tải Sổ Mượn Trả...').then(res => {
     state.soMuonTraReport = res;
     renderSoMuonTraSummary();
+    renderSoMuonTraSummaryByDoiTuong();
     renderSoMuonTraTable();
   });
 }
@@ -2162,6 +2185,25 @@ function renderSoMuonTraSummary(){
     </tr></thead><tbody>
     ${res.summary.map(s => `<tr ${s.duNo>0?'style="background:var(--rose-light,#fbeaea)"':''}>
       <td>${esc(s.donVi)}</td><td class="num">${fmtNum(s.tongMuon)}</td><td class="num">${fmtNum(s.tongTra)}</td>
+      <td class="num"><b>${fmtNum(s.duNo)}</b></td>
+    </tr>`).join('')}
+    </tbody></table></div>`;
+}
+
+/** Dư nợ lũy kế theo TỪNG ĐỐI TƯỢNG (mục BA) - trả lời trực tiếp câu
+ * "đang nợ AI bao nhiêu" (khác với renderSoMuonTraSummary ở trên chỉ
+ * gộp theo Đơn vị, không tách theo đối tượng). */
+function renderSoMuonTraSummaryByDoiTuong(){
+  const wrap = document.getElementById('mt-summary-doituong-wrap');
+  const res = state.soMuonTraReport;
+  if (!res || !res.summaryByDoiTuong || !res.summaryByDoiTuong.length) { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = `<div class="section-title">Dư nợ lũy kế theo Đối tượng</div>
+    <div style="overflow-x:auto"><table><thead><tr>
+      <th>Đơn vị</th><th>Đối tượng</th><th class="num">Tổng Mượn</th><th class="num">Tổng Trả</th><th class="num">Dư nợ (Mượn − Trả)</th>
+    </tr></thead><tbody>
+    ${res.summaryByDoiTuong.map(s => `<tr ${s.duNo>0?'style="background:var(--rose-light,#fbeaea)"':''}>
+      <td>${esc(s.donVi)}</td><td>${esc(s.doiTuong)}</td>
+      <td class="num">${fmtNum(s.tongMuon)}</td><td class="num">${fmtNum(s.tongTra)}</td>
       <td class="num"><b>${fmtNum(s.duNo)}</b></td>
     </tr>`).join('')}
     </tbody></table></div>`;

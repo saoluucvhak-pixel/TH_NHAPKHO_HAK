@@ -1750,6 +1750,10 @@ function renderReport(){
   // được phân quyền (xem ghi chú tương tự ở renderHistory) khi CHỈ có
   // đúng 1 Đơn vị được phép.
   const defaultDonVi = (!state.isAdmin && unitOptions.length === 1) ? unitOptions[0] : '';
+  // mục AZ (v2026.9.2): form "Ghi giao dịch Mượn/Trả mới" ở tab Sổ Mượn
+  // Trả CHỈ cho chọn Đơn vị người dùng có quyền "Nhập/Sửa" (KHÁC với
+  // unitOptions ở trên - dùng cho bộ lọc XEM, gồm cả quyền "Xem").
+  const nhapSuaUnitOptions = state.isAdmin ? (state.units.length ? state.units : []) : myUnitOptions(true);
   // THEO YÊU CẦU MỚI (mục L, v2026.8.17): ngày mặc định của báo cáo
   // "Theo mẫu Tonkho_Damgo" là HÔM QUA (lùi 1 ngày so với hiện hành) -
   // vì các đơn vị thường báo cáo cho ngày hôm trước, mặc định "hôm nay"
@@ -1767,6 +1771,7 @@ function renderReport(){
       <button class="btn sm report-tab-btn ${state.reportTab==='tonkhodamgo'?'primary':''}" data-tab="tonkhodamgo" onclick="switchReportTab('tonkhodamgo')">📄 Theo mẫu Tonkho_Damgo</button>
       <button class="btn sm report-tab-btn ${state.reportTab==='candoibdmt'?'primary':''}" data-tab="candoibdmt" onclick="switchReportTab('candoibdmt')">⚖️ Cân đối BDMT xuất hàng</button>
       <button class="btn sm report-tab-btn ${state.reportTab==='testkho'?'primary':''}" data-tab="testkho" onclick="switchReportTab('testkho')">🧪 Test Kho</button>
+      <button class="btn sm report-tab-btn ${state.reportTab==='somuontra'?'primary':''}" data-tab="somuontra" onclick="switchReportTab('somuontra')">🧾 Sổ Mượn Trả</button>
     </div>
 
     <div id="report-period-section" class="${state.reportTab==='period'?'':'hidden'}">
@@ -1843,6 +1848,42 @@ function renderReport(){
         <div class="hint-text">Với mỗi báo cáo trong khoảng lọc, tính lại "Đầu kỳ dự kiến" từ báo cáo CHÍNH THỨC ngày liền trước cùng đơn vị (gọi là "Ngày trước"): <b>Tồn CK hôm trước − Khối lượng thực tế MT (Cân đối BDMT, nếu có tất toán ĐÚNG "Ngày trước") +/− Điều chỉnh MT (Cân đối BDMT, cùng điều kiện) − Mượn/trả hôm trước (trừ luôn, kể cả Mượn/trả ≤ 0 - âm thì tự cộng ngược lại)</b>. Riêng khoản Điều chỉnh MT: nếu Điều chỉnh MT &gt; 0 (kho thực tế nhiều hơn sổ sách, hiểu là "lượng MT cần xuất thêm") thì <b>TRỪ</b> khoản đó; nếu Điều chỉnh MT ≤ 0 thì vẫn <b>CỘNG</b> như trước. Rồi so với "Tồn kho đầu ngày" ĐÃ NHẬP của chính báo cáo đó, hiện rõ Chênh lệch gồm đúng những khoản nào. Khác với cảnh báo lúc nộp báo cáo (chỉ chạy 1 lần, không áp dụng cho Admin) - tab này xem lại được mọi lúc, cho mọi báo cáo.</div>
       </div>
       <div class="card" id="tk-wrap"><div class="empty"><div class="ic">🧪</div>Chọn bộ lọc rồi bấm "Kiểm tra".</div></div>
+    </div>
+
+    <div id="report-somuontra-section" class="${state.reportTab==='somuontra'?'':'hidden'}">
+      <div class="card no-print">
+        <div class="section-title">Ghi giao dịch Mượn/Trả mới</div>
+        <div class="grid cols-4">
+          <div class="field"><label>Đơn vị</label>
+            <select id="mt-f-donVi"><option value="">-- Chọn --</option>${nhapSuaUnitOptions.map(u=>`<option value="${esc(u)}">${esc(u)}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label>Ngày giao dịch</label><input type="date" id="mt-f-ngay" value="${toISO(today)}"></div>
+          <div class="field"><label>Loại</label>
+            <select id="mt-f-loai"><option value="Mượn">Mượn</option><option value="Trả">Trả</option></select>
+          </div>
+          <div class="field"><label>Số lượng (MT)</label><input type="text" inputmode="decimal" class="num-fmt" id="mt-f-soLuong" value=""></div>
+        </div>
+        <div class="grid cols-4">
+          <div class="field" style="grid-column:span 2"><label>Đối tượng (mượn của ai/cho ai mượn)</label><input type="text" id="mt-f-doiTuong" placeholder="VD: Kho Tiên Sa, Đơn vị X..."></div>
+          <div class="field" style="grid-column:span 2"><label>Ghi chú</label><input type="text" id="mt-f-ghiChu"></div>
+        </div>
+        <button class="btn primary" onclick="submitSoMuonTra()">💾 Lưu giao dịch</button>
+        <div class="hint-text" style="margin-top:8px">Sổ này TÁCH BIỆT với cột "Mượn/trả" trong báo cáo tồn kho hàng ngày (cột đó vẫn là số gộp mỗi ngày, tiếp tục dùng cho công thức Tồn CK/"Đầu kỳ dự kiến" như cũ) - dùng để theo dõi CHI TIẾT từng giao dịch mượn/trả và biết Dư nợ lũy kế hiện đang là bao nhiêu.</div>
+      </div>
+
+      <div class="card no-print">
+        <div class="grid cols-4">
+          <div class="field"><label>Đơn vị</label>
+            <select id="mt-donVi"><option value="" ${defaultDonVi?'':'selected'}>-- Tất cả --</option>${unitOptions.map(u=>`<option value="${esc(u)}" ${u===defaultDonVi?'selected':''}>${esc(u)}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label>Từ ngày (phát sinh)</label><input type="date" id="mt-from"></div>
+          <div class="field"><label>Đến ngày (phát sinh / tính dư nợ)</label><input type="date" id="mt-to" value="${toISO(today)}"></div>
+          <div class="field" style="display:flex;align-items:flex-end"><button class="btn primary" onclick="loadSoMuonTraReport()">🔍 Xem báo cáo</button></div>
+        </div>
+        <div class="hint-text">"Dư nợ lũy kế" = Tổng Mượn − Tổng Trả CỦA MỌI GIAO DỊCH từ trước tới đúng "Đến ngày" (không giới hạn bởi "Từ ngày" - đó chỉ để lọc bảng chi tiết bên dưới). Bỏ trống "Đến ngày" để tính dư nợ tới hiện tại.</div>
+      </div>
+      <div class="card" id="mt-summary-wrap"><div class="empty"><div class="ic">💰</div>Bấm "Xem báo cáo" để xem Dư nợ lũy kế.</div></div>
+      <div class="card" id="mt-wrap"></div>
     </div>`;
 
   if (!state.units.length) call('getUnitList', [], null).then(list => { state.units = list; });
@@ -1851,6 +1892,8 @@ function renderReport(){
   // đúng 1 Đơn vị thì tự động xem luôn báo cáo Đơn vị đó, đỡ phải bấm
   // "Xem báo cáo" thêm 1 lần khi Đơn vị đã chọn sẵn.
   if (state.reportTab === 'period' && defaultDonVi) loadReport();
+  if (state.reportTab === 'somuontra') loadSoMuonTraReport();
+  attachNumberFormatting_(c);
 }
 
 function switchReportTab(tab){
@@ -1859,6 +1902,7 @@ function switchReportTab(tab){
   document.getElementById('report-tonkhodamgo-section').classList.toggle('hidden', tab!=='tonkhodamgo');
   document.getElementById('report-candoibdmt-section').classList.toggle('hidden', tab!=='candoibdmt');
   document.getElementById('report-testkho-section').classList.toggle('hidden', tab!=='testkho');
+  document.getElementById('report-somuontra-section').classList.toggle('hidden', tab!=='somuontra');
   document.querySelectorAll('.report-tab-btn').forEach(b => b.classList.toggle('primary', b.dataset.tab===tab));
   // SỬA LỖI (mục R, v2026.8.17): trước đây CHỈ tải lại báo cáo nếu chưa
   // từng tải trong phiên làm việc (!state.tonkhoDamgoReport) - nên nếu
@@ -1870,6 +1914,8 @@ function switchReportTab(tab){
   // mục AS: tab mới "Cân đối BDMT xuất hàng" - LUÔN tải lại mỗi khi vào
   // tab (cùng lý do như trên), chi phí nhẹ vì chỉ đọc 1 sheet log riêng.
   if (tab === 'candoibdmt') loadCanDoiBDMTReport();
+  // mục AZ: tab mới "Sổ Mượn Trả" - LUÔN tải lại (cùng lý do trên).
+  if (tab === 'somuontra') loadSoMuonTraReport();
 }
 
 /** Đổi chế độ hiển thị "Theo thực tế" / "Đầy đủ số liệu" cho báo cáo
@@ -2067,6 +2113,82 @@ function renderCanDoiBDMTReportTable(){
       <td class="num">${fmtNum(res.total.dieuChinhMT)}</td><td class="num">${fmtNum(res.total.dieuChinhBDMT)}</td>
       <td></td><td></td></tr></tfoot>
     </table></div>`;
+}
+
+/* ------------------------------------------------------------
+ * "SỔ MƯỢN TRẢ" (mục AZ ở đầu Code.gs) - sổ chi tiết từng giao dịch
+ * mượn/trả, TÁCH BIỆT với cột "Mượn/trả" gộp theo ngày trong báo cáo
+ * tồn kho hàng ngày - dùng để xem Dư nợ lũy kế theo Đơn vị.
+ * ------------------------------------------------------------ */
+function submitSoMuonTra(){
+  const payload = {
+    donVi: document.getElementById('mt-f-donVi').value,
+    ngayGiaoDich: document.getElementById('mt-f-ngay').value,
+    loai: document.getElementById('mt-f-loai').value,
+    soLuong: getNumFieldValue_('mt-f-soLuong'),
+    doiTuong: document.getElementById('mt-f-doiTuong').value,
+    ghiChu: document.getElementById('mt-f-ghiChu').value
+  };
+  if (!payload.donVi) { toast('Vui lòng chọn Đơn vị.', 'warn'); return; }
+  if (!payload.ngayGiaoDich) { toast('Vui lòng chọn Ngày giao dịch.', 'warn'); return; }
+  if (payload.soLuong === '' || !(Number(payload.soLuong) > 0)) { toast('Vui lòng nhập Số lượng (MT) lớn hơn 0.', 'warn'); return; }
+  call('ghiSoMuonTra', [payload], 'Đang lưu giao dịch...').then(res => {
+    if (handleResult(res)) {
+      document.getElementById('mt-f-soLuong').value = '';
+      document.getElementById('mt-f-doiTuong').value = '';
+      document.getElementById('mt-f-ghiChu').value = '';
+      loadSoMuonTraReport();
+    }
+  });
+}
+
+function loadSoMuonTraReport(){
+  const donVi = document.getElementById('mt-donVi').value;
+  const f = document.getElementById('mt-from').value, t = document.getElementById('mt-to').value;
+  call('getSoMuonTraList', [donVi, f, t], 'Đang tải Sổ Mượn Trả...').then(res => {
+    state.soMuonTraReport = res;
+    renderSoMuonTraSummary();
+    renderSoMuonTraTable();
+  });
+}
+
+function renderSoMuonTraSummary(){
+  const wrap = document.getElementById('mt-summary-wrap');
+  const res = state.soMuonTraReport;
+  if (!res || !res.summary.length) { wrap.innerHTML = '<div class="empty"><div class="ic">💰</div>Không có Đơn vị nào để tính Dư nợ.</div>'; return; }
+  wrap.innerHTML = `<div class="section-title">Dư nợ lũy kế theo Đơn vị</div>
+    <div style="overflow-x:auto"><table><thead><tr>
+      <th>Đơn vị</th><th class="num">Tổng Mượn</th><th class="num">Tổng Trả</th><th class="num">Dư nợ (Mượn − Trả)</th>
+    </tr></thead><tbody>
+    ${res.summary.map(s => `<tr ${s.duNo>0?'style="background:var(--rose-light,#fbeaea)"':''}>
+      <td>${esc(s.donVi)}</td><td class="num">${fmtNum(s.tongMuon)}</td><td class="num">${fmtNum(s.tongTra)}</td>
+      <td class="num"><b>${fmtNum(s.duNo)}</b></td>
+    </tr>`).join('')}
+    </tbody></table></div>`;
+}
+
+function renderSoMuonTraTable(){
+  const wrap = document.getElementById('mt-wrap');
+  const res = state.soMuonTraReport;
+  if (!res || !res.rows.length) { wrap.innerHTML = '<div class="empty"><div class="ic">📭</div>Chưa có giao dịch nào khớp bộ lọc này.</div>'; return; }
+  wrap.innerHTML = `<div class="section-title">Chi tiết giao dịch (${res.soDong})</div>
+    <div style="overflow-x:auto"><table><thead><tr>
+      <th>Ngày</th><th>Đơn vị</th><th>Loại</th><th class="num">Số lượng (MT)</th>
+      <th>Đối tượng</th><th>Ghi chú</th><th>Người ghi</th><th>Thời gian ghi</th><th></th>
+    </tr></thead><tbody>
+    ${res.rows.map(r => `<tr>
+      <td>${esc(r.ngay)}</td><td>${esc(r.donVi)}</td>
+      <td>${r.loai==='Mượn'?'📥 Mượn':'📤 Trả'}</td><td class="num">${fmtNum(r.soLuong)}</td>
+      <td>${esc(r.doiTuong)}</td><td>${esc(r.ghiChu)}</td>
+      <td>${esc(r.email)}</td><td>${esc(r.thoiGianGhi)}</td>
+      <td><button class="btn sm danger admin-only ${state.isAdmin?'':'hidden'}" onclick="xoaSoMuonTraRow(${r.rowIndex})">🗑️</button></td>
+    </tr>`).join('')}
+    </tbody></table></div>`;
+}
+
+function xoaSoMuonTraRow(rowIndex){
+  if (!confirm('Xóa giao dịch Mượn/Trả này? Hành động không thể hoàn tác.')) return;
+  call('xoaSoMuonTra', [rowIndex], 'Đang xóa...').then(res => handleResult(res, loadSoMuonTraReport));
 }
 
 /* ------------------------------------------------------------

@@ -1295,6 +1295,44 @@
  *     vị+Ngày tồn kho vẫn tự chuyển sang "Sửa" (mục F), "Lệch đầu kỳ"/
  *     "Lệch định mức"/"Lệch phiếu cân" vẫn gắn "Chờ duyệt" như cũ (mục
  *     X/AA/AG) - CHỈ riêng quy tắc "1 lần/email/ngày" bị bỏ.
+ *  AZ) THÊM "SỔ MƯỢN TRẢ" (v2026.9.2), THEO YÊU CẦU MỚI "theo dõi lượng
+ *     mượn" - người dùng nhận xét cột "Mượn/trả" hiện có (COL.MUON_TRA)
+ *     chỉ là 1 SỐ GỘP mỗi ngày/Đơn vị (dùng để trừ vào Tồn CK), không
+ *     cho biết đơn vị đang mượn CỦA AI/BAO NHIÊU, đã TRẢ bao nhiêu, còn
+ *     NỢ LŨY KẾ bao nhiêu tại 1 thời điểm - phải cộng dồn thủ công qua
+ *     từng dòng Chitiettonkho mới ra được, dễ sai.
+ *     GIẢI PHÁP: thêm 1 sheet CHI TIẾT hoàn toàn MỚI + TÁCH BIỆT
+ *     "SoMuonTra" (kiến trúc giống sheet CanDoiBDMT ở mục K - độc lập
+ *     với Form Responses 1/Chitiettonkho), mỗi dòng = 1 GIAO DỊCH mượn
+ *     hoặc trả cụ thể (Ngày giao dịch, Đơn vị, Loại "Mượn"/"Trả", Số
+ *     lượng MT, Đối tượng, Ghi chú, Email, Thời gian ghi). KHÔNG ĐỘNG
+ *     TỚI cột "Mượn/trả" hiện có trong báo cáo tồn kho hàng ngày - cột
+ *     đó vẫn dùng nguyên cho công thức Tồn CK/"Đầu kỳ dự kiến" như cũ,
+ *     2 nơi lưu SONG SONG, không phụ thuộc nhau (nhập báo cáo ngày vẫn
+ *     chỉ cần 1 số gộp; Sổ Mượn Trả là công cụ TRA CỨU/THEO DÕI chi tiết
+ *     bổ sung, không bắt buộc phải khớp 1-1 với số gộp đó).
+ *       1. getOrCreateSoMuonTraSheet_() - tạo sheet "SoMuonTra" nếu
+ *          chưa có, 8 cột (xem trên).
+ *       2. ghiSoMuonTra(payload) - ghi 1 giao dịch mới, CÙNG quy tắc
+ *          phân quyền với submitInventoryEntry (Admin toàn quyền; người
+ *          dùng thường phải có quyền "nhap_sua" ĐÚNG Đơn vị) - KHÔNG có
+ *          giới hạn 1 lần/ngày (nhất quán với mục AY). Ghi Audit mỗi
+ *          lần ghi.
+ *       3. getSoMuonTraList(donViFilter, fDate, tDate) - CHẶN Ở SERVER
+ *          theo donViChoPhepCuaToi_ (giống mọi báo cáo khác). Trả về
+ *          `rows` (danh sách giao dịch, lọc theo Đơn vị/khoảng ngày
+ *          PHÁT SINH nếu có) VÀ `summary` (Dư nợ lũy kế theo Đơn vị =
+ *          Tổng Mượn − Tổng Trả CỦA MỌI GIAO DỊCH TỪ TRƯỚC ĐẾN ĐÚNG
+ *          `tDate` nếu có lọc "Đến ngày", hoặc toàn bộ nếu bỏ trống -
+ *          dư nợ là số LŨY KẾ nên KHÔNG bị giới hạn bởi `fDate`, chỉ
+ *          `tDate` mới có ý nghĩa "tính đến thời điểm nào").
+ *       4. xoaSoMuonTra(rowIndex) - CHỈ ADMIN, xóa 1 dòng ghi nhầm/trùng
+ *          (không có "sửa" - muốn sửa thì xóa rồi ghi lại cho rõ ràng).
+ *     Index.html: thêm tab "🧾 Sổ Mượn Trả" ở trang "Báo Cáo Tổng Hợp"
+ *     (cạnh Test Kho) - gồm form ghi giao dịch mới (Đơn vị giới hạn
+ *     theo quyền nhap_sua của người dùng, hoặc mọi Đơn vị nếu Admin),
+ *     bảng "Dư nợ lũy kế" theo Đơn vị, và bảng chi tiết từng giao dịch
+ *     (nút Xóa chỉ Admin thấy).
  * ============================================================
  */
 
@@ -1316,6 +1354,10 @@ const CFG = {
   // mức (%) admin cấu hình cho từng Đơn vị để tự động kiểm tra khớp.
   SHEET_PHANQUYEN: "PhanQuyen",
   SHEET_DIEUKIENDUYET: "DieuKienDuyet",
+  // Sổ chi tiết Mượn/Trả (mục AY, v2026.9.2) - xem ghi chú thiết kế ở
+  // mục AY đầu file: sheet RIÊNG lưu TỪNG giao dịch mượn/trả (khác với
+  // cột MUON_TRA gộp theo ngày trong Form Responses 1/Chitiettonkho).
+  SHEET_SOMUONTRA: "SoMuonTra",
   // Danh sách đơn vị báo cáo (đã thấy trong dữ liệu thực tế) - có thể
   // thêm/bớt tại đây nếu công ty mở thêm đơn vị mới.
   UNITS: ["HAK (Bà Nà)", "CNHAK (QS)", "Đại Hiệp (Đại Lộc)", "HAKQN (QS Trung)"],
@@ -3245,6 +3287,148 @@ function getKiemTraDauKyReport(donViFilter, fDate, tDate) {
     soDong: rows.length,
     soDongLech: rows.filter(function (r) { return r.coDuLieuTruoc && !r.khop; }).length
   };
+}
+
+// ============================================================
+// SỔ MƯỢN TRẢ (mục AY, v2026.9.2), THÊM MỚI theo yêu cầu "theo dõi
+// lượng mượn" - sheet RIÊNG "SoMuonTra" (độc lập với Form Responses
+// 1/Chitiettonkho, giống kiến trúc CanDoiBDMT ở mục K), KHÔNG thay đổi
+// cột "Mượn/trả" (COL.MUON_TRA) đã có sẵn trong báo cáo tồn kho hàng
+// ngày - cột đó vẫn là số GỘP mỗi ngày/Đơn vị, tiếp tục dùng nguyên cho
+// công thức Tồn CK/"Đầu kỳ dự kiến" (timTonCuoiKyTruoc_) như cũ, KHÔNG
+// ĐỘNG TỚI. Sổ Mượn Trả là 1 SỔ CHI TIẾT bổ sung, TÁCH BIỆT: mỗi dòng =
+// 1 GIAO DỊCH mượn hoặc trả cụ thể (Ngày, Đơn vị, Loại, Số lượng, Đối
+// tượng, Ghi chú) - dùng để biết CHÍNH XÁC đơn vị đang mượn của ai/bao
+// nhiêu, đã trả bao nhiêu, còn NỢ LŨY KẾ bao nhiêu tại 1 thời điểm - số
+// mà cột MUON_TRA gộp theo ngày không thể trả lời được.
+// ------------------------------------------------------------
+function getOrCreateSoMuonTraSheet_() {
+  const ss = SpreadsheetApp.getActive();
+  let sh = ss.getSheetByName(CFG.SHEET_SOMUONTRA);
+  if (!sh) {
+    sh = ss.insertSheet(CFG.SHEET_SOMUONTRA);
+    sh.appendRow(["Ngày giao dịch", "Đơn vị", "Loại (Mượn/Trả)", "Số lượng (MT)", "Đối tượng", "Ghi chú", "Email", "Thời gian ghi"]);
+    sh.getRange(1, 1, 1, 8).setFontWeight("bold").setBackground("#d9d9d9");
+  }
+  return sh;
+}
+
+/** Ghi 1 giao dịch Mượn/Trả mới - CÙNG quy tắc phân quyền với
+ * submitInventoryEntry (Admin toàn quyền; người dùng thường phải có
+ * quyền "nhap_sua" ĐÚNG Đơn vị đang ghi). KHÔNG có giới hạn 1 lần/ngày
+ * (nhất quán với việc đã bỏ hẳn quy tắc đó ở mục AY trên). */
+function ghiSoMuonTra(payload) {
+  let lock;
+  try {
+    lock = LockService.getScriptLock();
+    lock.waitLock(30000);
+    if (!payload) throw new Error("Không nhận được dữ liệu.");
+    const email = utils.normEmail(getCurrentUserEmail_());
+    const isAdmin = utils.isAdmin(email);
+
+    const donVi = String(payload.donVi || "").trim();
+    if (!donVi) return { success: false, message: "❌ Vui lòng chọn Đơn vị." };
+    if (!isAdmin) {
+      const pq = layPhanQuyenNguoiDung_(email);
+      if (!pq.coQuyenGi) {
+        return { success: false, message: "❌ Email " + email + " chưa được Admin cấp quyền sử dụng hệ thống." };
+      }
+      if (pq.donViNhapSua.indexOf(donVi) === -1) {
+        return { success: false, message: "❌ Bạn không có quyền Nhập/Sửa cho đơn vị \"" + donVi + "\"." };
+      }
+    }
+    if (!payload.ngayGiaoDich) return { success: false, message: "❌ Vui lòng chọn Ngày giao dịch." };
+    const ngay = new Date(payload.ngayGiaoDich);
+    if (isNaN(ngay.getTime())) return { success: false, message: "❌ Ngày giao dịch không hợp lệ." };
+    const loai = String(payload.loai || "").trim();
+    if (loai !== "Mượn" && loai !== "Trả") return { success: false, message: "❌ Vui lòng chọn Loại giao dịch (Mượn hoặc Trả)." };
+    const soLuong = utils.parseNum(payload.soLuong);
+    if (!(soLuong > 0)) return { success: false, message: "❌ Số lượng (MT) phải lớn hơn 0." };
+
+    const sh = getOrCreateSoMuonTraSheet_();
+    sh.appendRow([
+      ngay, donVi, loai, soLuong,
+      String(payload.doiTuong || "").trim(), String(payload.ghiChu || "").trim(),
+      email, new Date()
+    ]);
+    logAudit_(email, donVi, utils.formatDate(ngay), "Ghi Sổ Mượn Trả: " + loai + " " + fmtNumVN_(soLuong) + " MT");
+    return { success: true, message: `✅ Đã ghi "${loai}" ${fmtNumVN_(soLuong)} MT cho "${donVi}" ngày ${utils.formatDate(ngay)}.` };
+  } catch (err) {
+    return { success: false, message: "❌ Lỗi: " + err.toString() };
+  } finally {
+    if (lock) lock.releaseLock();
+  }
+}
+
+/** Danh sách giao dịch Sổ Mượn Trả + "Dư nợ lũy kế" theo Đơn vị (= Tổng
+ * Mượn − Tổng Trả CỦA MỌI GIAO DỊCH TỪ TRƯỚC ĐẾN ĐÚNG `tDate` nếu có
+ * lọc, hoặc TOÀN BỘ nếu bỏ trống - KHÔNG bị giới hạn bởi `fDate`, vì dư
+ * nợ là số LŨY KẾ, không phải số phát sinh riêng trong khoảng lọc).
+ * CHẶN Ở SERVER theo donViChoPhepCuaToi_ giống các báo cáo khác. */
+function getSoMuonTraList(donViFilter, fDate, tDate) {
+  const sh = getOrCreateSoMuonTraSheet_();
+  const lastRow = sh.getLastRow();
+  const allowedUnits = donViChoPhepCuaToi_(utils.normEmail(getCurrentUserEmail_()));
+  if (lastRow < 2) return { rows: [], summary: [], soDong: 0 };
+
+  const data = sh.getRange(2, 1, lastRow - 1, 8).getValues();
+  let all = data.map(function (r, idx) {
+    return {
+      rowIndex: idx + 2,
+      ngayISO: utils.formatDateISO(r[0]),
+      ngay: utils.formatDate(r[0]),
+      donVi: String(r[1] || "").trim(),
+      loai: String(r[2] || "").trim(),
+      soLuong: utils.parseNum(r[3]),
+      doiTuong: String(r[4] || ""),
+      ghiChu: String(r[5] || ""),
+      email: String(r[6] || ""),
+      thoiGianGhi: utils.formatDate(r[7])
+    };
+  }).filter(r => r.donVi && r.ngayISO);
+  if (allowedUnits) all = all.filter(r => allowedUnits.includes(r.donVi));
+
+  let rows = all;
+  if (donViFilter) rows = rows.filter(r => r.donVi === donViFilter);
+  if (fDate) rows = rows.filter(r => r.ngayISO >= fDate);
+  if (tDate) rows = rows.filter(r => r.ngayISO <= tDate);
+  rows.sort(function (a, b) {
+    if (a.ngayISO !== b.ngayISO) return a.ngayISO < b.ngayISO ? 1 : -1;
+    return b.rowIndex - a.rowIndex;
+  });
+
+  const unitsForSummary = donViFilter ? [donViFilter] : (allowedUnits || CFG.UNITS);
+  const summary = unitsForSummary.map(function (donVi) {
+    let tongMuon = 0, tongTra = 0;
+    all.forEach(function (r) {
+      if (r.donVi !== donVi) return;
+      if (tDate && r.ngayISO > tDate) return; // dư nợ TÍNH ĐẾN tDate nếu có lọc
+      if (r.loai === "Mượn") tongMuon += r.soLuong;
+      else if (r.loai === "Trả") tongTra += r.soLuong;
+    });
+    return { donVi, tongMuon, tongTra, duNo: tongMuon - tongTra };
+  });
+
+  return { rows, summary, soDong: rows.length };
+}
+
+/** Xóa 1 dòng Sổ Mượn Trả - CHỈ ADMIN (cùng nguyên tắc với xóaDuLieu ở
+ * Lịch Sử) - dùng khi ghi nhầm/trùng, không có "sửa" vì giao dịch mượn
+ * trả nên XÓA rồi GHI LẠI cho rõ ràng thay vì sửa đè lịch sử. */
+function xoaSoMuonTra(rowIndex) {
+  try {
+    const email = getCurrentUserEmail_();
+    if (!utils.isAdmin(email)) return { success: false, message: "❌ Chỉ Admin mới được xóa Sổ Mượn Trả." };
+    const sh = getOrCreateSoMuonTraSheet_();
+    if (rowIndex < 2 || rowIndex > sh.getLastRow()) return { success: false, message: "❌ Dòng không hợp lệ." };
+    const r = sh.getRange(rowIndex, 1, 1, 8).getValues()[0];
+    const donVi = String(r[1] || ""), ngay = utils.formatDate(r[0]);
+    sh.deleteRow(rowIndex);
+    logAudit_(email, donVi, ngay, "Xóa dòng Sổ Mượn Trả bởi admin qua Web App");
+    return { success: true, message: "✅ Đã xóa dòng Sổ Mượn Trả." };
+  } catch (err) {
+    return { success: false, message: "❌ Lỗi: " + err.toString() };
+  }
 }
 
 // ============================================================

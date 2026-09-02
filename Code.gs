@@ -1356,6 +1356,78 @@
  *     #mt-summary-doituong-wrap) ngay dưới bảng "Dư nợ lũy kế theo Đơn
  *     vị" cũ - đây mới là bảng TRẢ LỜI TRỰC TIẾP câu "đang nợ ai bao
  *     nhiêu".
+ *  BB) HỆ THỐNG "NGHIỆP VỤ KHO" (v2026.9.2), THEO YÊU CẦU MỚI cấu trúc
+ *     lại toàn bộ cách ghi nhận tồn kho theo đúng nghiệp vụ kế toán kho
+ *     thật (đã hỏi lại và xác nhận qua AskUserQuestion 4 điểm chính - số
+ *     4 bên dưới): hệ thống hiện tại (Form Responses 1/Chitiettonkho)
+ *     ghi theo kiểu "báo cáo TỔNG cuối ngày" (mỗi Đơn vị 1 dòng/ngày với
+ *     các số TỔNG: Cộng MT, Mượn/trả, Nhập gỗ...) - không thể hiện được
+ *     TỪNG nghiệp vụ cụ thể (nhập/xuất/mượn/trung chuyển là gì, khi nào,
+ *     giữa kho nào với kho nào), không có Độ khô theo LÔ HÀNG THẬT
+ *     (FIFO), và "Cân đối BDMT xuất hàng" (mục K) phải nhập tay nhiều số
+ *     liệu vì không có sổ cái theo dõi từng lô.
+ *     THIẾT KẾ (xem plan đầy đủ lúc thực hiện, tóm tắt lại đây):
+ *       1. TRIỂN KHAI SONG SONG - 4 sheet HOÀN TOÀN MỚI/TÁCH BIỆT
+ *          (NghiepVuKho/ChitietKho_NVK/BaoCao_NVK/AuditNVK), KHÔNG sửa/
+ *          xóa bất kỳ hàm/sheet nào của hệ thống cũ - chạy song song để
+ *          đối chiếu số liệu (xem getDoiChieuNVKvsHeThongCu) trước khi
+ *          quyết định chuyển hẳn. PhanQuyen GIỮ NGUYÊN 100% - mọi hàm
+ *          ghi Nghiệp vụ kho dùng lại ĐÚNG layPhanQuyenNguoiDung_/
+ *          utils.isAdmin (xem kiemTraQuyenGhiNVK_).
+ *       2. NHẬP TỪNG NGHIỆP VỤ KHI PHÁT SINH - bỏ tinh thần "1 dòng
+ *          tổng/ngày", sổ "NghiepVuKho" mỗi dòng = 1 giao dịch cụ thể:
+ *          NHẬP (Sản xuất/Trung chuyển/Mượn/Nhập cân đối kho/Nhập trao
+ *          đổi) có Kho nhập, không Kho xuất; XUẤT (Xuất bán/Trung
+ *          chuyển/Mượn/Xuất cân đối kho/Xuất trao đổi) có Kho xuất,
+ *          không Kho nhập - Khối lượng BDMT = Khối lượng MT × Độ khô.
+ *          "Trung chuyển" và "Mượn/Trả" sinh CẶP 2 dòng liên kết (chung
+ *          "Chứng từ gốc") - 1 Xuất từ nguồn + 1 Nhập vào đích, CÙNG Độ
+ *          khô (BDMT bảo toàn khi chuyển kho). Mượn = Xuất từ Kho thực +
+ *          Nhập vào kho ẢO "Kho mượn - <Đối tượng>" (hợp nhất "Sổ Mượn
+ *          Trả" mục AZ/BA vào kiến trúc chung - dư nợ = số dư FIFO hiện
+ *          tại của đúng kho ảo đó, xem getSoDuKhoHienTai/getSoDuTatCaKho).
+ *       3. ĐỘ KHÔ KHI XUẤT (trừ Xuất bán): TỰ TÍNH THEO FIFO - mỗi
+ *          (Kho, Đơn vị) là 1 hàng đợi lô {ngày nhập, chứng từ, MT còn
+ *          lại, Độ khô} theo đúng thứ tự nhập trước (xem timFIFOLoKho_);
+ *          Xuất tiêu thụ từ lô CŨ NHẤT trước, cắt lô nếu xuất không hết,
+ *          vắt qua nhiều lô thì Độ khô = bình quân gia quyền theo MT của
+ *          các lô bị tiêu thụ (hàm THUẦN tieuThuFIFO_, không đụng Sheet,
+ *          dễ unit test - xem TEST A trong kiểm thử). Không duy trì bảng
+ *          số dư riêng - replay lại từ sheet log mỗi lần cần, nhất quán
+ *          phong cách code sẵn có (timTonCuoiKyTruoc_/readAllChitietData_
+ *          cũng luôn quét lại).
+ *       4. "XUẤT BÁN" TỰ ĐỘNG CÂN ĐỐI - GIỮ NGUYÊN công thức "Cân đối
+ *          BDMT xuất hàng" cũ (computeCanDoiBDMT_, mục K), CHỈ đổi cách
+ *          kích hoạt (tự động khi ghi "Xuất bán", thay vì tick + điền
+ *          tab riêng như trước): công thức được TRÍCH XUẤT NGUYÊN VĂN
+ *          thành hàm thuần tinhCanDoiBDMT_ (không đụng Sheet/không đọc ô
+ *          COL.DO_KHO cố định như bản gốc) để dùng lại được với input
+ *          `doKhoTBNhaMayFrac` lấy từ tinhDoKhoTBKhoNhaMay_ (bình quân
+ *          FIFO các Kho Nhà máy của Đơn vị tại thời điểm hiện tại) thay
+ *          vì đọc ô Sheet cố định - ĐÃ KIỂM CHỨNG tái tạo ĐÚNG 100% số
+ *          liệu thật (dieuChinhMT=533.29.../dieuChinhBDMT=204.43...) từ
+ *          chính dòng đầu tiên sheet CanDoiBDMT người dùng export (Kho
+ *          Tiên Sa, HAKQN, 20/08/2026) - xem TEST D/E trong kiểm thử.
+ *          ghiXuatBan() tự sinh 3 dòng dùng chung 1 Chứng từ gốc: (a)
+ *          Xuất bán chính (Độ khô = Độ khô cân đối đo tại bán), (b)
+ *          Nhập/Xuất cân đối kho ở Kho Nhà máy MẶC ĐỊNH của Đơn vị
+ *          (CFG.DONVI_KHO_NHA_MAY_MAC_DINH) tùy dấu dieuChinhMT, (c)
+ *          dòng đối ứng đưa Kho xuất bán về ĐÚNG 0 (xử lý phần dư/thiếu
+ *          làm tròn giữa số dư FIFO trước đó và Khối lượng thực tế MT).
+ *     4 SHEET: `NghiepVuKho` (sổ nhật ký gốc, append-only), sheet trung
+ *     gian `ChitietKho_NVK` (tự đồng bộ mỗi lần ghi qua
+ *     syncNVKStagingForKey_ - mỗi dòng = số dư CUỐI NGÀY 1 (Đơn vị,
+ *     Ngày), Báo cáo đọc thẳng từ đây), sheet báo cáo `BaoCao_NVK`
+ *     (dựng theo mẫu Tonkho_Damgo, chưa auto-populate ở bản đầu này -
+ *     Web App đọc trực tiếp qua getNVKBaoCao thay thế tạm), sheet log
+ *     `AuditNVK` (tách khỏi Audit cũ, không lẫn hoạt động 2 hệ thống).
+ *     Index.html: nav-item MỚI "🧾 Nghiệp Vụ Kho" (tag "thử nghiệm"),
+ *     trang riêng gồm 5 tab: Ghi nghiệp vụ (form động theo Nhóm nghiệp
+ *     vụ: Nhập kho/Xuất kho thường/Trung chuyển/Mượn-Trả/Xuất bán), Lịch
+ *     sử (renderNVKLichSuTable_, Xóa chỉ Admin), Tồn kho theo Kho (kể cả
+ *     "Kho mượn - X"), Báo cáo (Tồn đầu/Nhập/Xuất/Tồn CK theo Đơn vị+
+ *     Ngày), và Đối chiếu hệ thống cũ (so Tồn CK 2 hệ thống, đánh dấu
+ *     Khớp/Lệch - công cụ CHÍNH để kiểm thử trong giai đoạn song song).
  * ============================================================
  */
 
@@ -1384,6 +1456,35 @@ const CFG = {
   // Danh sách đơn vị báo cáo (đã thấy trong dữ liệu thực tế) - có thể
   // thêm/bớt tại đây nếu công ty mở thêm đơn vị mới.
   UNITS: ["HAK (Bà Nà)", "CNHAK (QS)", "Đại Hiệp (Đại Lộc)", "HAKQN (QS Trung)"],
+  // ==========================================================
+  // HỆ THỐNG "NGHIỆP VỤ KHO" (mục BB, v2026.9.2) - xem ghi chú thiết
+  // kế đầy đủ ở mục BB đầu file. 4 sheet MỚI, HOÀN TOÀN TÁCH BIỆT với
+  // hệ thống cũ ở trên (Form Responses 1/Chitiettonkho/CanDoiBDMT...) -
+  // chạy SONG SONG để đối chiếu trước khi quyết định chuyển hẳn.
+  // ==========================================================
+  SHEET_NGHIEPVUKHO: "NghiepVuKho",       // sổ nhật ký gốc (append-only)
+  SHEET_NVK_STAGING: "ChitietKho_NVK",     // sheet trung gian (tự đồng bộ)
+  SHEET_NVK_BAOCAO: "BaoCao_NVK",          // sheet báo cáo (dựng theo yêu cầu)
+  SHEET_NVK_LOG: "AuditNVK",               // sheet log riêng cho Nghiệp vụ kho
+  // 4 Kho Nhà máy - ĐÚNG 4 cột đã có trong báo cáo cũ (Hòa Nhơn/Quế
+  // Sơn/Đại Hiệp/HAKQN). Mỗi Đơn vị có 1 Kho Nhà máy "của mình" (dùng
+  // làm mặc định/đích cho các bút toán tự động) - xem
+  // DONVI_KHO_NHA_MAY_MAC_DINH bên dưới - nhưng schema KHÔNG cấm ghi
+  // vào kho khác (giữ đúng linh hoạt như cột cũ).
+  KHO_NHA_MAY: ["Hòa Nhơn", "Quế Sơn", "Đại Hiệp", "HAKQN"],
+  // 2 Kho xuất hàng - ĐÚNG TÊN đã dùng ở tab "Cân đối BDMT xuất hàng"
+  // (mục K) để nhất quán toàn hệ thống.
+  KHO_XUAT_HANG: ["Kho Tiên Sa", "Kho Dung Quất"],
+  // Kho Nhà máy "của mình" mặc định cho từng Đơn vị (dùng làm đích/gốc
+  // cho "Sản xuất" và bút toán "cân đối kho" tự động khi Xuất bán) -
+  // khớp đúng cách dữ liệu thực tế hiện có (mỗi Đơn vị chỉ có hàng ở
+  // ĐÚNG 1 trong 4 cột Hòa Nhơn/Quế Sơn/Đại Hiệp/HAKQN).
+  DONVI_KHO_NHA_MAY_MAC_DINH: {
+    "HAK (Bà Nà)": "Hòa Nhơn",
+    "CNHAK (QS)": "Quế Sơn",
+    "Đại Hiệp (Đại Lộc)": "Đại Hiệp",
+    "HAKQN (QS Trung)": "HAKQN"
+  },
   // Đối chiếu tự động "Nhập gỗ keo trong ngày" với PHIẾU CÂN THỰC TẾ -
   // mỗi Đơn vị có 1 file Google Sheet RIÊNG (KHÔNG thuộc file dữ liệu
   // đứng sau Web App này) do bộ phận cân xe ghi - xem mục AG,
@@ -4998,4 +5099,766 @@ function TAT_LICH_BAO_CAO_TON_KHO_TELEGRAM() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === "BAO_CAO_TON_KHO_TELEGRAM_HANG_NGAY_") ScriptApp.deleteTrigger(t);
   });
+}
+
+// ================================================================
+// HỆ THỐNG "NGHIỆP VỤ KHO" (mục BB, v2026.9.2) - xem ghi chú thiết kế
+// đầy đủ ở mục BB đầu file. TOÀN BỘ section này HOÀN TOÀN TÁCH BIỆT với
+// hệ thống cũ ở trên (Form Responses 1/Chitiettonkho/CanDoiBDMT/SoMuonTra
+// ...) - chạy SONG SONG để đối chiếu số liệu trước khi quyết định
+// chuyển hẳn (không sửa/xóa bất kỳ hàm nào ở trên). Chỉ dùng lại
+// `layPhanQuyenNguoiDung_`/`utils.isAdmin`/`donViChoPhepCuaToi_` (Phân
+// quyền GIỮ NGUYÊN như yêu cầu) và `utils`/`fmtNumVN_`/`fmtPctVN_` sẵn
+// có - không tạo cơ chế phân quyền/định dạng số mới.
+// ================================================================
+
+const COL_NVK = {
+  TIMESTAMP: 0, CHUNG_TU: 1, CHUNG_TU_GOC: 2, NGAY_CHUNG_TU: 3,
+  LOAI: 4, HINH_THUC: 5, KHOI_LUONG_MT: 6, DO_KHO: 7, KHOI_LUONG_BDMT: 8,
+  KHO_NHAP: 9, KHO_XUAT: 10, DON_VI: 11, DOI_TUONG: 12, GHI_CHU: 13,
+  TRANG_THAI: 14, EMAIL: 15
+};
+const NVK_TOTAL_COL = 16;
+
+function getOrCreateNghiepVuKhoSheet_() {
+  const ss = SpreadsheetApp.getActive();
+  let sh = ss.getSheetByName(CFG.SHEET_NGHIEPVUKHO);
+  if (!sh) {
+    sh = ss.insertSheet(CFG.SHEET_NGHIEPVUKHO);
+    sh.appendRow([
+      "Timestamp", "Chứng từ", "Chứng từ gốc", "Ngày chứng từ", "Loại", "Hình thức",
+      "Khối lượng MT", "Độ khô", "Khối lượng BDMT", "Kho nhập", "Kho xuất",
+      "Đơn vị", "Đối tượng", "Ghi chú", "Trạng thái", "Email"
+    ]);
+    sh.getRange(1, 1, 1, NVK_TOTAL_COL).setFontWeight("bold").setBackground("#d9d9d9");
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+// Sheet trung gian (mục BB) - tự đồng bộ sau mỗi lần ghi Nghiệp vụ kho,
+// mỗi dòng = số dư CUỐI NGÀY của 1 (Đơn vị, Ngày) - Báo cáo đọc thẳng từ
+// đây, không phải replay FIFO lại từ đầu mỗi lần xem (chỉ replay lúc
+// ghi/đồng bộ - xem syncNVKStagingForKey_).
+function getOrCreateNVKStagingSheet_() {
+  const ss = SpreadsheetApp.getActive();
+  let sh = ss.getSheetByName(CFG.SHEET_NVK_STAGING);
+  if (!sh) {
+    sh = ss.insertSheet(CFG.SHEET_NVK_STAGING);
+    sh.appendRow([
+      "Đơn vị", "Ngày", "Tồn đầu ngày MT", "Tồn đầu ngày BDMT",
+      "Nhập trong ngày MT", "Nhập trong ngày BDMT",
+      "Xuất trong ngày MT", "Xuất trong ngày BDMT",
+      "Tồn CK MT", "Tồn CK BDMT", "Độ khô TB CK", "Cập nhật lúc"
+    ]);
+    sh.getRange(1, 1, 1, 12).setFontWeight("bold").setBackground("#d9ead3");
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+function getOrCreateNVKBaoCaoSheet_() {
+  const ss = SpreadsheetApp.getActive();
+  let sh = ss.getSheetByName(CFG.SHEET_NVK_BAOCAO);
+  if (!sh) sh = ss.insertSheet(CFG.SHEET_NVK_BAOCAO);
+  return sh;
+}
+
+function getOrCreateNVKLogSheet_() {
+  const ss = SpreadsheetApp.getActive();
+  let sh = ss.getSheetByName(CFG.SHEET_NVK_LOG);
+  if (!sh) {
+    sh = ss.insertSheet(CFG.SHEET_NVK_LOG);
+    sh.appendRow(["Thời gian", "Email", "Đơn vị", "Chứng từ", "Hành động"]);
+    sh.getRange(1, 1, 1, 5).setFontWeight("bold").setBackground("#d9d9d9");
+  }
+  return sh;
+}
+function logNVK_(email, donVi, chungTu, hanhDong) {
+  getOrCreateNVKLogSheet_().appendRow([new Date(), email, donVi, chungTu, hanhDong]);
+}
+
+/** Số chứng từ tự động dạng "NVK{yyyyMMdd}-{số thứ tự trong ngày, 3 chữ
+ * số}" - tăng dần trong ngày, KHÔNG trùng (quét lại cột Chứng từ của
+ * chính ngày đó để tìm số lớn nhất). Luôn gọi hàm này BÊN TRONG
+ * LockService (xem các hàm ghi* bên dưới) để tránh 2 người ghi cùng lúc
+ * bị trùng số. */
+function sinhSoChungTu_(ngay) {
+  const prefix = "NVK" + Utilities.formatDate(ngay, "GMT+7", "yyyyMMdd") + "-";
+  const sh = getOrCreateNghiepVuKhoSheet_();
+  const lastRow = sh.getLastRow();
+  let maxSeq = 0;
+  if (lastRow >= 2) {
+    const data = sh.getRange(2, COL_NVK.CHUNG_TU + 1, lastRow - 1, 1).getValues();
+    data.forEach(function (r) {
+      const v = String(r[0] || "");
+      if (v.indexOf(prefix) !== 0) return;
+      const rest = v.slice(prefix.length);
+      const seq = parseInt(rest, 10); // "005" hoặc "005-X"/"005-N"/"005-B"/"005-C"/"005-D" đều parseInt đúng phần số đầu
+      if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+    });
+  }
+  return prefix + String(maxSeq + 1).padStart(3, "0");
+}
+
+/** Ghi 1 dòng THÔ vào NghiepVuKho (helper nội bộ dùng chung cho mọi hàm
+ * ghi* bên dưới) - tự tính Khối lượng BDMT = Khối lượng MT × Độ khô. */
+function ghiMotDongNVK_(sh, o) {
+  const bdmt = o.mt * o.doKho;
+  sh.appendRow([
+    new Date(), o.chungTu, o.chungTuGoc || o.chungTu, o.ngayChungTu,
+    o.loai, o.hinhThuc, o.mt, o.doKho, bdmt,
+    o.khoNhap || "", o.khoXuat || "", o.donVi, o.doiTuong || "", o.ghiChu || "",
+    o.trangThai || "Chính thức", o.email
+  ]);
+  return bdmt;
+}
+
+/** Kiểm tra quyền ghi Nghiệp vụ kho cho 1 Đơn vị - Y HỆT quy tắc
+ * submitInventoryEntry() (Admin toàn quyền; người dùng thường phải có
+ * quyền "nhap_sua" ĐÚNG Đơn vị) - dùng lại layPhanQuyenNguoiDung_/
+ * utils.isAdmin sẵn có, KHÔNG tạo cơ chế phân quyền mới. */
+function kiemTraQuyenGhiNVK_(email, donVi) {
+  const isAdmin = utils.isAdmin(email);
+  if (isAdmin) return { ok: true, isAdmin: true };
+  const pq = layPhanQuyenNguoiDung_(email);
+  if (!pq.coQuyenGi) return { ok: false, message: "❌ Email " + email + " chưa được Admin cấp quyền sử dụng hệ thống." };
+  if (pq.donViNhapSua.indexOf(donVi) === -1) return { ok: false, message: "❌ Bạn không có quyền Nhập/Sửa cho đơn vị \"" + donVi + "\"." };
+  return { ok: true, isAdmin: false };
+}
+
+// ----------------------------------------------------------------
+// FIFO THEO TỪNG (KHO, ĐƠN VỊ) - "nhập trước xuất trước" đúng nghĩa.
+// ----------------------------------------------------------------
+
+/** Hàm THUẦN (không đụng Sheet) - tiêu thụ `mtCanXuat` từ `danhSachLo`
+ * (mảng lô {ngayNhap, chungTu, mtConLai, doKho}, ĐÃ ở đúng thứ tự nhập
+ * trước) theo FIFO - KHÔNG sửa đổi `danhSachLo` truyền vào (trả về bản
+ * sao đã trừ ở `loConLaiSauKhiTru`) - dễ unit test độc lập. Nếu không đủ
+ * lô để xuất hết `mtCanXuat`, phần thiếu trả về ở `mtThieu` (dương) -
+ * người gọi tự quyết định chặn hay cho phép (Admin ghi đè). Độ khô của
+ * lượng xuất = bình quân gia quyền theo MT của các lô bị tiêu thụ, đảm
+ * bảo BDMT xuất = đúng tổng BDMT bị trừ ra khỏi từng lô (không lệch số
+ * học dù vắt qua nhiều lô khác Độ khô nhau). */
+function tieuThuFIFO_(danhSachLo, mtCanXuat) {
+  let conLai = mtCanXuat;
+  let bdmtXuat = 0;
+  const loMoi = danhSachLo.map(function (l) {
+    return { ngayNhap: l.ngayNhap, chungTu: l.chungTu, mtConLai: l.mtConLai, doKho: l.doKho };
+  });
+  for (let i = 0; i < loMoi.length && conLai > 0.0001; i++) {
+    const lo = loMoi[i];
+    if (lo.mtConLai <= 0) continue;
+    const mtLay = Math.min(lo.mtConLai, conLai);
+    bdmtXuat += mtLay * lo.doKho;
+    lo.mtConLai -= mtLay;
+    conLai -= mtLay;
+  }
+  const mtThieu = conLai > 0.0001 ? conLai : 0;
+  const mtThucXuat = mtCanXuat - mtThieu;
+  return {
+    doKhoBinhQuan: mtThucXuat > 0 ? bdmtXuat / mtThucXuat : 0,
+    bdmtXuat,
+    mtThieu,
+    loConLaiSauKhiTru: loMoi.filter(function (l) { return l.mtConLai > 0.0001; })
+  };
+}
+
+/** Replay TOÀN BỘ NghiepVuKho theo đúng thứ tự "nhập trước" (Ngày chứng
+ * từ rồi tới Timestamp ghi - để tách được nhiều nghiệp vụ cùng ngày),
+ * trả về hàng đợi lô CÒN TỒN của đúng 1 (kho, donVi) - tại thời điểm
+ * HIỆN TẠI, hoặc TÍNH ĐẾN đúng `denNgayISO` (bao gồm) nếu có truyền (ví
+ * dụ dùng cho báo cáo/đối chiếu theo 1 ngày quá khứ - xem
+ * syncNVKStagingForKey_). Không duy trì bảng số dư riêng - nhất quán
+ * với phong cách code sẵn có (timTonCuoiKyTruoc_, readAllChitietData_
+ * cũng luôn quét lại từ sheet log mỗi lần gọi). */
+function timFIFOLoKho_(kho, donVi, denNgayISO) {
+  const sh = getOrCreateNghiepVuKhoSheet_();
+  const lastRow = sh.getLastRow();
+  if (lastRow < 2) return [];
+  const data = sh.getRange(2, 1, lastRow - 1, NVK_TOTAL_COL).getValues();
+  const rows = data
+    .map(function (r, idx) { return { r: r, idx: idx }; })
+    .sort(function (a, b) {
+      const da = a.r[COL_NVK.NGAY_CHUNG_TU], db = b.r[COL_NVK.NGAY_CHUNG_TU];
+      if (da instanceof Date && db instanceof Date && da.getTime() !== db.getTime()) return da - db;
+      const ta = a.r[COL_NVK.TIMESTAMP], tb = b.r[COL_NVK.TIMESTAMP];
+      if (ta instanceof Date && tb instanceof Date && ta.getTime() !== tb.getTime()) return ta - tb;
+      return a.idx - b.idx;
+    });
+
+  let lots = [];
+  rows.forEach(function (item) {
+    const r = item.r;
+    if (String(r[COL_NVK.DON_VI] || "").trim() !== donVi) return;
+    const ngayISO = utils.formatDateISO(r[COL_NVK.NGAY_CHUNG_TU]);
+    if (denNgayISO && ngayISO > denNgayISO) return;
+    const loai = String(r[COL_NVK.LOAI] || "").trim();
+    const mt = utils.parseNum(r[COL_NVK.KHOI_LUONG_MT]);
+    const doKho = utils.parseNum(r[COL_NVK.DO_KHO]);
+    if (loai === "Nhập" && String(r[COL_NVK.KHO_NHAP] || "").trim() === kho) {
+      lots.push({ ngayNhap: r[COL_NVK.NGAY_CHUNG_TU], chungTu: String(r[COL_NVK.CHUNG_TU] || ""), mtConLai: mt, doKho: doKho });
+    } else if (loai === "Xuất" && String(r[COL_NVK.KHO_XUAT] || "").trim() === kho) {
+      lots = tieuThuFIFO_(lots, mt).loConLaiSauKhiTru;
+    }
+  });
+  return lots;
+}
+
+/** Độ khô TRUNG BÌNH (bình quân gia quyền theo MT) của TẤT CẢ Kho Nhà
+ * máy (4 kho) của 1 Đơn vị - dùng làm input `doKhoTBNhaMayFrac` cho
+ * `tinhCanDoiBDMT_` (mục K cũ) khi Xuất bán. */
+function tinhDoKhoTBKhoNhaMay_(donVi, denNgayISO) {
+  let tongMT = 0, tongBDMT = 0;
+  CFG.KHO_NHA_MAY.forEach(function (kho) {
+    timFIFOLoKho_(kho, donVi, denNgayISO).forEach(function (l) {
+      tongMT += l.mtConLai;
+      tongBDMT += l.mtConLai * l.doKho;
+    });
+  });
+  return tongMT > 0 ? tongBDMT / tongMT : 0;
+}
+
+/** Danh sách TÊN KHO đã từng xuất hiện trong NghiepVuKho (gồm cả "Kho
+ * mượn - <Đối tượng>" động) + 6 kho cố định - dùng cho dropdown lọc/
+ * xem tồn kho ở Index.html. */
+function danhSachKhoDangDung_() {
+  const set = new Set(CFG.KHO_NHA_MAY.concat(CFG.KHO_XUAT_HANG));
+  const sh = getOrCreateNghiepVuKhoSheet_();
+  const lastRow = sh.getLastRow();
+  if (lastRow >= 2) {
+    sh.getRange(2, 1, lastRow - 1, NVK_TOTAL_COL).getValues().forEach(function (r) {
+      const kn = String(r[COL_NVK.KHO_NHAP] || "").trim();
+      const kx = String(r[COL_NVK.KHO_XUAT] || "").trim();
+      if (kn) set.add(kn);
+      if (kx) set.add(kx);
+    });
+  }
+  return Array.from(set);
+}
+
+function getDanhSachKhoNVK() {
+  return { khoNhaMay: CFG.KHO_NHA_MAY, khoXuatHang: CFG.KHO_XUAT_HANG, khoDangDung: danhSachKhoDangDung_() };
+}
+
+// ----------------------------------------------------------------
+// API GHI NGHIỆP VỤ (public - gọi từ Index.html qua google.script.run)
+// ----------------------------------------------------------------
+
+/** Nhập kho - dùng chung cho 3 hình thức "tạo lô hàng mới thật sự", Độ
+ * khô NHẬP TAY (đo đạc tại chỗ): Sản xuất, Nhập cân đối kho (thủ công),
+ * Nhập trao đổi (bắt buộc Đối tượng). */
+function ghiNhapKho(payload) {
+  let lock;
+  try {
+    lock = LockService.getScriptLock();
+    lock.waitLock(30000);
+    if (!payload) throw new Error("Không nhận được dữ liệu.");
+    const email = utils.normEmail(getCurrentUserEmail_());
+    const donVi = String(payload.donVi || "").trim();
+    if (!donVi) return { success: false, message: "❌ Vui lòng chọn Đơn vị." };
+    const q = kiemTraQuyenGhiNVK_(email, donVi);
+    if (!q.ok) return { success: false, message: q.message };
+
+    const hinhThuc = String(payload.hinhThuc || "").trim();
+    if (["Sản xuất", "Nhập cân đối kho", "Nhập trao đổi"].indexOf(hinhThuc) === -1) {
+      return { success: false, message: "❌ Hình thức Nhập không hợp lệ." };
+    }
+    const kho = String(payload.kho || "").trim();
+    if (!kho) return { success: false, message: "❌ Vui lòng chọn Kho nhập." };
+    if (!payload.ngayChungTu) return { success: false, message: "❌ Vui lòng chọn Ngày chứng từ." };
+    const ngay = new Date(payload.ngayChungTu);
+    if (isNaN(ngay.getTime())) return { success: false, message: "❌ Ngày chứng từ không hợp lệ." };
+    const mt = utils.parseNum(payload.khoiLuongMT);
+    if (!(mt > 0)) return { success: false, message: "❌ Khối lượng MT phải lớn hơn 0." };
+    const doKhoPct = utils.parseNum(payload.doKhoPct);
+    if (!(doKhoPct > 0 && doKhoPct <= 100)) return { success: false, message: "❌ Độ khô phải trong khoảng 0-100%." };
+    const doiTuong = String(payload.doiTuong || "").trim();
+    if (hinhThuc === "Nhập trao đổi" && !doiTuong) return { success: false, message: "❌ Vui lòng chọn Đối tượng cho Nhập trao đổi." };
+
+    const sh = getOrCreateNghiepVuKhoSheet_();
+    const chungTu = sinhSoChungTu_(ngay);
+    ghiMotDongNVK_(sh, {
+      chungTu: chungTu, ngayChungTu: ngay, loai: "Nhập", hinhThuc: hinhThuc,
+      mt: mt, doKho: doKhoPct / 100, khoNhap: kho, donVi: donVi, doiTuong: doiTuong,
+      ghiChu: payload.ghiChu, email: email
+    });
+    logNVK_(email, donVi, chungTu, "Ghi \"" + hinhThuc + "\" " + fmtNumVN_(mt) + " MT vào \"" + kho + "\"");
+    syncNVKStagingForKey_(donVi, utils.formatDateISO(ngay));
+    return { success: true, message: "✅ Đã ghi \"" + hinhThuc + "\" " + fmtNumVN_(mt) + " MT vào \"" + kho + "\" (Chứng từ " + chungTu + ")." };
+  } catch (err) {
+    return { success: false, message: "❌ Lỗi: " + err.toString() };
+  } finally {
+    if (lock) lock.releaseLock();
+  }
+}
+
+/** Xuất kho thường (KHÔNG phải Xuất bán - xem ghiXuatBan riêng) - Độ
+ * khô TỰ TÍNH THEO FIFO từ chính kho đang xuất, người dùng không gõ:
+ * Xuất trao đổi (bắt buộc Đối tượng), Xuất cân đối kho (thủ công). */
+function ghiXuatKhoThuong(payload) {
+  let lock;
+  try {
+    lock = LockService.getScriptLock();
+    lock.waitLock(30000);
+    if (!payload) throw new Error("Không nhận được dữ liệu.");
+    const email = utils.normEmail(getCurrentUserEmail_());
+    const donVi = String(payload.donVi || "").trim();
+    if (!donVi) return { success: false, message: "❌ Vui lòng chọn Đơn vị." };
+    const q = kiemTraQuyenGhiNVK_(email, donVi);
+    if (!q.ok) return { success: false, message: q.message };
+
+    const hinhThuc = String(payload.hinhThuc || "").trim();
+    if (["Xuất trao đổi", "Xuất cân đối kho"].indexOf(hinhThuc) === -1) {
+      return { success: false, message: "❌ Hình thức Xuất không hợp lệ." };
+    }
+    const kho = String(payload.kho || "").trim();
+    if (!kho) return { success: false, message: "❌ Vui lòng chọn Kho xuất." };
+    if (!payload.ngayChungTu) return { success: false, message: "❌ Vui lòng chọn Ngày chứng từ." };
+    const ngay = new Date(payload.ngayChungTu);
+    if (isNaN(ngay.getTime())) return { success: false, message: "❌ Ngày chứng từ không hợp lệ." };
+    const mt = utils.parseNum(payload.khoiLuongMT);
+    if (!(mt > 0)) return { success: false, message: "❌ Khối lượng MT phải lớn hơn 0." };
+    const doiTuong = String(payload.doiTuong || "").trim();
+    if (hinhThuc === "Xuất trao đổi" && !doiTuong) return { success: false, message: "❌ Vui lòng chọn Đối tượng cho Xuất trao đổi." };
+
+    const kq = tieuThuFIFO_(timFIFOLoKho_(kho, donVi), mt);
+    if (kq.mtThieu > 0.01 && !q.isAdmin) {
+      return { success: false, message: "❌ Kho \"" + kho + "\" (Đơn vị \"" + donVi + "\") chỉ còn tồn " + fmtNumVN_(mt - kq.mtThieu) + " MT, không đủ để xuất " + fmtNumVN_(mt) + " MT. (Chỉ Admin mới ghi đè được khi kho không đủ tồn.)" };
+    }
+
+    const sh = getOrCreateNghiepVuKhoSheet_();
+    const chungTu = sinhSoChungTu_(ngay);
+    ghiMotDongNVK_(sh, {
+      chungTu: chungTu, ngayChungTu: ngay, loai: "Xuất", hinhThuc: hinhThuc,
+      mt: mt, doKho: kq.doKhoBinhQuan, khoXuat: kho, donVi: donVi, doiTuong: doiTuong,
+      ghiChu: payload.ghiChu, email: email
+    });
+    logNVK_(email, donVi, chungTu, "Ghi \"" + hinhThuc + "\" " + fmtNumVN_(mt) + " MT từ \"" + kho + "\"");
+    syncNVKStagingForKey_(donVi, utils.formatDateISO(ngay));
+    return { success: true, message: "✅ Đã ghi \"" + hinhThuc + "\" " + fmtNumVN_(mt) + " MT từ \"" + kho + "\" (Độ khô tự tính FIFO: " + fmtPctVN_(kq.doKhoBinhQuan) + ", Chứng từ " + chungTu + ")." };
+  } catch (err) {
+    return { success: false, message: "❌ Lỗi: " + err.toString() };
+  } finally {
+    if (lock) lock.releaseLock();
+  }
+}
+
+/** Trung chuyển (chuyển kho nội bộ, CÙNG 1 Đơn vị) - tự sinh CẶP 2 dòng
+ * liên kết (Xuất từ Kho nguồn + Nhập vào Kho đích), CÙNG 1 Độ khô (BDMT
+ * bảo toàn khi chuyển kho - không tự sinh/mất khô giữa đường). */
+function ghiTrungChuyen(payload) {
+  let lock;
+  try {
+    lock = LockService.getScriptLock();
+    lock.waitLock(30000);
+    if (!payload) throw new Error("Không nhận được dữ liệu.");
+    const email = utils.normEmail(getCurrentUserEmail_());
+    const donVi = String(payload.donVi || "").trim();
+    if (!donVi) return { success: false, message: "❌ Vui lòng chọn Đơn vị." };
+    const q = kiemTraQuyenGhiNVK_(email, donVi);
+    if (!q.ok) return { success: false, message: q.message };
+
+    const khoNguon = String(payload.khoNguon || "").trim();
+    const khoDich = String(payload.khoDich || "").trim();
+    if (!khoNguon || !khoDich) return { success: false, message: "❌ Vui lòng chọn Kho nguồn và Kho đích." };
+    if (khoNguon === khoDich) return { success: false, message: "❌ Kho nguồn và Kho đích phải khác nhau." };
+    if (!payload.ngayChungTu) return { success: false, message: "❌ Vui lòng chọn Ngày chứng từ." };
+    const ngay = new Date(payload.ngayChungTu);
+    if (isNaN(ngay.getTime())) return { success: false, message: "❌ Ngày chứng từ không hợp lệ." };
+    const mt = utils.parseNum(payload.khoiLuongMT);
+    if (!(mt > 0)) return { success: false, message: "❌ Khối lượng MT phải lớn hơn 0." };
+
+    const kq = tieuThuFIFO_(timFIFOLoKho_(khoNguon, donVi), mt);
+    if (kq.mtThieu > 0.01 && !q.isAdmin) {
+      return { success: false, message: "❌ Kho \"" + khoNguon + "\" (Đơn vị \"" + donVi + "\") chỉ còn tồn " + fmtNumVN_(mt - kq.mtThieu) + " MT, không đủ để chuyển " + fmtNumVN_(mt) + " MT." };
+    }
+
+    const sh = getOrCreateNghiepVuKhoSheet_();
+    const chungTuGoc = sinhSoChungTu_(ngay);
+    ghiMotDongNVK_(sh, { chungTu: chungTuGoc + "-X", chungTuGoc: chungTuGoc, ngayChungTu: ngay, loai: "Xuất", hinhThuc: "Trung chuyển", mt: mt, doKho: kq.doKhoBinhQuan, khoXuat: khoNguon, donVi: donVi, ghiChu: payload.ghiChu, email: email });
+    ghiMotDongNVK_(sh, { chungTu: chungTuGoc + "-N", chungTuGoc: chungTuGoc, ngayChungTu: ngay, loai: "Nhập", hinhThuc: "Trung chuyển", mt: mt, doKho: kq.doKhoBinhQuan, khoNhap: khoDich, donVi: donVi, ghiChu: payload.ghiChu, email: email });
+    logNVK_(email, donVi, chungTuGoc, "Trung chuyển " + fmtNumVN_(mt) + " MT từ \"" + khoNguon + "\" sang \"" + khoDich + "\"");
+    syncNVKStagingForKey_(donVi, utils.formatDateISO(ngay));
+    return { success: true, message: "✅ Đã chuyển " + fmtNumVN_(mt) + " MT từ \"" + khoNguon + "\" sang \"" + khoDich + "\" (Độ khô: " + fmtPctVN_(kq.doKhoBinhQuan) + ", Chứng từ " + chungTuGoc + ")." };
+  } catch (err) {
+    return { success: false, message: "❌ Lỗi: " + err.toString() };
+  } finally {
+    if (lock) lock.releaseLock();
+  }
+}
+
+/** Mượn/Trả - hợp nhất "Sổ Mượn Trả" (mục AZ/BA) vào kiến trúc Nghiệp
+ * vụ kho: Mượn = Xuất từ Kho thực + Nhập vào "Kho mượn - <Đối tượng>"
+ * (kho ảo); Trả = ngược lại. Dư nợ mượn/trả của 1 Đối tượng = số dư
+ * FIFO hiện tại của đúng kho ảo đó (xem getSoDuTatCaKho). */
+function ghiMuonTra(payload) {
+  let lock;
+  try {
+    lock = LockService.getScriptLock();
+    lock.waitLock(30000);
+    if (!payload) throw new Error("Không nhận được dữ liệu.");
+    const email = utils.normEmail(getCurrentUserEmail_());
+    const donVi = String(payload.donVi || "").trim();
+    if (!donVi) return { success: false, message: "❌ Vui lòng chọn Đơn vị." };
+    const q = kiemTraQuyenGhiNVK_(email, donVi);
+    if (!q.ok) return { success: false, message: q.message };
+
+    const loai = String(payload.loai || "").trim();
+    if (loai !== "Mượn" && loai !== "Trả") return { success: false, message: "❌ Vui lòng chọn Mượn hoặc Trả." };
+    const doiTuong = String(payload.doiTuong || "").trim();
+    if (!doiTuong) return { success: false, message: "❌ Vui lòng chọn Đối tượng." };
+    const kho = String(payload.kho || "").trim();
+    if (!kho) return { success: false, message: loai === "Mượn" ? "❌ Vui lòng chọn Kho xuất mượn." : "❌ Vui lòng chọn Kho nhận trả về." };
+    if (!payload.ngayChungTu) return { success: false, message: "❌ Vui lòng chọn Ngày chứng từ." };
+    const ngay = new Date(payload.ngayChungTu);
+    if (isNaN(ngay.getTime())) return { success: false, message: "❌ Ngày chứng từ không hợp lệ." };
+    const mt = utils.parseNum(payload.khoiLuongMT);
+    if (!(mt > 0)) return { success: false, message: "❌ Khối lượng MT phải lớn hơn 0." };
+
+    const khoMuon = "Kho mượn - " + doiTuong;
+    const khoNguon = loai === "Mượn" ? kho : khoMuon;
+    const khoDich = loai === "Mượn" ? khoMuon : kho;
+
+    const kq = tieuThuFIFO_(timFIFOLoKho_(khoNguon, donVi), mt);
+    if (kq.mtThieu > 0.01 && !q.isAdmin) {
+      const lyDo = loai === "Mượn"
+        ? "Kho \"" + kho + "\" không đủ tồn để xuất mượn."
+        : "Đối tượng \"" + doiTuong + "\" chỉ đang mượn " + fmtNumVN_(mt - kq.mtThieu) + " MT, không đủ để trả " + fmtNumVN_(mt) + " MT.";
+      return { success: false, message: "❌ " + lyDo };
+    }
+
+    const sh = getOrCreateNghiepVuKhoSheet_();
+    const chungTuGoc = sinhSoChungTu_(ngay);
+    ghiMotDongNVK_(sh, { chungTu: chungTuGoc + "-X", chungTuGoc: chungTuGoc, ngayChungTu: ngay, loai: "Xuất", hinhThuc: loai, mt: mt, doKho: kq.doKhoBinhQuan, khoXuat: khoNguon, donVi: donVi, doiTuong: doiTuong, ghiChu: payload.ghiChu, email: email });
+    ghiMotDongNVK_(sh, { chungTu: chungTuGoc + "-N", chungTuGoc: chungTuGoc, ngayChungTu: ngay, loai: "Nhập", hinhThuc: loai, mt: mt, doKho: kq.doKhoBinhQuan, khoNhap: khoDich, donVi: donVi, doiTuong: doiTuong, ghiChu: payload.ghiChu, email: email });
+    logNVK_(email, donVi, chungTuGoc, loai + " " + fmtNumVN_(mt) + " MT với \"" + doiTuong + "\"");
+    syncNVKStagingForKey_(donVi, utils.formatDateISO(ngay));
+    return { success: true, message: "✅ Đã ghi \"" + loai + "\" " + fmtNumVN_(mt) + " MT với \"" + doiTuong + "\" (Chứng từ " + chungTuGoc + ")." };
+  } catch (err) {
+    return { success: false, message: "❌ Lỗi: " + err.toString() };
+  } finally {
+    if (lock) lock.releaseLock();
+  }
+}
+
+/** Công thức "Cân đối BDMT xuất hàng" (mục K cũ, hàm computeCanDoiBDMT_)
+ * TRÍCH XUẤT NGUYÊN VĂN thành hàm THUẦN (không đụng Sheet/không đọc ô
+ * COL.DO_KHO cố định) để dùng lại ĐÚNG công thức cho ghiXuatBan() bên
+ * dưới - theo đúng yêu cầu "giữ đúng công thức cũ, chỉ đổi cách kích
+ * hoạt". Input `doKhoTBNhaMayFrac` giờ lấy từ tinhDoKhoTBKhoNhaMay_ (số
+ * dư FIFO thời điểm hiện tại) thay vì đọc ô Sheet cố định. */
+function tinhCanDoiBDMT_(mtKho, bdmtKho, doAmCanDoi, mtThucTe, doKhoTBNhaMayFrac) {
+  const doKhoKhoPct = bdmtKho / mtKho * 100;
+  const doAmKhoPct = 100 - doKhoKhoPct;
+  const doKhoCanDoi = 100 - doAmCanDoi;
+  const klThucTeBDMT = mtThucTe * (doKhoCanDoi / 100);
+  const doKhoTBNhaMayPct = doKhoTBNhaMayFrac * 100;
+
+  const dieuChinhBDMT = klThucTeBDMT - bdmtKho;
+  const dieuChinhMT = (klThucTeBDMT / doKhoTBNhaMayFrac) - mtKho;
+  const dienGiai = function (v, don) {
+    return v > 0
+      ? "Dương - Kho Nhà máy phải XUẤT điều chỉnh bổ sung " + don + " về kho xuất bán."
+      : (v < 0 ? "Âm - Kho Nhà máy phải NHẬP điều chỉnh bổ sung " + don + " ở kho Nhà máy." : "Đã khớp - không cần điều chỉnh " + don + ".");
+  };
+
+  return {
+    mtKho: mtKho, bdmtKho: bdmtKho, doKhoKhoPct: doKhoKhoPct, doAmKhoPct: doAmKhoPct,
+    doAmCanDoi: doAmCanDoi, doKhoCanDoi: doKhoCanDoi, mtThucTe: mtThucTe,
+    klThucTeBDMT: klThucTeBDMT, doKhoTBNhaMayPct: doKhoTBNhaMayPct,
+    dieuChinhBDMT: dieuChinhBDMT, dieuChinhMT: dieuChinhMT,
+    dienGiaiBDMT: dienGiai(dieuChinhBDMT, "BDMT"),
+    dienGiaiMT: dienGiai(dieuChinhMT, "MT")
+  };
+}
+
+/** Xuất bán - TỰ ĐỘNG cân đối chênh lệch khô (mục BB, dùng lại ĐÚNG
+ * công thức mục K qua tinhCanDoiBDMT_ ở trên). Input tay: Kho xuất bán,
+ * Độ ẩm cân đối (%), Khối lượng thực tế MT (đo tại điểm bán) - HỆ
+ * THỐNG TỰ SINH THÊM (Trạng thái = "Tự động"):
+ *   1) Dòng "Xuất bán" chính (Độ khô = Độ khô cân đối).
+ *   2) Dòng "Nhập/Xuất cân đối kho" ở Kho Nhà máy MẶC ĐỊNH của Đơn vị
+ *      (CFG.DONVI_KHO_NHA_MAY_MAC_DINH) - tùy dấu dieuChinhMT.
+ *   3) Dòng đối ứng đưa Kho xuất bán về ĐÚNG 0 (xử lý phần dư/thiếu do
+ *      làm tròn giữa số dư FIFO trước đó và Khối lượng thực tế MT).
+ * Cả 3 dòng dùng chung 1 "Chứng từ gốc". */
+function ghiXuatBan(payload) {
+  let lock;
+  try {
+    lock = LockService.getScriptLock();
+    lock.waitLock(30000);
+    if (!payload) throw new Error("Không nhận được dữ liệu.");
+    const email = utils.normEmail(getCurrentUserEmail_());
+    const donVi = String(payload.donVi || "").trim();
+    if (!donVi) return { success: false, message: "❌ Vui lòng chọn Đơn vị." };
+    const q = kiemTraQuyenGhiNVK_(email, donVi);
+    if (!q.ok) return { success: false, message: q.message };
+
+    const khoXuatBan = String(payload.khoXuatBan || "").trim();
+    if (CFG.KHO_XUAT_HANG.indexOf(khoXuatBan) === -1) return { success: false, message: "❌ Vui lòng chọn đúng 1 trong 2 Kho xuất hàng (\"Kho Tiên Sa\" hoặc \"Kho Dung Quất\")." };
+    if (!payload.ngayChungTu) return { success: false, message: "❌ Vui lòng chọn Ngày chứng từ." };
+    const ngay = new Date(payload.ngayChungTu);
+    if (isNaN(ngay.getTime())) return { success: false, message: "❌ Ngày chứng từ không hợp lệ." };
+    const doAmCanDoi = utils.parseNum(payload.doAmCanDoiPct);
+    if (!(doAmCanDoi > 0 && doAmCanDoi < 100)) return { success: false, message: "❌ Độ ẩm cân đối phải trong khoảng 0-100%." };
+    const mtThucTe = utils.parseNum(payload.mtThucTe);
+    if (!(mtThucTe > 0)) return { success: false, message: "❌ Khối lượng thực tế MT phải lớn hơn 0." };
+
+    const lots = timFIFOLoKho_(khoXuatBan, donVi);
+    const mtKho = lots.reduce(function (s, l) { return s + l.mtConLai; }, 0);
+    const bdmtKho = lots.reduce(function (s, l) { return s + l.mtConLai * l.doKho; }, 0);
+    if (!(mtKho > 0)) return { success: false, message: "❌ Chưa có tồn ở \"" + khoXuatBan + "\" (Đơn vị \"" + donVi + "\") để xuất bán." };
+    const doKhoTBNhaMayFrac = tinhDoKhoTBKhoNhaMay_(donVi);
+    if (!(doKhoTBNhaMayFrac > 0)) return { success: false, message: "❌ Chưa có tồn Kho Nhà máy của \"" + donVi + "\" để tính Độ khô TB - không thể cân đối." };
+
+    const kq = tinhCanDoiBDMT_(mtKho, bdmtKho, doAmCanDoi, mtThucTe, doKhoTBNhaMayFrac);
+    const doKhoCanDoiFrac = kq.doKhoCanDoi / 100;
+
+    const sh = getOrCreateNghiepVuKhoSheet_();
+    const chungTuGoc = sinhSoChungTu_(ngay);
+
+    // 1) Dòng Xuất bán chính - tiêu thụ FIFO đúng Khối lượng thực tế MT
+    // từ số dư hiện có ở Kho xuất bán (có thể KHÔNG khớp đúng mtKho cũ -
+    // phần lệch được dòng #3 xử lý).
+    const kqTieuThu = tieuThuFIFO_(lots, mtThucTe);
+    ghiMotDongNVK_(sh, { chungTu: chungTuGoc + "-B", chungTuGoc: chungTuGoc, ngayChungTu: ngay, loai: "Xuất", hinhThuc: "Xuất bán", mt: mtThucTe, doKho: doKhoCanDoiFrac, khoXuat: khoXuatBan, donVi: donVi, ghiChu: payload.ghiChu, email: email });
+
+    // 2) Dòng cân đối chênh lệch khô ở Kho Nhà máy mặc định của Đơn vị.
+    const khoNhaMay = CFG.DONVI_KHO_NHA_MAY_MAC_DINH[donVi] || CFG.KHO_NHA_MAY[0];
+    if (Math.abs(kq.dieuChinhMT) > 0.0001) {
+      if (kq.dieuChinhMT > 0) {
+        const kqTru = tieuThuFIFO_(timFIFOLoKho_(khoNhaMay, donVi), kq.dieuChinhMT);
+        ghiMotDongNVK_(sh, { chungTu: chungTuGoc + "-C", chungTuGoc: chungTuGoc, ngayChungTu: ngay, loai: "Xuất", hinhThuc: "Xuất cân đối kho", mt: kq.dieuChinhMT, doKho: kqTru.doKhoBinhQuan || doKhoTBNhaMayFrac, khoXuat: khoNhaMay, donVi: donVi, ghiChu: kq.dienGiaiMT, trangThai: "Tự động", email: email });
+      } else {
+        ghiMotDongNVK_(sh, { chungTu: chungTuGoc + "-C", chungTuGoc: chungTuGoc, ngayChungTu: ngay, loai: "Nhập", hinhThuc: "Nhập cân đối kho", mt: -kq.dieuChinhMT, doKho: doKhoTBNhaMayFrac, khoNhap: khoNhaMay, donVi: donVi, ghiChu: kq.dienGiaiMT, trangThai: "Tự động", email: email });
+      }
+    }
+
+    // 3) Dòng đối ứng đưa Kho xuất bán về ĐÚNG 0.
+    const mtConLaiSauXuatBan = kqTieuThu.loConLaiSauKhiTru.reduce(function (s, l) { return s + l.mtConLai; }, 0);
+    if (mtConLaiSauXuatBan > 0.0001) {
+      const bdmtConLai = kqTieuThu.loConLaiSauKhiTru.reduce(function (s, l) { return s + l.mtConLai * l.doKho; }, 0);
+      ghiMotDongNVK_(sh, { chungTu: chungTuGoc + "-D", chungTuGoc: chungTuGoc, ngayChungTu: ngay, loai: "Xuất", hinhThuc: "Xuất cân đối kho", mt: mtConLaiSauXuatBan, doKho: bdmtConLai / mtConLaiSauXuatBan, khoXuat: khoXuatBan, donVi: donVi, ghiChu: "Đối ứng đưa kho xuất bán về 0 sau khi xuất bán.", trangThai: "Tự động", email: email });
+    } else if (kqTieuThu.mtThieu > 0.0001) {
+      ghiMotDongNVK_(sh, { chungTu: chungTuGoc + "-D", chungTuGoc: chungTuGoc, ngayChungTu: ngay, loai: "Nhập", hinhThuc: "Nhập cân đối kho", mt: kqTieuThu.mtThieu, doKho: doKhoCanDoiFrac, khoNhap: khoXuatBan, donVi: donVi, ghiChu: "Đối ứng bổ sung tồn kho xuất bán (Khối lượng thực tế MT lớn hơn số dư FIFO trước khi bán).", trangThai: "Tự động", email: email });
+    }
+
+    logNVK_(email, donVi, chungTuGoc, "Xuất bán " + fmtNumVN_(mtThucTe) + " MT tại \"" + khoXuatBan + "\" - Điều chỉnh MT: " + fmtNumVN_(kq.dieuChinhMT));
+    syncNVKStagingForKey_(donVi, utils.formatDateISO(ngay));
+    return {
+      success: true,
+      message: "✅ Đã ghi Xuất bán " + fmtNumVN_(mtThucTe) + " MT tại \"" + khoXuatBan + "\" (Chứng từ " + chungTuGoc + ").\n" + kq.dienGiaiMT + "\n" + kq.dienGiaiBDMT,
+      canDoi: kq
+    };
+  } catch (err) {
+    return { success: false, message: "❌ Lỗi: " + err.toString() };
+  } finally {
+    if (lock) lock.releaseLock();
+  }
+}
+
+/** Xóa 1 dòng Nghiệp vụ kho - CHỈ ADMIN (cùng nguyên tắc xóaDuLieu/
+ * xoaSoMuonTra) - dùng khi ghi nhầm. LƯU Ý: xóa 1 dòng của 1 cặp
+ * (Trung chuyển/Mượn/Trả/Xuất bán tự động) sẽ làm LỆCH cặp đó - Admin
+ * tự chịu trách nhiệm kiểm tra lại "Chứng từ gốc" để xóa ĐỦ cả cặp/bộ
+ * nếu cần (không tự động xóa dây chuyền, tránh xóa nhầm diện rộng). */
+function xoaNghiepVuKho(rowIndex) {
+  try {
+    const email = getCurrentUserEmail_();
+    if (!utils.isAdmin(email)) return { success: false, message: "❌ Chỉ Admin mới được xóa Nghiệp vụ kho." };
+    const sh = getOrCreateNghiepVuKhoSheet_();
+    if (rowIndex < 2 || rowIndex > sh.getLastRow()) return { success: false, message: "❌ Dòng không hợp lệ." };
+    const r = sh.getRange(rowIndex, 1, 1, NVK_TOTAL_COL).getValues()[0];
+    const donVi = String(r[COL_NVK.DON_VI] || "").trim();
+    const ngayISO = utils.formatDateISO(r[COL_NVK.NGAY_CHUNG_TU]);
+    const chungTu = String(r[COL_NVK.CHUNG_TU] || "");
+    sh.deleteRow(rowIndex);
+    logNVK_(email, donVi, chungTu, "Xóa dòng Nghiệp vụ kho bởi admin qua Web App");
+    if (donVi && ngayISO) syncNVKStagingForKey_(donVi, ngayISO);
+    return { success: true, message: "✅ Đã xóa dòng Nghiệp vụ kho." };
+  } catch (err) {
+    return { success: false, message: "❌ Lỗi: " + err.toString() };
+  }
+}
+
+// ----------------------------------------------------------------
+// SHEET TRUNG GIAN + BÁO CÁO + ĐỐI CHIẾU VỚI HỆ THỐNG CŨ
+// ----------------------------------------------------------------
+
+/** Đồng bộ lại ĐÚNG 1 dòng ChitietKho_NVK cho 1 khóa (Đơn vị, Ngày) -
+ * gọi sau MỌI lần ghi (giống syncChitietTonKhoForKey_ cũ). "Tồn CK" =
+ * tổng FIFO của 4 Kho Nhà máy + 2 Kho xuất hàng (KHÔNG gồm Kho mượn -
+ * đúng định nghĩa "Tồn CK" của hệ thống cũ, mục H: Cộng MT + Kho Tiên
+ * Sa MT + Kho Dung Quất MT) - để đối chiếu được với Tồn CK cũ. */
+function syncNVKStagingForKey_(donVi, ngayISO) {
+  const khoTong = CFG.KHO_NHA_MAY.concat(CFG.KHO_XUAT_HANG);
+  function tonTaiThoiDiem_(denNgayISO) {
+    let mt = 0, bdmt = 0;
+    khoTong.forEach(function (kho) {
+      timFIFOLoKho_(kho, donVi, denNgayISO).forEach(function (l) { mt += l.mtConLai; bdmt += l.mtConLai * l.doKho; });
+    });
+    return { mt: mt, bdmt: bdmt };
+  }
+  const ngayTruoc = utils.formatDateISO(new Date(new Date(ngayISO + "T00:00:00").getTime() - 86400000));
+  const tonDauNgay = tonTaiThoiDiem_(ngayTruoc);
+  const tonCK = tonTaiThoiDiem_(ngayISO);
+
+  const sh = getOrCreateNghiepVuKhoSheet_();
+  const lastRow = sh.getLastRow();
+  let nhapMT = 0, nhapBDMT = 0, xuatMT = 0, xuatBDMT = 0;
+  if (lastRow >= 2) {
+    sh.getRange(2, 1, lastRow - 1, NVK_TOTAL_COL).getValues().forEach(function (r) {
+      if (String(r[COL_NVK.DON_VI] || "").trim() !== donVi) return;
+      if (utils.formatDateISO(r[COL_NVK.NGAY_CHUNG_TU]) !== ngayISO) return;
+      const mt = utils.parseNum(r[COL_NVK.KHOI_LUONG_MT]);
+      const bdmt = utils.parseNum(r[COL_NVK.KHOI_LUONG_BDMT]);
+      if (String(r[COL_NVK.LOAI] || "").trim() === "Nhập") { nhapMT += mt; nhapBDMT += bdmt; }
+      else { xuatMT += mt; xuatBDMT += bdmt; }
+    });
+  }
+
+  const stagingSh = getOrCreateNVKStagingSheet_();
+  const rowValues = [
+    donVi, new Date(ngayISO + "T00:00:00"),
+    tonDauNgay.mt, tonDauNgay.bdmt,
+    nhapMT, nhapBDMT, xuatMT, xuatBDMT,
+    tonCK.mt, tonCK.bdmt, tonCK.mt > 0 ? tonCK.bdmt / tonCK.mt : 0,
+    new Date()
+  ];
+  const lastRow2 = stagingSh.getLastRow();
+  let existingRow = -1;
+  if (lastRow2 >= 2) {
+    const data2 = stagingSh.getRange(2, 1, lastRow2 - 1, 2).getValues();
+    for (let i = 0; i < data2.length; i++) {
+      if (String(data2[i][0] || "").trim() === donVi && utils.formatDateISO(data2[i][1]) === ngayISO) { existingRow = i + 2; break; }
+    }
+  }
+  if (existingRow > 0) stagingSh.getRange(existingRow, 1, 1, rowValues.length).setValues([rowValues]);
+  else stagingSh.appendRow(rowValues);
+}
+
+function getNVKBaoCao(donViFilter, fDate, tDate) {
+  const allowedUnits = donViChoPhepCuaToi_(utils.normEmail(getCurrentUserEmail_()));
+  const sh = getOrCreateNVKStagingSheet_();
+  const lastRow = sh.getLastRow();
+  if (lastRow < 2) return { rows: [], soDong: 0 };
+  let rows = sh.getRange(2, 1, lastRow - 1, 12).getValues().map(function (r) {
+    return {
+      donVi: String(r[0] || "").trim(), ngayISO: utils.formatDateISO(r[1]), ngay: utils.formatDate(r[1]),
+      tonDauMT: utils.parseNum(r[2]), tonDauBDMT: utils.parseNum(r[3]),
+      nhapMT: utils.parseNum(r[4]), nhapBDMT: utils.parseNum(r[5]),
+      xuatMT: utils.parseNum(r[6]), xuatBDMT: utils.parseNum(r[7]),
+      tonCKMT: utils.parseNum(r[8]), tonCKBDMT: utils.parseNum(r[9]), doKhoTB: utils.parseNum(r[10])
+    };
+  }).filter(function (r) { return r.donVi && r.ngayISO; });
+  if (allowedUnits) rows = rows.filter(function (r) { return allowedUnits.includes(r.donVi); });
+  if (donViFilter) rows = rows.filter(function (r) { return r.donVi === donViFilter; });
+  if (fDate) rows = rows.filter(function (r) { return r.ngayISO >= fDate; });
+  if (tDate) rows = rows.filter(function (r) { return r.ngayISO <= tDate; });
+  rows.sort(function (a, b) { return a.ngayISO === b.ngayISO ? a.donVi.localeCompare(b.donVi) : (a.ngayISO < b.ngayISO ? 1 : -1); });
+  return { rows: rows, soDong: rows.length };
+}
+
+function getSoDuKhoHienTai(kho, donVi) {
+  const lots = timFIFOLoKho_(kho, donVi);
+  const mt = lots.reduce(function (s, l) { return s + l.mtConLai; }, 0);
+  const bdmt = lots.reduce(function (s, l) { return s + l.mtConLai * l.doKho; }, 0);
+  return { kho: kho, donVi: donVi, mt: mt, bdmt: bdmt, doKho: mt > 0 ? bdmt / mt : 0, soLoTon: lots.length };
+}
+
+function getSoDuTatCaKho() {
+  const allowedUnits = donViChoPhepCuaToi_(utils.normEmail(getCurrentUserEmail_()));
+  const donViList = allowedUnits || CFG.UNITS;
+  const khoList = danhSachKhoDangDung_();
+  const rows = [];
+  donViList.forEach(function (donVi) {
+    khoList.forEach(function (kho) {
+      const r = getSoDuKhoHienTai(kho, donVi);
+      if (r.mt > 0.0001 || r.soLoTon > 0) rows.push(r);
+    });
+  });
+  return { rows: rows };
+}
+
+/** Lịch sử Nghiệp vụ kho - CHẶN Ở SERVER theo donViChoPhepCuaToi_ giống
+ * mọi báo cáo khác. */
+function getLichSuNVK(donViFilter, khoFilter, loaiFilter, fDate, tDate) {
+  const allowedUnits = donViChoPhepCuaToi_(utils.normEmail(getCurrentUserEmail_()));
+  const sh = getOrCreateNghiepVuKhoSheet_();
+  const lastRow = sh.getLastRow();
+  if (lastRow < 2) return { rows: [], soDong: 0 };
+  let rows = sh.getRange(2, 1, lastRow - 1, NVK_TOTAL_COL).getValues().map(function (r, idx) {
+    return {
+      rowIndex: idx + 2,
+      timestamp: utils.formatDate(r[COL_NVK.TIMESTAMP]),
+      chungTu: String(r[COL_NVK.CHUNG_TU] || ""),
+      chungTuGoc: String(r[COL_NVK.CHUNG_TU_GOC] || ""),
+      ngayISO: utils.formatDateISO(r[COL_NVK.NGAY_CHUNG_TU]),
+      ngay: utils.formatDate(r[COL_NVK.NGAY_CHUNG_TU]),
+      loai: String(r[COL_NVK.LOAI] || ""),
+      hinhThuc: String(r[COL_NVK.HINH_THUC] || ""),
+      khoiLuongMT: utils.parseNum(r[COL_NVK.KHOI_LUONG_MT]),
+      doKho: utils.parseNum(r[COL_NVK.DO_KHO]),
+      khoiLuongBDMT: utils.parseNum(r[COL_NVK.KHOI_LUONG_BDMT]),
+      khoNhap: String(r[COL_NVK.KHO_NHAP] || ""),
+      khoXuat: String(r[COL_NVK.KHO_XUAT] || ""),
+      donVi: String(r[COL_NVK.DON_VI] || "").trim(),
+      doiTuong: String(r[COL_NVK.DOI_TUONG] || ""),
+      ghiChu: String(r[COL_NVK.GHI_CHU] || ""),
+      trangThai: String(r[COL_NVK.TRANG_THAI] || ""),
+      email: String(r[COL_NVK.EMAIL] || "")
+    };
+  }).filter(function (r) { return r.donVi && r.ngayISO; });
+  if (allowedUnits) rows = rows.filter(function (r) { return allowedUnits.includes(r.donVi); });
+  if (donViFilter) rows = rows.filter(function (r) { return r.donVi === donViFilter; });
+  if (khoFilter) rows = rows.filter(function (r) { return r.khoNhap === khoFilter || r.khoXuat === khoFilter; });
+  if (loaiFilter) rows = rows.filter(function (r) { return r.loai === loaiFilter; });
+  if (fDate) rows = rows.filter(function (r) { return r.ngayISO >= fDate; });
+  if (tDate) rows = rows.filter(function (r) { return r.ngayISO <= tDate; });
+  rows.sort(function (a, b) { return b.rowIndex - a.rowIndex; });
+  return { rows: rows, soDong: rows.length };
+}
+
+/** Đối chiếu Tồn CK tính từ ChitietKho_NVK (hệ thống mới) với Tồn CK từ
+ * Chitiettonkho (hệ thống cũ), cùng (Đơn vị, Ngày) - đúng tinh thần
+ * "Test Kho" đã quen thuộc - công cụ CHÍNH để kiểm thử trong giai đoạn
+ * chạy song song trước khi quyết định chuyển hẳn. */
+function getDoiChieuNVKvsHeThongCu(donViFilter, fDate, tDate) {
+  const allowedUnits = donViChoPhepCuaToi_(utils.normEmail(getCurrentUserEmail_()));
+  const stagingSh = getOrCreateNVKStagingSheet_();
+  const lastRow = stagingSh.getLastRow();
+  if (lastRow < 2) return { rows: [], soDong: 0, soDongLech: 0 };
+  let staging = stagingSh.getRange(2, 1, lastRow - 1, 12).getValues()
+    .map(function (r) { return { donVi: String(r[0] || "").trim(), ngayISO: utils.formatDateISO(r[1]), tonCK_NVK: utils.parseNum(r[8]) }; })
+    .filter(function (r) { return r.donVi && r.ngayISO; });
+
+  const chitietData = readAllChitietData_().data;
+  const chitietMap = {};
+  chitietData.forEach(function (r) {
+    const donVi = String(r[COL.DON_VI] || "").trim();
+    const ngayISO = utils.formatDateISO(r[COL.NGAY_TON_KHO]);
+    if (!donVi || !ngayISO) return;
+    chitietMap[donVi + "|" + ngayISO] = utils.parseNum(r[COL.TON_CK]);
+  });
+
+  let rows = staging;
+  if (allowedUnits) rows = rows.filter(function (r) { return allowedUnits.includes(r.donVi); });
+  if (donViFilter) rows = rows.filter(function (r) { return r.donVi === donViFilter; });
+  if (fDate) rows = rows.filter(function (r) { return r.ngayISO >= fDate; });
+  if (tDate) rows = rows.filter(function (r) { return r.ngayISO <= tDate; });
+
+  rows = rows.map(function (r) {
+    const key = r.donVi + "|" + r.ngayISO;
+    const conHeThongCu = Object.prototype.hasOwnProperty.call(chitietMap, key);
+    const tonCK_cu = conHeThongCu ? chitietMap[key] : null;
+    const chenhLech = conHeThongCu ? r.tonCK_NVK - tonCK_cu : null;
+    return {
+      donVi: r.donVi, ngayISO: r.ngayISO, ngay: utils.formatDate(new Date(r.ngayISO + "T00:00:00")),
+      tonCK_NVK: r.tonCK_NVK, tonCK_cu: tonCK_cu, conHeThongCu: conHeThongCu,
+      chenhLech: chenhLech, khop: conHeThongCu ? Math.abs(chenhLech) <= 0.5 : null
+    };
+  }).sort(function (a, b) { return a.ngayISO === b.ngayISO ? a.donVi.localeCompare(b.donVi) : (a.ngayISO < b.ngayISO ? 1 : -1); });
+
+  return { rows: rows, soDong: rows.length, soDongLech: rows.filter(function (r) { return r.conHeThongCu && !r.khop; }).length };
 }

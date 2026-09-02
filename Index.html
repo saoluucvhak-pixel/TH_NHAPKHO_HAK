@@ -230,6 +230,8 @@
       <div class="nav-item" data-page="history"><span class="ic">📋</span> Lịch Sử <span class="nav-badge hidden" id="nav-choduyet-badge">0</span></div>
       <div class="nav-item" data-page="report"><span class="ic">📊</span> Báo Cáo Tổng Hợp</div>
       <div class="nav-sep"></div>
+      <div class="nav-item" data-page="nvk"><span class="ic">🧾</span> Nghiệp Vụ Kho <span class="hint" style="font-size:9px">(thử nghiệm)</span></div>
+      <div class="nav-sep"></div>
       <div class="nav-item admin-only hidden" data-page="audit"><span class="ic">🛡️</span> Nhật Ký (Audit)</div>
       <div class="nav-item admin-only hidden" data-page="settings"><span class="ic">⚙️</span> Cài đặt</div>
     </nav>
@@ -494,6 +496,7 @@ const PAGES = {
   create:    {title:'Nhập Tồn Kho Hàng Ngày', desc:'Báo cáo tồn kho dăm cho 1 đơn vị / 1 ngày', render: renderCreate},
   history:   {title:'Lịch Sử Nhập Kho', desc:'Tra cứu, xem chi tiết, sửa/xóa (Admin) các báo cáo đã nộp', render: renderHistory},
   report:    {title:'Báo Cáo Tổng Hợp', desc:'Tổng hợp tồn kho theo đơn vị trong khoảng thời gian', render: renderReport},
+  nvk:       {title:'Nghiệp Vụ Kho (thử nghiệm)', desc:'Sổ nghiệp vụ kho theo giao dịch thật (FIFO Độ khô) - chạy song song để đối chiếu với hệ thống báo cáo hàng ngày hiện có', render: renderNVK},
   audit:     {title:'Nhật Ký (Audit)', desc:'Lịch sử các lần bị từ chối / ghi đè bởi Admin', render: renderAudit},
   settings:  {title:'Cài đặt', desc:'Công cụ Admin · Phân quyền · Điều kiện kiểm tra duyệt', render: renderSettings}
 };
@@ -2556,6 +2559,519 @@ call('getMyAccess', [], null).then(access => {
   loadSoLuongChoDuyet();
   goTo('dashboard');
 });
+
+/* ============================================================
+ * "NGHIỆP VỤ KHO" (mục BB ở đầu Code.gs) - trang MỚI, HOÀN TOÀN TÁCH
+ * BIỆT khỏi trang "Nhập Tồn Kho" cũ, chạy SONG SONG để đối chiếu số
+ * liệu trước khi quyết định chuyển hẳn (xem plan mục BB). Sổ nghiệp vụ
+ * thật (mỗi dòng = 1 giao dịch cụ thể), Độ khô theo FIFO từng kho, Xuất
+ * bán tự động cân đối chênh lệch khô (giữ ĐÚNG công thức Cân đối BDMT
+ * cũ, chỉ đổi cách kích hoạt).
+ * ============================================================ */
+function renderNVK(){
+  if (!state.nvkTab) state.nvkTab = 'ghi';
+  if (!state.nvkGhiLoai) state.nvkGhiLoai = 'nhap';
+  const c = document.getElementById('content');
+  c.innerHTML = `
+    <div class="card no-print" style="padding:8px;display:flex;gap:6px;flex-wrap:wrap">
+      <button class="btn sm nvk-tab-btn ${state.nvkTab==='ghi'?'primary':''}" data-tab="ghi" onclick="switchNVKTab('ghi')">📝 Ghi nghiệp vụ</button>
+      <button class="btn sm nvk-tab-btn ${state.nvkTab==='lichsu'?'primary':''}" data-tab="lichsu" onclick="switchNVKTab('lichsu')">📜 Lịch sử</button>
+      <button class="btn sm nvk-tab-btn ${state.nvkTab==='tonkho'?'primary':''}" data-tab="tonkho" onclick="switchNVKTab('tonkho')">📦 Tồn kho theo Kho</button>
+      <button class="btn sm nvk-tab-btn ${state.nvkTab==='baocao'?'primary':''}" data-tab="baocao" onclick="switchNVKTab('baocao')">📊 Báo cáo</button>
+      <button class="btn sm nvk-tab-btn ${state.nvkTab==='doichieu'?'primary':''}" data-tab="doichieu" onclick="switchNVKTab('doichieu')">🔍 Đối chiếu hệ thống cũ</button>
+    </div>
+    <div class="hint-text no-print" style="margin:0 0 10px 0">⚠️ Hệ thống THỬ NGHIỆM, chạy SONG SONG với "Nhập Tồn Kho" hiện có - KHÔNG thay thế, KHÔNG ảnh hưởng số liệu cũ. Dùng tab "Đối chiếu hệ thống cũ" để kiểm tra khớp số liệu trước khi quyết định chuyển hẳn.</div>
+
+    <div id="nvk-ghi-section" class="${state.nvkTab==='ghi'?'':'hidden'}"></div>
+    <div id="nvk-lichsu-section" class="${state.nvkTab==='lichsu'?'':'hidden'}"></div>
+    <div id="nvk-tonkho-section" class="${state.nvkTab==='tonkho'?'':'hidden'}"></div>
+    <div id="nvk-baocao-section" class="${state.nvkTab==='baocao'?'':'hidden'}"></div>
+    <div id="nvk-doichieu-section" class="${state.nvkTab==='doichieu'?'':'hidden'}"></div>`;
+
+  call('getDanhSachKhoNVK', [], null).then(kho => { state.nvkKhoList = kho; if (state.nvkTab === 'ghi') renderNVKGhiForm(); });
+  if (state.nvkTab === 'lichsu') loadNVKLichSu();
+  if (state.nvkTab === 'tonkho') loadNVKTonKho();
+  if (state.nvkTab === 'baocao') loadNVKBaoCao();
+  if (state.nvkTab === 'doichieu') loadNVKDoiChieu();
+}
+
+function switchNVKTab(tab){
+  state.nvkTab = tab;
+  ['ghi','lichsu','tonkho','baocao','doichieu'].forEach(function (t) {
+    document.getElementById('nvk-' + t + '-section').classList.toggle('hidden', t !== tab);
+  });
+  document.querySelectorAll('.nvk-tab-btn').forEach(function (b) { b.classList.toggle('primary', b.dataset.tab === tab); });
+  if (tab === 'ghi') { if (state.nvkKhoList) renderNVKGhiForm(); else call('getDanhSachKhoNVK', [], null).then(kho => { state.nvkKhoList = kho; renderNVKGhiForm(); }); }
+  if (tab === 'lichsu') loadNVKLichSu();
+  if (tab === 'tonkho') loadNVKTonKho();
+  if (tab === 'baocao') loadNVKBaoCao();
+  if (tab === 'doichieu') loadNVKDoiChieu();
+}
+
+/* ---- Tab "Ghi nghiệp vụ" ---- */
+function switchNVKGhiLoai(v){
+  state.nvkGhiLoai = v;
+  renderNVKGhiForm();
+}
+
+function renderNVKGhiForm(){
+  const host = document.getElementById('nvk-ghi-section');
+  if (!host) return;
+  const kho = state.nvkKhoList || { khoNhaMay: [], khoXuatHang: [], khoDangDung: [] };
+  const donViOptions = state.isAdmin ? (state.units.length ? state.units : []) : myUnitOptions(true);
+  const khoChonDuoc = kho.khoDangDung.length ? kho.khoDangDung : kho.khoNhaMay.concat(kho.khoXuatHang);
+  const today = todayISO_();
+  const nhomOptions = [
+    { v: 'nhap', label: '📥 Nhập kho (Sản xuất / Cân đối kho / Trao đổi)' },
+    { v: 'xuat', label: '📤 Xuất kho thường (Trao đổi / Cân đối kho)' },
+    { v: 'trungchuyen', label: '🔀 Trung chuyển (chuyển kho nội bộ)' },
+    { v: 'muontra', label: '🤝 Mượn / Trả' },
+    { v: 'xuatban', label: '💰 Xuất bán (tự động cân đối chênh lệch khô)' }
+  ];
+  host.innerHTML = `
+    <div class="card no-print">
+      <div class="field"><label>Nhóm nghiệp vụ</label>
+        <select id="nvk-nhom" onchange="switchNVKGhiLoai(this.value)">
+          ${nhomOptions.map(o => `<option value="${o.v}" ${state.nvkGhiLoai===o.v?'selected':''}>${o.label}</option>`).join('')}
+        </select>
+      </div>
+      <div id="nvk-ghi-form-wrap"></div>
+    </div>`;
+  renderNVKGhiSubForm_(donViOptions, khoChonDuoc, today);
+}
+
+function renderNVKGhiSubForm_(donViOptions, khoChonDuoc, today){
+  const wrap = document.getElementById('nvk-ghi-form-wrap');
+  if (!wrap) return;
+  const donViOpts = '<option value="">-- Chọn --</option>' + donViOptions.map(u => `<option value="${esc(u)}">${esc(u)}</option>`).join('');
+  const khoOpts = '<option value="">-- Chọn --</option>' + khoChonDuoc.map(k => `<option value="${esc(k)}">${esc(k)}</option>`).join('');
+  let html = '';
+  if (state.nvkGhiLoai === 'nhap') {
+    html = `
+      <div class="grid cols-4">
+        <div class="field"><label>Đơn vị</label><select id="nvk-n-donVi">${donViOpts}</select></div>
+        <div class="field"><label>Hình thức</label>
+          <select id="nvk-n-hinhThuc" onchange="toggleNVKNhapDoiTuong_()">
+            <option value="Sản xuất">Sản xuất</option>
+            <option value="Nhập cân đối kho">Nhập cân đối kho</option>
+            <option value="Nhập trao đổi">Nhập trao đổi</option>
+          </select>
+        </div>
+        <div class="field"><label>Kho nhập</label><select id="nvk-n-kho">${khoOpts}</select></div>
+        <div class="field"><label>Ngày chứng từ</label><input type="date" id="nvk-n-ngay" value="${today}"></div>
+      </div>
+      <div class="grid cols-4">
+        <div class="field"><label>Khối lượng MT</label><input type="text" inputmode="decimal" class="num-fmt" id="nvk-n-mt"></div>
+        <div class="field"><label>Độ khô (%) <span class="muted" style="font-weight:400">- đo tại chỗ</span></label><input type="text" inputmode="decimal" class="num-fmt" id="nvk-n-dokho"></div>
+        <div class="field hidden" id="nvk-n-doituong-wrap"><label>Đối tượng</label><input type="text" id="nvk-n-doituong" placeholder="Bên trao đổi"></div>
+        <div class="field" style="grid-column:span 2"><label>Ghi chú</label><input type="text" id="nvk-n-ghichu"></div>
+      </div>
+      <button class="btn primary" onclick="submitNVKNhap()">💾 Lưu Nhập kho</button>`;
+  } else if (state.nvkGhiLoai === 'xuat') {
+    html = `
+      <div class="grid cols-4">
+        <div class="field"><label>Đơn vị</label><select id="nvk-x-donVi">${donViOpts}</select></div>
+        <div class="field"><label>Hình thức</label>
+          <select id="nvk-x-hinhThuc" onchange="toggleNVKXuatDoiTuong_()">
+            <option value="Xuất trao đổi">Xuất trao đổi</option>
+            <option value="Xuất cân đối kho">Xuất cân đối kho</option>
+          </select>
+        </div>
+        <div class="field"><label>Kho xuất</label><select id="nvk-x-kho">${khoOpts}</select></div>
+        <div class="field"><label>Ngày chứng từ</label><input type="date" id="nvk-x-ngay" value="${today}"></div>
+      </div>
+      <div class="grid cols-4">
+        <div class="field"><label>Khối lượng MT</label><input type="text" inputmode="decimal" class="num-fmt" id="nvk-x-mt"></div>
+        <div class="field hidden" id="nvk-x-doituong-wrap"><label>Đối tượng</label><input type="text" id="nvk-x-doituong"></div>
+        <div class="field" style="grid-column:span 2"><label>Ghi chú</label><input type="text" id="nvk-x-ghichu"></div>
+      </div>
+      <div class="hint-text">Độ khô của lô xuất TỰ ĐỘNG tính theo FIFO (lấy từ (các) lô nhập CŨ NHẤT còn tồn ở đúng kho này) - không cần nhập tay.</div>
+      <button class="btn primary" onclick="submitNVKXuat()">💾 Lưu Xuất kho</button>`;
+  } else if (state.nvkGhiLoai === 'trungchuyen') {
+    html = `
+      <div class="grid cols-4">
+        <div class="field"><label>Đơn vị</label><select id="nvk-tc-donVi">${donViOpts}</select></div>
+        <div class="field"><label>Kho nguồn</label><select id="nvk-tc-khoNguon">${khoOpts}</select></div>
+        <div class="field"><label>Kho đích</label><select id="nvk-tc-khoDich">${khoOpts}</select></div>
+        <div class="field"><label>Ngày chứng từ</label><input type="date" id="nvk-tc-ngay" value="${today}"></div>
+      </div>
+      <div class="grid cols-4">
+        <div class="field"><label>Khối lượng MT</label><input type="text" inputmode="decimal" class="num-fmt" id="nvk-tc-mt"></div>
+        <div class="field" style="grid-column:span 3"><label>Ghi chú</label><input type="text" id="nvk-tc-ghichu"></div>
+      </div>
+      <div class="hint-text">Độ khô tự tính FIFO từ Kho nguồn, và ĐƯỢC GIỮ NGUYÊN sang Kho đích (BDMT bảo toàn khi chuyển kho).</div>
+      <button class="btn primary" onclick="submitNVKTrungChuyen()">💾 Lưu Trung chuyển</button>`;
+  } else if (state.nvkGhiLoai === 'muontra') {
+    html = `
+      <div class="grid cols-4">
+        <div class="field"><label>Đơn vị</label><select id="nvk-mt-donVi">${donViOpts}</select></div>
+        <div class="field"><label>Loại</label>
+          <select id="nvk-mt-loai" onchange="updateNVKMuonTraLabel_()">
+            <option value="Mượn">Mượn</option>
+            <option value="Trả">Trả</option>
+          </select>
+        </div>
+        <div class="field"><label id="nvk-mt-kho-label">Kho xuất mượn</label><select id="nvk-mt-kho">${khoOpts}</select></div>
+        <div class="field"><label>Đối tượng</label><input type="text" id="nvk-mt-doituong" placeholder="Người/đơn vị mượn - cho mượn"></div>
+      </div>
+      <div class="grid cols-4">
+        <div class="field"><label>Ngày chứng từ</label><input type="date" id="nvk-mt-ngay" value="${today}"></div>
+        <div class="field"><label>Khối lượng MT</label><input type="text" inputmode="decimal" class="num-fmt" id="nvk-mt-mt"></div>
+        <div class="field" style="grid-column:span 2"><label>Ghi chú</label><input type="text" id="nvk-mt-ghichu"></div>
+      </div>
+      <div class="hint-text">Mượn = hàng "chuyển" từ Kho thực sang kho ảo "Kho mượn - Đối tượng"; Trả = ngược lại. Dư nợ mượn/trả xem ở tab "Tồn kho theo Kho".</div>
+      <button class="btn primary" onclick="submitNVKMuonTra()">💾 Lưu Mượn/Trả</button>`;
+  } else if (state.nvkGhiLoai === 'xuatban') {
+    html = `
+      <div class="grid cols-4">
+        <div class="field"><label>Đơn vị</label><select id="nvk-b-donVi">${donViOpts}</select></div>
+        <div class="field"><label>Kho xuất bán</label>
+          <select id="nvk-b-kho">
+            <option value="Kho Tiên Sa">Kho Tiên Sa</option>
+            <option value="Kho Dung Quất">Kho Dung Quất</option>
+          </select>
+        </div>
+        <div class="field"><label>Ngày chứng từ</label><input type="date" id="nvk-b-ngay" value="${today}"></div>
+        <div class="field"><label>Độ ẩm cân đối (%)</label><input type="text" inputmode="decimal" class="num-fmt" id="nvk-b-doam"></div>
+      </div>
+      <div class="grid cols-4">
+        <div class="field"><label>Khối lượng thực tế MT</label><input type="text" inputmode="decimal" class="num-fmt" id="nvk-b-mt"></div>
+        <div class="field" style="grid-column:span 3"><label>Ghi chú</label><input type="text" id="nvk-b-ghichu"></div>
+      </div>
+      <div class="hint-text">Hệ thống TỰ ĐỘNG tính chênh lệch khô (ĐÚNG công thức "Cân đối BDMT xuất hàng" đã dùng từ trước) và tự sinh thêm bút toán cân đối ở Kho Nhà máy + bút toán đối ứng đưa Kho xuất bán về 0 - xem lại ở tab "Lịch sử" (cột Trạng thái = "Tự động").</div>
+      <button class="btn primary" onclick="submitNVKXuatBan()">💾 Lưu Xuất bán</button>
+      <div id="nvk-b-ketqua" style="margin-top:10px"></div>`;
+  }
+  wrap.innerHTML = html;
+  attachNumberFormatting_(wrap);
+  if (state.nvkGhiLoai === 'nhap') toggleNVKNhapDoiTuong_();
+  if (state.nvkGhiLoai === 'xuat') toggleNVKXuatDoiTuong_();
+  if (state.nvkGhiLoai === 'muontra') updateNVKMuonTraLabel_();
+}
+
+function toggleNVKNhapDoiTuong_(){
+  const isTraoDoi = document.getElementById('nvk-n-hinhThuc').value === 'Nhập trao đổi';
+  document.getElementById('nvk-n-doituong-wrap').classList.toggle('hidden', !isTraoDoi);
+}
+function toggleNVKXuatDoiTuong_(){
+  const isTraoDoi = document.getElementById('nvk-x-hinhThuc').value === 'Xuất trao đổi';
+  document.getElementById('nvk-x-doituong-wrap').classList.toggle('hidden', !isTraoDoi);
+}
+function updateNVKMuonTraLabel_(){
+  const isTra = document.getElementById('nvk-mt-loai').value === 'Trả';
+  document.getElementById('nvk-mt-kho-label').textContent = isTra ? 'Kho nhận trả về' : 'Kho xuất mượn';
+}
+
+function submitNVKNhap(){
+  const payload = {
+    donVi: document.getElementById('nvk-n-donVi').value,
+    hinhThuc: document.getElementById('nvk-n-hinhThuc').value,
+    kho: document.getElementById('nvk-n-kho').value,
+    ngayChungTu: document.getElementById('nvk-n-ngay').value,
+    khoiLuongMT: getNumFieldValue_('nvk-n-mt'),
+    doKhoPct: getNumFieldValue_('nvk-n-dokho'),
+    doiTuong: (document.getElementById('nvk-n-doituong') || {}).value || '',
+    ghiChu: document.getElementById('nvk-n-ghichu').value
+  };
+  if (!payload.donVi) { toast('Vui lòng chọn Đơn vị.', 'warn'); return; }
+  if (!payload.kho) { toast('Vui lòng chọn Kho nhập.', 'warn'); return; }
+  if (!payload.khoiLuongMT || !(Number(payload.khoiLuongMT) > 0)) { toast('Vui lòng nhập Khối lượng MT lớn hơn 0.', 'warn'); return; }
+  if (!payload.doKhoPct || !(Number(payload.doKhoPct) > 0 && Number(payload.doKhoPct) <= 100)) { toast('Vui lòng nhập Độ khô trong khoảng 0-100%.', 'warn'); return; }
+  call('ghiNhapKho', [payload], 'Đang lưu...').then(res => {
+    if (handleResult(res)) {
+      document.getElementById('nvk-n-mt').value = '';
+      document.getElementById('nvk-n-dokho').value = '';
+      document.getElementById('nvk-n-ghichu').value = '';
+    }
+  });
+}
+
+function submitNVKXuat(){
+  const payload = {
+    donVi: document.getElementById('nvk-x-donVi').value,
+    hinhThuc: document.getElementById('nvk-x-hinhThuc').value,
+    kho: document.getElementById('nvk-x-kho').value,
+    ngayChungTu: document.getElementById('nvk-x-ngay').value,
+    khoiLuongMT: getNumFieldValue_('nvk-x-mt'),
+    doiTuong: (document.getElementById('nvk-x-doituong') || {}).value || '',
+    ghiChu: document.getElementById('nvk-x-ghichu').value
+  };
+  if (!payload.donVi) { toast('Vui lòng chọn Đơn vị.', 'warn'); return; }
+  if (!payload.kho) { toast('Vui lòng chọn Kho xuất.', 'warn'); return; }
+  if (!payload.khoiLuongMT || !(Number(payload.khoiLuongMT) > 0)) { toast('Vui lòng nhập Khối lượng MT lớn hơn 0.', 'warn'); return; }
+  call('ghiXuatKhoThuong', [payload], 'Đang lưu...').then(res => {
+    if (handleResult(res)) {
+      document.getElementById('nvk-x-mt').value = '';
+      document.getElementById('nvk-x-ghichu').value = '';
+    }
+  });
+}
+
+function submitNVKTrungChuyen(){
+  const payload = {
+    donVi: document.getElementById('nvk-tc-donVi').value,
+    khoNguon: document.getElementById('nvk-tc-khoNguon').value,
+    khoDich: document.getElementById('nvk-tc-khoDich').value,
+    ngayChungTu: document.getElementById('nvk-tc-ngay').value,
+    khoiLuongMT: getNumFieldValue_('nvk-tc-mt'),
+    ghiChu: document.getElementById('nvk-tc-ghichu').value
+  };
+  if (!payload.donVi) { toast('Vui lòng chọn Đơn vị.', 'warn'); return; }
+  if (!payload.khoNguon || !payload.khoDich) { toast('Vui lòng chọn Kho nguồn và Kho đích.', 'warn'); return; }
+  if (!payload.khoiLuongMT || !(Number(payload.khoiLuongMT) > 0)) { toast('Vui lòng nhập Khối lượng MT lớn hơn 0.', 'warn'); return; }
+  call('ghiTrungChuyen', [payload], 'Đang lưu...').then(res => {
+    if (handleResult(res)) {
+      document.getElementById('nvk-tc-mt').value = '';
+      document.getElementById('nvk-tc-ghichu').value = '';
+    }
+  });
+}
+
+function submitNVKMuonTra(){
+  const payload = {
+    donVi: document.getElementById('nvk-mt-donVi').value,
+    loai: document.getElementById('nvk-mt-loai').value,
+    kho: document.getElementById('nvk-mt-kho').value,
+    doiTuong: document.getElementById('nvk-mt-doituong').value,
+    ngayChungTu: document.getElementById('nvk-mt-ngay').value,
+    khoiLuongMT: getNumFieldValue_('nvk-mt-mt'),
+    ghiChu: document.getElementById('nvk-mt-ghichu').value
+  };
+  if (!payload.donVi) { toast('Vui lòng chọn Đơn vị.', 'warn'); return; }
+  if (!payload.doiTuong) { toast('Vui lòng nhập Đối tượng.', 'warn'); return; }
+  if (!payload.kho) { toast('Vui lòng chọn Kho.', 'warn'); return; }
+  if (!payload.khoiLuongMT || !(Number(payload.khoiLuongMT) > 0)) { toast('Vui lòng nhập Khối lượng MT lớn hơn 0.', 'warn'); return; }
+  call('ghiMuonTra', [payload], 'Đang lưu...').then(res => {
+    if (handleResult(res)) {
+      document.getElementById('nvk-mt-mt').value = '';
+      document.getElementById('nvk-mt-ghichu').value = '';
+    }
+  });
+}
+
+function submitNVKXuatBan(){
+  const payload = {
+    donVi: document.getElementById('nvk-b-donVi').value,
+    khoXuatBan: document.getElementById('nvk-b-kho').value,
+    ngayChungTu: document.getElementById('nvk-b-ngay').value,
+    doAmCanDoiPct: getNumFieldValue_('nvk-b-doam'),
+    mtThucTe: getNumFieldValue_('nvk-b-mt'),
+    ghiChu: document.getElementById('nvk-b-ghichu').value
+  };
+  if (!payload.donVi) { toast('Vui lòng chọn Đơn vị.', 'warn'); return; }
+  if (!payload.doAmCanDoiPct) { toast('Vui lòng nhập Độ ẩm cân đối.', 'warn'); return; }
+  if (!payload.mtThucTe || !(Number(payload.mtThucTe) > 0)) { toast('Vui lòng nhập Khối lượng thực tế MT lớn hơn 0.', 'warn'); return; }
+  call('ghiXuatBan', [payload], 'Đang cân đối + lưu...').then(res => {
+    handleResult(res);
+    const box = document.getElementById('nvk-b-ketqua');
+    if (!box) return;
+    if (res.success && res.canDoi) {
+      const k = res.canDoi;
+      box.innerHTML = `<div class="card" style="background:var(--paper-2)">
+        <div class="section-title">Kết quả cân đối</div>
+        <div class="kv"><div class="k">Độ khô % kho (sổ sách)</div><div class="v">${fmtNum(k.doKhoKhoPct)}%</div></div>
+        <div class="kv"><div class="k">Độ khô cân đối (đo tại bán)</div><div class="v">${fmtNum(k.doKhoCanDoi)}%</div></div>
+        <div class="kv"><div class="k">Độ khô TB Kho Nhà máy</div><div class="v">${fmtNum(k.doKhoTBNhaMayPct)}%</div></div>
+        <div class="kv"><div class="k">Điều chỉnh BDMT</div><div class="v">${fmtNum(k.dieuChinhBDMT)}</div></div>
+        <div class="kv"><div class="k">Điều chỉnh MT</div><div class="v">${fmtNum(k.dieuChinhMT)}</div></div>
+        <div class="hint-text" style="margin-top:6px">${esc(k.dienGiaiMT)}<br>${esc(k.dienGiaiBDMT)}</div>
+      </div>`;
+      document.getElementById('nvk-b-mt').value = '';
+      document.getElementById('nvk-b-doam').value = '';
+      document.getElementById('nvk-b-ghichu').value = '';
+    } else {
+      box.innerHTML = '';
+    }
+  });
+}
+
+/* ---- Tab "Lịch sử" ---- */
+function loadNVKLichSu(){
+  const host = document.getElementById('nvk-lichsu-section');
+  if (!host) return;
+  const donViOptions = state.isAdmin ? (state.units.length ? state.units : []) : myUnitOptions(false);
+  if (!host.dataset.built) {
+    host.dataset.built = '1';
+    host.innerHTML = `
+      <div class="card no-print">
+        <div class="grid cols-4">
+          <div class="field"><label>Đơn vị</label><select id="nvk-ls-donVi"><option value="">-- Tất cả --</option>${donViOptions.map(u => `<option value="${esc(u)}">${esc(u)}</option>`).join('')}</select></div>
+          <div class="field"><label>Kho</label><select id="nvk-ls-kho"><option value="">-- Tất cả --</option></select></div>
+          <div class="field"><label>Loại</label><select id="nvk-ls-loai"><option value="">-- Tất cả --</option><option value="Nhập">Nhập</option><option value="Xuất">Xuất</option></select></div>
+          <div class="field" style="display:flex;align-items:flex-end"><button class="btn primary" onclick="loadNVKLichSuData_()">🔍 Xem</button></div>
+        </div>
+        <div class="grid cols-4">
+          <div class="field"><label>Từ ngày</label><input type="date" id="nvk-ls-from"></div>
+          <div class="field"><label>Đến ngày</label><input type="date" id="nvk-ls-to"></div>
+        </div>
+      </div>
+      <div class="card" id="nvk-ls-wrap"></div>`;
+    call('getDanhSachKhoNVK', [], null).then(kho => {
+      const sel = document.getElementById('nvk-ls-kho');
+      if (sel) sel.innerHTML = '<option value="">-- Tất cả --</option>' + kho.khoDangDung.map(k => `<option value="${esc(k)}">${esc(k)}</option>`).join('');
+    });
+  }
+  loadNVKLichSuData_();
+}
+
+function loadNVKLichSuData_(){
+  const donVi = document.getElementById('nvk-ls-donVi').value;
+  const kho = document.getElementById('nvk-ls-kho').value;
+  const loai = document.getElementById('nvk-ls-loai').value;
+  const f = document.getElementById('nvk-ls-from').value, t = document.getElementById('nvk-ls-to').value;
+  call('getLichSuNVK', [donVi, kho, loai, f, t], 'Đang tải...').then(res => {
+    state.nvkLichSu = res;
+    renderNVKLichSuTable_();
+  });
+}
+
+function renderNVKLichSuTable_(){
+  const wrap = document.getElementById('nvk-ls-wrap');
+  const res = state.nvkLichSu;
+  if (!wrap) return;
+  if (!res || !res.rows.length) { wrap.innerHTML = '<div class="empty"><div class="ic">📭</div>Chưa có nghiệp vụ nào khớp bộ lọc này.</div>'; return; }
+  wrap.innerHTML = `<div class="hint-text" style="margin-bottom:8px">${res.soDong} nghiệp vụ.</div>
+    <div style="overflow-x:auto"><table><thead><tr>
+      <th>Ngày</th><th>Chứng từ</th><th>Loại</th><th>Hình thức</th>
+      <th class="num">MT</th><th class="num">Độ khô</th><th class="num">BDMT</th>
+      <th>Kho nhập</th><th>Kho xuất</th><th>Đơn vị</th><th>Đối tượng</th><th>Trạng thái</th><th>Người ghi</th><th></th>
+    </tr></thead><tbody>
+    ${res.rows.map(r => `<tr ${r.trangThai==='Tự động'?'style="background:var(--paper-2)"':''}>
+      <td>${esc(r.ngay)}</td><td class="mono">${esc(r.chungTu)}</td>
+      <td>${r.loai==='Nhập'?'📥':'📤'} ${esc(r.loai)}</td><td>${esc(r.hinhThuc)}</td>
+      <td class="num">${fmtNum(r.khoiLuongMT)}</td><td class="num">${fmtPct(r.doKho)}</td><td class="num">${fmtNum(r.khoiLuongBDMT)}</td>
+      <td>${esc(r.khoNhap)}</td><td>${esc(r.khoXuat)}</td><td>${esc(r.donVi)}</td><td>${esc(r.doiTuong)}</td>
+      <td>${esc(r.trangThai)}</td><td>${esc(r.email)}</td>
+      <td><button class="btn sm danger admin-only ${state.isAdmin?'':'hidden'}" onclick="xoaNVKRow(${r.rowIndex})">🗑️</button></td>
+    </tr>`).join('')}
+    </tbody></table></div>`;
+}
+
+function xoaNVKRow(rowIndex){
+  if (!confirm('Xóa dòng Nghiệp vụ kho này? Hành động không thể hoàn tác (có thể làm lệch cặp Trung chuyển/Mượn/Xuất bán liên kết).')) return;
+  call('xoaNghiepVuKho', [rowIndex], 'Đang xóa...').then(res => handleResult(res, loadNVKLichSuData_));
+}
+
+/* ---- Tab "Tồn kho theo Kho" ---- */
+function loadNVKTonKho(){
+  call('getSoDuTatCaKho', [], 'Đang tải tồn kho...').then(res => {
+    state.nvkTonKho = res;
+    renderNVKTonKhoTable_();
+  });
+}
+
+function renderNVKTonKhoTable_(){
+  const host = document.getElementById('nvk-tonkho-section');
+  const res = state.nvkTonKho;
+  if (!host) return;
+  if (!res || !res.rows.length) { host.innerHTML = '<div class="card"><div class="empty"><div class="ic">📦</div>Chưa có tồn kho nào.</div></div>'; return; }
+  host.innerHTML = `<div class="card"><div style="overflow-x:auto"><table><thead><tr>
+      <th>Đơn vị</th><th>Kho</th><th class="num">Tồn MT</th><th class="num">Tồn BDMT</th><th class="num">Độ khô TB</th><th class="num">Số lô còn tồn</th>
+    </tr></thead><tbody>
+    ${res.rows.map(r => `<tr ${String(r.kho).indexOf('Kho mượn - ')===0?'style="background:var(--rose-light,#fbeaea)"':''}>
+      <td>${esc(r.donVi)}</td><td>${esc(r.kho)}</td>
+      <td class="num">${fmtNum(r.mt)}</td><td class="num">${fmtNum(r.bdmt)}</td><td class="num">${fmtPct(r.doKho)}</td><td class="num">${r.soLoTon}</td>
+    </tr>`).join('')}
+    </tbody></table></div></div>`;
+}
+
+/* ---- Tab "Báo cáo" ---- */
+function loadNVKBaoCao(){
+  const host = document.getElementById('nvk-baocao-section');
+  if (!host) return;
+  const donViOptions = state.isAdmin ? (state.units.length ? state.units : []) : myUnitOptions(false);
+  if (!host.dataset.built) {
+    host.dataset.built = '1';
+    host.innerHTML = `
+      <div class="card no-print">
+        <div class="grid cols-4">
+          <div class="field"><label>Đơn vị</label><select id="nvk-bc-donVi"><option value="">-- Tất cả --</option>${donViOptions.map(u => `<option value="${esc(u)}">${esc(u)}</option>`).join('')}</select></div>
+          <div class="field"><label>Từ ngày</label><input type="date" id="nvk-bc-from"></div>
+          <div class="field"><label>Đến ngày</label><input type="date" id="nvk-bc-to" value="${todayISO_()}"></div>
+          <div class="field" style="display:flex;align-items:flex-end"><button class="btn primary" onclick="loadNVKBaoCaoData_()">🔍 Xem</button></div>
+        </div>
+      </div>
+      <div class="card" id="nvk-bc-wrap"></div>`;
+  }
+  loadNVKBaoCaoData_();
+}
+
+function loadNVKBaoCaoData_(){
+  const donVi = document.getElementById('nvk-bc-donVi').value;
+  const f = document.getElementById('nvk-bc-from').value, t = document.getElementById('nvk-bc-to').value;
+  call('getNVKBaoCao', [donVi, f, t], 'Đang tải báo cáo...').then(res => {
+    state.nvkBaoCao = res;
+    renderNVKBaoCaoTable_();
+  });
+}
+
+function renderNVKBaoCaoTable_(){
+  const wrap = document.getElementById('nvk-bc-wrap');
+  const res = state.nvkBaoCao;
+  if (!wrap) return;
+  if (!res || !res.rows.length) { wrap.innerHTML = '<div class="empty"><div class="ic">📊</div>Chưa có dữ liệu.</div>'; return; }
+  wrap.innerHTML = `<div style="overflow-x:auto"><table><thead><tr>
+      <th>Đơn vị</th><th>Ngày</th>
+      <th class="num">Tồn đầu MT</th><th class="num">Nhập MT</th><th class="num">Xuất MT</th>
+      <th class="num">Tồn CK MT</th><th class="num">Tồn CK BDMT</th><th class="num">Độ khô TB</th>
+    </tr></thead><tbody>
+    ${res.rows.map(r => `<tr>
+      <td>${esc(r.donVi)}</td><td>${esc(r.ngay)}</td>
+      <td class="num">${fmtNum(r.tonDauMT)}</td><td class="num">${fmtNum(r.nhapMT)}</td><td class="num">${fmtNum(r.xuatMT)}</td>
+      <td class="num"><b>${fmtNum(r.tonCKMT)}</b></td><td class="num">${fmtNum(r.tonCKBDMT)}</td><td class="num">${fmtPct(r.doKhoTB)}</td>
+    </tr>`).join('')}
+    </tbody></table></div>`;
+}
+
+/* ---- Tab "Đối chiếu hệ thống cũ" ---- */
+function loadNVKDoiChieu(){
+  const host = document.getElementById('nvk-doichieu-section');
+  if (!host) return;
+  const donViOptions = state.isAdmin ? (state.units.length ? state.units : []) : myUnitOptions(false);
+  if (!host.dataset.built) {
+    host.dataset.built = '1';
+    host.innerHTML = `
+      <div class="card no-print">
+        <div class="grid cols-4">
+          <div class="field"><label>Đơn vị</label><select id="nvk-dc-donVi"><option value="">-- Tất cả --</option>${donViOptions.map(u => `<option value="${esc(u)}">${esc(u)}</option>`).join('')}</select></div>
+          <div class="field"><label>Từ ngày</label><input type="date" id="nvk-dc-from"></div>
+          <div class="field"><label>Đến ngày</label><input type="date" id="nvk-dc-to" value="${todayISO_()}"></div>
+          <div class="field" style="display:flex;align-items:flex-end"><button class="btn primary" onclick="loadNVKDoiChieuData_()">🔍 Đối chiếu</button></div>
+        </div>
+        <div class="hint-text">So Tồn CK tính từ Nghiệp vụ kho (mới) với Tồn CK từ báo cáo hàng ngày (hệ thống cũ) cùng Đơn vị/Ngày - dùng để kiểm thử trong giai đoạn chạy song song.</div>
+      </div>
+      <div class="card" id="nvk-dc-wrap"></div>`;
+  }
+  loadNVKDoiChieuData_();
+}
+
+function loadNVKDoiChieuData_(){
+  const donVi = document.getElementById('nvk-dc-donVi').value;
+  const f = document.getElementById('nvk-dc-from').value, t = document.getElementById('nvk-dc-to').value;
+  call('getDoiChieuNVKvsHeThongCu', [donVi, f, t], 'Đang đối chiếu...').then(res => {
+    state.nvkDoiChieu = res;
+    renderNVKDoiChieuTable_();
+  });
+}
+
+function renderNVKDoiChieuTable_(){
+  const wrap = document.getElementById('nvk-dc-wrap');
+  const res = state.nvkDoiChieu;
+  if (!wrap) return;
+  if (!res || !res.rows.length) { wrap.innerHTML = '<div class="empty"><div class="ic">🔍</div>Chưa có dữ liệu Nghiệp vụ kho để đối chiếu.</div>'; return; }
+  wrap.innerHTML = `<div class="hint-text" style="margin-bottom:8px">${res.soDongLech ? `⚠️ Có <b>${res.soDongLech}</b>/${res.soDong} ngày LỆCH so với hệ thống cũ.` : `✅ Không có ngày nào lệch (${res.soDong} ngày đã đối chiếu).`}</div>
+    <div style="overflow-x:auto"><table><thead><tr>
+      <th>Đơn vị</th><th>Ngày</th><th class="num">Tồn CK (Nghiệp vụ kho)</th><th class="num">Tồn CK (hệ thống cũ)</th><th class="num">Chênh lệch</th><th>Trạng thái</th>
+    </tr></thead><tbody>
+    ${res.rows.map(r => `<tr ${r.conHeThongCu && !r.khop ? 'style="background:var(--rose-light,#fbeaea)"' : ''}>
+      <td>${esc(r.donVi)}</td><td>${esc(r.ngay)}</td>
+      <td class="num">${fmtNum(r.tonCK_NVK)}</td>
+      <td class="num">${r.conHeThongCu ? fmtNum(r.tonCK_cu) : '–'}</td>
+      <td class="num">${r.conHeThongCu ? fmtNum(r.chenhLech) : '–'}</td>
+      <td>${!r.conHeThongCu ? '⚪ Chưa có dữ liệu cũ' : (r.khop ? '✅ Khớp' : '⚠️ Lệch')}</td>
+    </tr>`).join('')}
+    </tbody></table></div>`;
+}
 </script>
 </body>
 </html>

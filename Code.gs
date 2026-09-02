@@ -1274,6 +1274,27 @@
  *     Tiên Sa"/"Chở ra Dung Quất", cột "Điều chỉnh MT" đổi sang hiện
  *     dieuChinhMTTerm với tooltip giải thích dấu +/−) + hint-text tab
  *     Test Kho (viết lại mô tả công thức, bỏ đoạn "chở ra").
+ *  AY) BỎ HẲN GIỚI HẠN "MỖI EMAIL CHỈ ĐƯỢC NHẬP 1 LẦN/NGÀY" (mục B/F cũ)
+ *     (v2026.9.2) - THEO YÊU CẦU MỚI của người dùng ("bỏ điều kiện giới
+ *     hạn nhập của email"): 1 email giờ NHẬP ĐƯỢC KHÔNG GIỚI HẠN số lần
+ *     trong ngày (kể cả cho nhiều Đơn vị/Ngày tồn kho khác nhau), không
+ *     còn phân biệt Admin hay người dùng thường ở quy tắc này nữa.
+ *       1. submitInventoryEntry(): XÓA HẲN đoạn chặn "if (!duplicateUnitDate
+ *          && emailUsedToday && !isAdmin) return {success:false, ...}"
+ *          (trước đây báo lỗi "Mỗi email chỉ được nhập 1 lần mỗi ngày").
+ *          Cũng xóa log Audit "Override giới hạn 1 lần/ngày bởi admin"
+ *          đi kèm (không còn ý nghĩa vì không còn gì để "override" nữa).
+ *       2. checkDuplicates_() (dùng chung Web App + Google Form): BỎ HẲN
+ *          việc tính `emailUsedToday` - hàm giờ CHỈ còn trả về
+ *          `duplicateUnitDate` (trùng Đơn vị+Ngày tồn kho, dùng để tự
+ *          chuyển màn "Nhập Tồn Kho" sang chế độ "Sửa", xem mục F).
+ *       3. onFormSubmit(): bỏ dòng ghi Audit cảnh báo "Email này đã nộp
+ *          báo cáo hôm nay rồi" (đi cùng `emailUsedToday` đã xóa ở #2).
+ *     CÁC RÀNG BUỘC KHÁC GIỮ NGUYÊN, KHÔNG ĐỔI: Phân quyền theo Đơn vị
+ *     (mục X - email chưa được cấp quyền vẫn bị chặn hẳn), trùng Đơn
+ *     vị+Ngày tồn kho vẫn tự chuyển sang "Sửa" (mục F), "Lệch đầu kỳ"/
+ *     "Lệch định mức"/"Lệch phiếu cân" vẫn gắn "Chờ duyệt" như cũ (mục
+ *     X/AA/AG) - CHỈ riêng quy tắc "1 lần/email/ngày" bị bỏ.
  * ============================================================
  */
 
@@ -2243,24 +2264,23 @@ function extendFormulasToNewRow_(sh, newRowIndex, headerRow) {
 // ============================================================
 // VALIDATE DÙNG CHUNG cho cả Web App (submitInventoryEntry) VÀ
 // Google Form (onFormSubmit) - đảm bảo 2 kênh nhập liệu áp dụng ĐÚNG
-// CÙNG 1 bộ quy tắc (trùng Đơn vị+Ngày, giới hạn 1 lần/email/ngày).
+// CÙNG 1 bộ quy tắc (trùng Đơn vị+Ngày).
 // `excludeRowIndex`: khi gọi từ onFormSubmit, dòng vừa được Form tự
 // ghi (0-based trong mảng `data`) cần bị loại ra khi so sánh, vì nó
 // chính là dòng đang xét (không phải dữ liệu "cũ" để so sánh với).
+// LƯU Ý (v2026.9.2): ĐÃ BỎ HẲN quy tắc "mỗi email chỉ được nhập 1 lần
+// mỗi ngày" theo yêu cầu mới - hàm này giờ chỉ còn kiểm tra trùng
+// (Đơn vị, Ngày tồn kho) để tự chuyển sang chế độ "Sửa" (mục F).
 // ============================================================
 function checkDuplicates_(data, email, donVi, ngayTonKho, now, excludeIndex) {
-  let duplicateUnitDate = false, emailUsedToday = false;
+  let duplicateUnitDate = false;
   data.forEach((r, idx) => {
     if (idx === excludeIndex) return;
     const oldDonVi = String(r[COL.DON_VI] || "").trim();
     const oldNgay = r[COL.NGAY_TON_KHO];
     if (oldDonVi === donVi && utils.isSameDay(oldNgay, ngayTonKho)) duplicateUnitDate = true;
-
-    const oldEmail = utils.normEmail(r[COL.EMAIL]);
-    const oldTimestamp = r[COL.TIMESTAMP];
-    if (oldEmail === email && utils.isSameDay(oldTimestamp, now)) emailUsedToday = true;
   });
-  return { duplicateUnitDate, emailUsedToday };
+  return { duplicateUnitDate };
 }
 
 // ============================================================
@@ -2299,7 +2319,7 @@ function submitInventoryEntry(payload) {
     const now = new Date();
     const { sh, headerRow, data } = readAllData_();
 
-    const { duplicateUnitDate, emailUsedToday } = checkDuplicates_(data, email, donVi, ngayTonKho, now, -1);
+    const { duplicateUnitDate } = checkDuplicates_(data, email, donVi, ngayTonKho, now, -1);
 
     // THEO YÊU CẦU MỚI (mục F): nếu (Đơn vị, Ngày tồn kho) ĐÃ có dữ liệu,
     // Web App KHÔNG còn coi đây là vi phạm cần chặn nữa - mà hiểu đây là
@@ -2308,13 +2328,11 @@ function submitInventoryEntry(payload) {
     // Mọi người dùng (không chỉ Admin) đều sửa được theo cách này - vẫn
     // ghi 1 dòng MỚI vào Form Responses 1 (giữ nguyên lịch sử để tra
     // soát), Chitiettonkho sẽ tự lấy đúng dòng mới nhất này làm chính
-    // thức. Giới hạn "1 lần/email/ngày" CHỈ áp dụng cho lượt NHẬP MỚI
-    // thật sự (chưa có dữ liệu cho ngày đó) - không áp dụng khi đang SỬA,
-    // để không cản trở việc tự sửa lại ngay trong ngày.
-    if (!duplicateUnitDate && emailUsedToday && !isAdmin) {
-      logAudit_(email, donVi, utils.formatDate(ngayTonKho), "Mỗi email chỉ được nhập 1 lần mỗi ngày");
-      return { success: false, message: "❌ Email của bạn đã nộp báo cáo hôm nay rồi. Mỗi email chỉ được nhập 1 lần mỗi ngày (chỉ Admin mới ghi đè được)." };
-    }
+    // thức.
+    // v2026.9.2: ĐÃ BỎ HẲN giới hạn "1 lần/email/ngày" (trước đây chặn
+    // lượt NHẬP MỚI thật sự nếu cùng email đã nộp bất kỳ báo cáo nào
+    // trong ngày) - THEO YÊU CẦU MỚI, 1 email giờ nhập được KHÔNG GIỚI
+    // HẠN số lần/ngày (kể cả cho nhiều Đơn vị/Ngày tồn kho khác nhau).
 
     // --- Ghi dữ liệu ---
     const row = new Array(CFG.TOTAL_COL_COUNT).fill("");
@@ -2386,9 +2404,6 @@ function submitInventoryEntry(payload) {
 
     if (duplicateUnitDate) {
       logAudit_(email, donVi, utils.formatDate(ngayTonKho), "Sửa báo cáo đã có qua Web App" + (isAdmin ? " (admin)" : ""));
-    }
-    if (emailUsedToday && isAdmin) {
-      logAudit_(email, donVi, utils.formatDate(ngayTonKho), "Override giới hạn 1 lần/ngày bởi admin");
     }
     if (lechDauKy) {
       logAudit_(email, donVi, utils.formatDate(ngayTonKho), "Báo cáo lệch đầu kỳ - Chờ Admin duyệt");
@@ -2543,12 +2558,9 @@ function onFormSubmit(e) {
     if (lastRow > headerRow + 1) {
       const allData = sh.getRange(headerRow + 1, 1, lastRow - headerRow, CFG.TOTAL_COL_COUNT).getValues();
       const excludeIndex = allData.length - 1; // dòng cuối cùng chính là dòng Form vừa ghi
-      const { duplicateUnitDate, emailUsedToday } = checkDuplicates_(allData, email, donVi, ngayTonKho, now, excludeIndex);
+      const { duplicateUnitDate } = checkDuplicates_(allData, email, donVi, ngayTonKho, now, excludeIndex);
       if (duplicateUnitDate) {
         logAudit_(email, donVi, utils.formatDate(ngayTonKho), "Cảnh báo: Ngày tồn kho này đã có cho đơn vị này (đã nộp lại, Chitiettonkho sẽ lấy bản mới nhất)");
-      }
-      if (emailUsedToday) {
-        logAudit_(email, donVi, utils.formatDate(ngayTonKho), "Cảnh báo: Email này đã nộp báo cáo hôm nay rồi (nộp thêm lần nữa)");
       }
     }
 

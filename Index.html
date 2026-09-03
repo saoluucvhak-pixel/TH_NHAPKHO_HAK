@@ -2658,7 +2658,8 @@ function renderNVKGhiForm(){
     { v: 'xuat', label: '📤 Xuất kho thường (Trao đổi / Cân đối kho)' },
     { v: 'trungchuyen', label: '🔀 Trung chuyển (chuyển kho nội bộ)' },
     { v: 'muontra', label: '🤝 Mượn / Trả' },
-    { v: 'xuatban', label: '💰 Xuất bán (tự động cân đối chênh lệch khô)' }
+    { v: 'xuatban', label: '💰 Xuất bán (tự động cân đối chênh lệch khô)' },
+    { v: 'nhapgokeo', label: '🪵 Nhập gỗ keo (nguyên liệu, đối chiếu Phiếu cân)' }
   ];
   host.innerHTML = `
     <div class="card no-print">
@@ -2773,6 +2774,16 @@ function renderNVKGhiSubForm_(donViOptions, khoChonDuoc, today){
       <div class="hint-text">Hệ thống TỰ ĐỘNG tính chênh lệch khô (ĐÚNG công thức "Cân đối BDMT xuất hàng" đã dùng từ trước) và tự sinh thêm bút toán cân đối ở Kho Nhà máy + bút toán đối ứng đưa Kho xuất bán về 0 - xem lại ở tab "Lịch sử" (cột Trạng thái = "Tự động").</div>
       <button class="btn primary" onclick="submitNVKXuatBan()">💾 Lưu Xuất bán</button>
       <div id="nvk-b-ketqua" style="margin-top:10px"></div>`;
+  } else if (state.nvkGhiLoai === 'nhapgokeo') {
+    html = `
+      <div class="grid cols-4">
+        <div class="field"><label>Đơn vị</label><select id="nvk-gk-donVi">${donViOpts}</select></div>
+        <div class="field"><label>Ngày</label><input type="date" id="nvk-gk-ngay" value="${today}"></div>
+        <div class="field"><label>Nhập gỗ keo trong ngày (MT)</label><input type="text" inputmode="decimal" class="num-fmt" id="nvk-gk-mt"></div>
+      </div>
+      <div class="hint-text">Số MT gỗ keo tươi NGUYÊN LIỆU nhập trong ngày (nhập tay, giống hệ thống cũ) - hệ thống TỰ đối chiếu với Phiếu cân thực tế (lệch quá 5% sẽ cảnh báo qua email) và tự tính lại "Định mức" (= 100% - Sản xuất/Nhập gỗ keo) so với khoảng Admin cấu hình ở Cài đặt &gt; Điều kiện kiểm tra duyệt. Nộp lại cùng Đơn vị + Ngày sẽ GHI ĐÈ số cũ.</div>
+      <button class="btn primary" onclick="submitNVKNhapGoKeo()">💾 Lưu Nhập gỗ keo</button>
+      <div id="nvk-gk-ketqua" style="margin-top:10px"></div>`;
   }
   wrap.innerHTML = html;
   attachNumberFormatting_(wrap);
@@ -2911,6 +2922,29 @@ function submitNVKXuatBan(){
       document.getElementById('nvk-b-mt').value = '';
       document.getElementById('nvk-b-doam').value = '';
       document.getElementById('nvk-b-ghichu').value = '';
+    } else {
+      box.innerHTML = '';
+    }
+  });
+}
+
+function submitNVKNhapGoKeo(){
+  const donVi = document.getElementById('nvk-gk-donVi').value;
+  const ngayISO = document.getElementById('nvk-gk-ngay').value;
+  const mt = getNumFieldValue_('nvk-gk-mt');
+  if (!donVi) { toast('Vui lòng chọn Đơn vị.', 'warn'); return; }
+  if (!ngayISO) { toast('Vui lòng chọn Ngày.', 'warn'); return; }
+  if (!mt || !(Number(mt) > 0)) { toast('Vui lòng nhập "Nhập gỗ keo" lớn hơn 0.', 'warn'); return; }
+  call('ghiNhapGoKeoNVK', [donVi, ngayISO, mt], 'Đang lưu + đối chiếu...').then(res => {
+    handleResult(res);
+    const box = document.getElementById('nvk-gk-ketqua');
+    if (!box) return;
+    if (res.success) {
+      box.innerHTML = `<div class="card" style="background:var(--paper-2)">
+        <div class="kv"><div class="k">Định mức tính được</div><div class="v">${res.dinhMucPct==null?'–':fmtNum(res.dinhMucPct)+'%'}</div></div>
+        ${res.canhBao && res.canhBao.length ? `<div class="hint-text" style="color:var(--danger,#c0392b);margin-top:6px">${res.canhBao.map(esc).join('<br>')}</div>` : ''}
+      </div>`;
+      document.getElementById('nvk-gk-mt').value = '';
     } else {
       box.innerHTML = '';
     }
@@ -3056,11 +3090,13 @@ function renderNVKBaoCaoTable_(){
       <th>Đơn vị</th><th>Ngày</th>
       <th class="num">Tồn đầu MT</th><th class="num">Nhập MT</th><th class="num">Xuất MT</th>
       <th class="num">Tồn CK MT</th><th class="num">Tồn CK BDMT</th><th class="num">Độ khô TB</th>
+      <th class="num">Nhập gỗ keo MT</th><th class="num">Định mức</th>
     </tr></thead><tbody>
     ${res.rows.map(r => `<tr>
       <td>${esc(r.donVi)}</td><td>${esc(r.ngay)}</td>
       <td class="num">${fmtNum(r.tonDauMT)}</td><td class="num">${fmtNum(r.nhapMT)}</td><td class="num">${fmtNum(r.xuatMT)}</td>
       <td class="num"><b>${fmtNum(r.tonCKMT)}</b></td><td class="num">${fmtNum(r.tonCKBDMT)}</td><td class="num">${fmtPct(r.doKhoTB)}</td>
+      <td class="num">${r.nhapGoKeoMT==null?'–':fmtNum(r.nhapGoKeoMT)}</td><td class="num">${r.dinhMuc==null?'–':fmtPct(r.dinhMuc)}</td>
     </tr>`).join('')}
     </tbody></table></div>`;
 }

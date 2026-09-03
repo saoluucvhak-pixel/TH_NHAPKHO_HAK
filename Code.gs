@@ -1428,6 +1428,36 @@
  *     "Kho mượn - X"), Báo cáo (Tồn đầu/Nhập/Xuất/Tồn CK theo Đơn vị+
  *     Ngày), và Đối chiếu hệ thống cũ (so Tồn CK 2 hệ thống, đánh dấu
  *     Khớp/Lệch - công cụ CHÍNH để kiểm thử trong giai đoạn song song).
+ *  BC) "NHẬP GỖ KEO (NGUYÊN LIỆU)" CHO NVK (v2026.9.3) - hệ thống cũ có
+ *     cột "Nhập gỗ keo trong ngày" (nhập tay, đối chiếu Phiếu cân +
+ *     dùng tính "Định mức" AK = 100% - AJ/Q, xem mục H), nhưng NVK (mục
+ *     BB) khi thiết kế ban đầu THIẾU HẲN khái niệm này - 3 hình thức
+ *     Nhập của NVK (Sản xuất/Nhập cân đối kho/Nhập trao đổi) đều là dăm
+ *     THÀNH PHẨM vào Kho Nhà máy, không phải NGUYÊN LIỆU gỗ tươi đưa
+ *     vào TRƯỚC sản xuất - nên NVK không có cách nào cảnh báo "hao hụt
+ *     sản xuất bất thường" như hệ thống cũ. Bổ sung (không sửa kiến
+ *     trúc sổ nhật ký NghiepVuKho vì đây không phải 1 giao dịch kho -
+ *     không có Kho nhập/xuất, không ảnh hưởng FIFO/Tồn CK):
+ *       - Sheet MỚI `NhapGoKeo_NVK` (CFG.SHEET_NVK_NHAPGOKEO): 1 dòng /
+ *         (Đơn vị, Ngày), GHI ĐÈ khi nộp lại (giống logCanDoiBDMT_) -
+ *         xem getOrCreateNhapGoKeoNVKSheet_/ghiNhapGoKeoNVK.
+ *       - "Định mức" tính LẠI theo đúng công thức hệ thống cũ (100% -
+ *         Sản xuất/Nhập gỗ keo) nhưng lấy "Sản xuất" từ CHÍNH sổ
+ *         NghiepVuKho (chỉ hình thức "Sản xuất", KHÔNG gồm Nhập cân đối
+ *         kho/Nhập trao đổi) thay vì công thức Sheet cũ - xem
+ *         tongSanXuatMTTrongNgayNVK_/syncNVKStagingForKey_ (cột 13 mới
+ *         "Sản xuất MT"). LƯU Ý: công thức gốc "AJ/Q" của hệ thống cũ
+ *         nằm trong công thức Sheet thủ công (mục D), Web App KHÔNG đọc
+ *         được nguyên văn - đây là suy luận lại theo đúng mô tả ở mục H,
+ *         CẦN người dùng tự đối chiếu 1 lần với số thật trước khi tin
+ *         tưởng hoàn toàn (xem "Đối chiếu hệ thống cũ").
+ *       - Đối chiếu Phiếu cân + cảnh báo qua email dùng lại NGUYÊN VĂN
+ *         docTongPhieuCanNgoai_ (đã có, độc lập hệ thống cũ) - CHỈ CẢNH
+ *         BÁO (không có "Chờ duyệt" vì NVK là sổ nhật ký append-only,
+ *         không có khái niệm trạng thái chờ duyệt như Form Responses 1).
+ *     Index.html: tab "Ghi nghiệp vụ" thêm Nhóm nghiệp vụ mới "🪵 Nhập
+ *     gỗ keo (nguyên liệu)"; tab "Báo cáo" thêm 2 cột "Nhập gỗ keo (MT)"
+ *     + "Định mức".
  * ============================================================
  */
 
@@ -1466,6 +1496,13 @@ const CFG = {
   SHEET_NVK_STAGING: "ChitietKho_NVK",     // sheet trung gian (tự đồng bộ)
   SHEET_NVK_BAOCAO: "BaoCao_NVK",          // sheet báo cáo (dựng theo yêu cầu)
   SHEET_NVK_LOG: "AuditNVK",               // sheet log riêng cho Nghiệp vụ kho
+  // "Nhập gỗ keo (nguyên liệu)" cho NVK (mục BC, v2026.9.3) - xem ghi
+  // chú thiết kế ở mục BC đầu file: sheet RIÊNG (1 dòng/Đơn vị+Ngày,
+  // GHI ĐÈ khi nộp lại) lưu số MT gỗ keo tươi nguyên liệu nhập trong
+  // ngày - hệ thống cũ có (cột "Nhập gỗ keo trong ngày"), NVK ban đầu
+  // (mục BB) THIẾU hẳn khái niệm này (chỉ có "Sản xuất" = dăm ra lò
+  // vào Kho Nhà máy, không có nguyên liệu gỗ tươi đưa vào trước đó).
+  SHEET_NVK_NHAPGOKEO: "NhapGoKeo_NVK",
   // 4 Kho Nhà máy - ĐÚNG 4 cột đã có trong báo cáo cũ (Hòa Nhơn/Quế
   // Sơn/Đại Hiệp/HAKQN). Mỗi Đơn vị có 1 Kho Nhà máy "của mình" (dùng
   // làm mặc định/đích cho các bút toán tự động) - xem
@@ -5255,9 +5292,10 @@ function getOrCreateNVKStagingSheet_() {
       "Đơn vị", "Ngày", "Tồn đầu ngày MT", "Tồn đầu ngày BDMT",
       "Nhập trong ngày MT", "Nhập trong ngày BDMT",
       "Xuất trong ngày MT", "Xuất trong ngày BDMT",
-      "Tồn CK MT", "Tồn CK BDMT", "Độ khô TB CK", "Cập nhật lúc"
+      "Tồn CK MT", "Tồn CK BDMT", "Độ khô TB CK", "Cập nhật lúc",
+      "Sản xuất trong ngày MT" // mục BC - riêng hình thức "Sản xuất", dùng tính Định mức
     ]);
-    sh.getRange(1, 1, 1, 12).setFontWeight("bold").setBackground("#d9ead3");
+    sh.getRange(1, 1, 1, 13).setFontWeight("bold").setBackground("#d9ead3");
     sh.setFrozenRows(1);
   }
   return sh;
@@ -5492,6 +5530,167 @@ function ghiNhapKho(payload) {
     logNVK_(email, donVi, chungTu, "Ghi \"" + hinhThuc + "\" " + fmtNumVN_(mt) + " MT vào \"" + kho + "\"");
     syncNVKStagingForKey_(donVi, utils.formatDateISO(ngay));
     return { success: true, message: "✅ Đã ghi \"" + hinhThuc + "\" " + fmtNumVN_(mt) + " MT vào \"" + kho + "\" (Chứng từ " + chungTu + ")." };
+  } catch (err) {
+    return { success: false, message: "❌ Lỗi: " + err.toString() };
+  } finally {
+    if (lock) lock.releaseLock();
+  }
+}
+
+// ----------------------------------------------------------------
+// "NHẬP GỖ KEO (NGUYÊN LIỆU)" CHO NVK (mục BC) - xem ghi chú thiết kế
+// đầy đủ ở mục BC đầu file. KHÔNG phải 1 giao dịch kho (không Kho nhập/
+// xuất, không đụng FIFO/Tồn CK) - chỉ 1 số liệu nguyên liệu/ngày dùng để
+// đối chiếu Phiếu cân + tính "Định mức", giống hệt vai trò cột "Nhập gỗ
+// keo trong ngày" ở hệ thống cũ.
+// ----------------------------------------------------------------
+function getOrCreateNhapGoKeoNVKSheet_() {
+  const ss = SpreadsheetApp.getActive();
+  let sh = ss.getSheetByName(CFG.SHEET_NVK_NHAPGOKEO);
+  if (!sh) {
+    sh = ss.insertSheet(CFG.SHEET_NVK_NHAPGOKEO);
+    sh.appendRow(["Ngày", "Đơn vị", "Nhập gỗ keo (MT)", "Email", "Thời gian ghi"]);
+    sh.getRange(1, 1, 1, 5).setFontWeight("bold").setBackground("#d9ead3");
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+/** Tổng MT "Sản xuất" (dăm ra lò vào Kho Nhà máy - KHÔNG gồm Nhập cân
+ * đối kho/Nhập trao đổi/Trung chuyển/Mượn) của 1 (Đơn vị, Ngày) trong sổ
+ * NghiepVuKho - dùng làm tử số "Định mức" (xem mục BC). */
+function tongSanXuatMTTrongNgayNVK_(donVi, ngayISO) {
+  const sh = getOrCreateNghiepVuKhoSheet_();
+  const lastRow = sh.getLastRow();
+  if (lastRow < 2) return 0;
+  let tong = 0;
+  sh.getRange(2, 1, lastRow - 1, NVK_TOTAL_COL).getValues().forEach(function (r) {
+    if (String(r[COL_NVK.DON_VI] || "").trim() !== donVi) return;
+    if (utils.formatDateISO(r[COL_NVK.NGAY_CHUNG_TU]) !== ngayISO) return;
+    if (String(r[COL_NVK.LOAI] || "").trim() !== "Nhập") return;
+    if (String(r[COL_NVK.HINH_THUC] || "").trim() !== "Sản xuất") return;
+    tong += utils.parseNum(r[COL_NVK.KHOI_LUONG_MT]);
+  });
+  return tong;
+}
+
+/** Đọc TOÀN BỘ sheet NhapGoKeo_NVK 1 lần thành Map "donVi|ngayISO" ->
+ * MT - dùng cho getNVKBaoCao (tránh đọc lại sheet cho từng dòng báo
+ * cáo). */
+function layNhapGoKeoNVKMap_() {
+  const sh = getOrCreateNhapGoKeoNVKSheet_();
+  const lastRow = sh.getLastRow();
+  const map = new Map();
+  if (lastRow < 2) return map;
+  sh.getRange(2, 1, lastRow - 1, 5).getValues().forEach(function (r) {
+    const ngayISO = utils.formatDateISO(r[0]);
+    const donVi = String(r[1] || "").trim();
+    if (!donVi || !ngayISO) return;
+    map.set(donVi + "|" + ngayISO, utils.parseNum(r[2]));
+  });
+  return map;
+}
+
+/** Tìm đúng dòng "Điều kiện kiểm tra duyệt" (sheet DieuKienDuyet, Admin
+ * cấu hình - dùng CHUNG với hệ thống cũ, KHÔNG tạo cấu hình riêng cho
+ * NVK) khớp Đơn vị + chứa Ngày - CÙNG quy tắc ưu tiên "Từ ngày" gần nhất
+ * với kiemTraDinhMucVaCanhBao_ (xem mục BC). Trả về null nếu chưa cấu
+ * hình cho Đơn vị/khoảng ngày này. */
+function timDieuKienDinhMucKhopNVK_(donVi, ngayISO) {
+  const ungVien = getDieuKienDuyetListRaw_().filter(function (d) {
+    if (d.donVi !== donVi) return false;
+    if (d.tuNgayISO && ngayISO < d.tuNgayISO) return false;
+    if (d.denNgayISO && ngayISO > d.denNgayISO) return false;
+    return true;
+  });
+  if (!ungVien.length) return null;
+  ungVien.sort(function (a, b) { return (b.tuNgayISO || "0000-00-00").localeCompare(a.tuNgayISO || "0000-00-00"); });
+  return ungVien[0];
+}
+
+/** Ghi/cập nhật "Nhập gỗ keo trong ngày" cho NVK (mục BC) - GHI ĐÈ theo
+ * khóa (Đơn vị, Ngày), giống logCanDoiBDMT_. Sau khi ghi, TỰ đối chiếu
+ * Phiếu cân thực tế (dùng lại NGUYÊN VĂN docTongPhieuCanNgoai_) + tính
+ * "Định mức" (= 100% - Sản xuất/Nhập gỗ keo, xem
+ * tongSanXuatMTTrongNgayNVK_) so với khoảng Admin cấu hình ở
+ * DieuKienDuyet - CHỈ CẢNH BÁO (gửi email, KHÔNG có "Chờ duyệt" vì
+ * NghiepVuKho là sổ nhật ký append-only, không có trạng thái chờ duyệt
+ * như Form Responses 1). */
+function ghiNhapGoKeoNVK(donVi, ngayISO, mt) {
+  let lock;
+  try {
+    lock = LockService.getScriptLock();
+    lock.waitLock(30000);
+    const email = utils.normEmail(getCurrentUserEmail_());
+    donVi = String(donVi || "").trim();
+    if (!donVi) return { success: false, message: "❌ Vui lòng chọn Đơn vị." };
+    const q = kiemTraQuyenGhiNVK_(email, donVi);
+    if (!q.ok) return { success: false, message: q.message };
+    if (!ngayISO) return { success: false, message: "❌ Vui lòng chọn Ngày." };
+    const ngay = new Date(ngayISO + "T00:00:00");
+    if (isNaN(ngay.getTime())) return { success: false, message: "❌ Ngày không hợp lệ." };
+    mt = utils.parseNum(mt);
+    if (!(mt > 0)) return { success: false, message: "❌ \"Nhập gỗ keo\" phải lớn hơn 0." };
+
+    const sh = getOrCreateNhapGoKeoNVKSheet_();
+    const rowVals = [ngay, donVi, mt, email, new Date()];
+    const lastRow = sh.getLastRow();
+    let existingRow = -1;
+    if (lastRow >= 2) {
+      const data = sh.getRange(2, 1, lastRow - 1, 2).getValues();
+      for (let i = 0; i < data.length; i++) {
+        if (String(data[i][1] || "").trim() === donVi && utils.formatDateISO(data[i][0]) === ngayISO) { existingRow = i + 2; break; }
+      }
+    }
+    if (existingRow > 0) sh.getRange(existingRow, 1, 1, rowVals.length).setValues([rowVals]);
+    else sh.appendRow(rowVals);
+    logNVK_(email, donVi, "", "Ghi \"Nhập gỗ keo trong ngày\" " + fmtNumVN_(mt) + " MT (ngày " + ngayISO + ")");
+
+    const canhBao = [];
+
+    // Đối chiếu Phiếu cân (5%, cùng ngưỡng với hệ thống cũ).
+    try {
+      const kq = docTongPhieuCanNgoai_(donVi, ngayISO);
+      if (kq && kq.tongMT > 0) {
+        const pctLech = Math.abs(mt - kq.tongMT) / kq.tongMT;
+        if (pctLech > 0.05) {
+          const lyDo = "Lệch phiếu cân: \"Nhập gỗ keo trong ngày\" nhập tay (" + fmtNumVN_(mt) + " MT) lệch " +
+            (pctLech * 100).toFixed(2) + "% so với TỔNG Phiếu cân thực tế ngày " + ngayISO + " (" + fmtNumVN_(kq.tongMT) + " MT, " + kq.soDong + " phiếu cân) - vượt ngưỡng cho phép 5%.";
+          canhBao.push(lyDo);
+          guiEmailAnToan_({
+            to: [email].concat(CFG.ADMIN_EMAILS).filter(function (v, i, a) { return v && a.indexOf(v) === i; }).join(","),
+            subject: "⚠️ [Nghiệp Vụ Kho] Nhập gỗ keo LỆCH PHIẾU CÂN - " + donVi,
+            body: "Nhập gỗ keo ngày " + ngayISO + " của \"" + donVi + "\" (người ghi: " + email + "):\n\n" + lyDo +
+              "\n\n(Email tự động từ hệ thống Nghiệp Vụ Kho (thử nghiệm) - Web App Quản Lý Tồn Kho Dăm - HAK Group)"
+          }, "NVK lệch phiếu cân - " + donVi);
+        }
+      }
+    } catch (e) { /* không để lỗi đọc file Phiếu cân ngoài làm hỏng việc ghi Nhập gỗ keo */ }
+
+    // "Định mức" so với khoảng Admin cấu hình (DieuKienDuyet, dùng
+    // chung với hệ thống cũ).
+    let dinhMucPct = null;
+    try {
+      const sanXuatMT = tongSanXuatMTTrongNgayNVK_(donVi, ngayISO);
+      dinhMucPct = mt > 0 ? (1 - sanXuatMT / mt) * 100 : null;
+      const dieuKien = timDieuKienDinhMucKhopNVK_(donVi, ngayISO);
+      if (dieuKien && dinhMucPct !== null && (dinhMucPct < dieuKien.minPct || dinhMucPct > dieuKien.maxPct)) {
+        const khoangNgay = (dieuKien.tuNgayDisplay || "…") + " → " + (dieuKien.denNgayDisplay || "…");
+        const lyDo = "Lệch định mức: Định mức tính được " + dinhMucPct.toFixed(2) + "% (Sản xuất " + fmtNumVN_(sanXuatMT) +
+          " MT / Nhập gỗ keo " + fmtNumVN_(mt) + " MT) nằm NGOÀI khoảng cho phép (" + dieuKien.minPct + "% - " + dieuKien.maxPct + "%) áp dụng cho giai đoạn " + khoangNgay + ".";
+        canhBao.push(lyDo);
+        guiEmailAnToan_({
+          to: [email].concat(CFG.ADMIN_EMAILS).filter(function (v, i, a) { return v && a.indexOf(v) === i; }).join(","),
+          subject: "⚠️ [Nghiệp Vụ Kho] Nhập gỗ keo LỆCH ĐỊNH MỨC - " + donVi,
+          body: "Nhập gỗ keo ngày " + ngayISO + " của \"" + donVi + "\" (người ghi: " + email + "):\n\n" + lyDo +
+            "\n\n(Email tự động từ hệ thống Nghiệp Vụ Kho (thử nghiệm) - Web App Quản Lý Tồn Kho Dăm - HAK Group)"
+        }, "NVK lệch định mức - " + donVi);
+      }
+    } catch (e) { /* không để lỗi kiểm tra định mức làm hỏng việc ghi Nhập gỗ keo */ }
+
+    let msg = "✅ Đã ghi \"Nhập gỗ keo\" " + fmtNumVN_(mt) + " MT cho \"" + donVi + "\" ngày " + ngayISO + ".";
+    if (canhBao.length) msg += "\n\n⚠️ " + canhBao.join("\n⚠️ ");
+    return { success: true, message: msg, dinhMucPct: dinhMucPct, canhBao: canhBao };
   } catch (err) {
     return { success: false, message: "❌ Lỗi: " + err.toString() };
   } finally {
@@ -5817,15 +6016,19 @@ function syncNVKStagingForKey_(donVi, ngayISO) {
 
   const sh = getOrCreateNghiepVuKhoSheet_();
   const lastRow = sh.getLastRow();
-  let nhapMT = 0, nhapBDMT = 0, xuatMT = 0, xuatBDMT = 0;
+  let nhapMT = 0, nhapBDMT = 0, xuatMT = 0, xuatBDMT = 0, sanXuatMT = 0;
   if (lastRow >= 2) {
     sh.getRange(2, 1, lastRow - 1, NVK_TOTAL_COL).getValues().forEach(function (r) {
       if (String(r[COL_NVK.DON_VI] || "").trim() !== donVi) return;
       if (utils.formatDateISO(r[COL_NVK.NGAY_CHUNG_TU]) !== ngayISO) return;
       const mt = utils.parseNum(r[COL_NVK.KHOI_LUONG_MT]);
       const bdmt = utils.parseNum(r[COL_NVK.KHOI_LUONG_BDMT]);
-      if (String(r[COL_NVK.LOAI] || "").trim() === "Nhập") { nhapMT += mt; nhapBDMT += bdmt; }
-      else { xuatMT += mt; xuatBDMT += bdmt; }
+      if (String(r[COL_NVK.LOAI] || "").trim() === "Nhập") {
+        nhapMT += mt; nhapBDMT += bdmt;
+        // mục BC: riêng "Sản xuất" (dăm ra lò, KHÔNG gồm Nhập cân đối
+        // kho/Nhập trao đổi) - dùng làm tử số "Định mức".
+        if (String(r[COL_NVK.HINH_THUC] || "").trim() === "Sản xuất") sanXuatMT += mt;
+      } else { xuatMT += mt; xuatBDMT += bdmt; }
     });
   }
 
@@ -5835,7 +6038,7 @@ function syncNVKStagingForKey_(donVi, ngayISO) {
     tonDauNgay.mt, tonDauNgay.bdmt,
     nhapMT, nhapBDMT, xuatMT, xuatBDMT,
     tonCK.mt, tonCK.bdmt, tonCK.mt > 0 ? tonCK.bdmt / tonCK.mt : 0,
-    new Date()
+    new Date(), sanXuatMT
   ];
   const lastRow2 = stagingSh.getLastRow();
   let existingRow = -1;
@@ -5854,13 +6057,23 @@ function getNVKBaoCao(donViFilter, fDate, tDate) {
   const sh = getOrCreateNVKStagingSheet_();
   const lastRow = sh.getLastRow();
   if (lastRow < 2) return { rows: [], soDong: 0 };
-  let rows = sh.getRange(2, 1, lastRow - 1, 12).getValues().map(function (r) {
+  const nhapGoKeoMap = layNhapGoKeoNVKMap_(); // mục BC
+  let rows = sh.getRange(2, 1, lastRow - 1, 13).getValues().map(function (r) {
+    const donVi = String(r[0] || "").trim(), ngayISO = utils.formatDateISO(r[1]);
+    const sanXuatMT = utils.parseNum(r[12]);
+    const nhapGoKeoMT = nhapGoKeoMap.has(donVi + "|" + ngayISO) ? nhapGoKeoMap.get(donVi + "|" + ngayISO) : null;
+    // mục BC: Định mức = 100% - Sản xuất/Nhập gỗ keo, CÙNG công thức hệ
+    // thống cũ (xem mục H đầu file) - null nếu chưa ghi "Nhập gỗ keo"
+    // ngày đó (KHÔNG mặc định 0%, tránh hiểu lầm "đạt định mức tuyệt
+    // đối" khi thực ra chưa có số liệu để so).
+    const dinhMuc = (nhapGoKeoMT !== null && nhapGoKeoMT > 0) ? (1 - sanXuatMT / nhapGoKeoMT) : null;
     return {
-      donVi: String(r[0] || "").trim(), ngayISO: utils.formatDateISO(r[1]), ngay: utils.formatDate(r[1]),
+      donVi: donVi, ngayISO: ngayISO, ngay: utils.formatDate(r[1]),
       tonDauMT: utils.parseNum(r[2]), tonDauBDMT: utils.parseNum(r[3]),
       nhapMT: utils.parseNum(r[4]), nhapBDMT: utils.parseNum(r[5]),
       xuatMT: utils.parseNum(r[6]), xuatBDMT: utils.parseNum(r[7]),
-      tonCKMT: utils.parseNum(r[8]), tonCKBDMT: utils.parseNum(r[9]), doKhoTB: utils.parseNum(r[10])
+      tonCKMT: utils.parseNum(r[8]), tonCKBDMT: utils.parseNum(r[9]), doKhoTB: utils.parseNum(r[10]),
+      sanXuatMT: sanXuatMT, nhapGoKeoMT: nhapGoKeoMT, dinhMuc: dinhMuc
     };
   }).filter(function (r) { return r.donVi && r.ngayISO; });
   if (allowedUnits) rows = rows.filter(function (r) { return allowedUnits.includes(r.donVi); });
@@ -5895,9 +6108,10 @@ function ghiBaoCaoNVKVaoSheet(donViFilter, fDate, tDate) {
     const res = getNVKBaoCao(donViFilter, fDate, tDate);
     const sh = getOrCreateNVKBaoCaoSheet_();
     sh.clear();
-    const header = ["Đơn vị", "Ngày", "Tồn đầu MT", "Tồn đầu BDMT", "Nhập MT", "Nhập BDMT", "Xuất MT", "Xuất BDMT", "Tồn CK MT", "Tồn CK BDMT", "Độ khô TB CK"];
+    const header = ["Đơn vị", "Ngày", "Tồn đầu MT", "Tồn đầu BDMT", "Nhập MT", "Nhập BDMT", "Xuất MT", "Xuất BDMT", "Tồn CK MT", "Tồn CK BDMT", "Độ khô TB CK", "Nhập gỗ keo (MT)", "Định mức"];
     const rows = res.rows.map(function (r) {
-      return [r.donVi, r.ngay, r.tonDauMT, r.tonDauBDMT, r.nhapMT, r.nhapBDMT, r.xuatMT, r.xuatBDMT, r.tonCKMT, r.tonCKBDMT, r.doKhoTB];
+      return [r.donVi, r.ngay, r.tonDauMT, r.tonDauBDMT, r.nhapMT, r.nhapBDMT, r.xuatMT, r.xuatBDMT, r.tonCKMT, r.tonCKBDMT, r.doKhoTB,
+        r.nhapGoKeoMT === null ? "" : r.nhapGoKeoMT, r.dinhMuc === null ? "" : r.dinhMuc];
     });
     sh.getRange(1, 1, 1, header.length).setValues([header]).setFontWeight("bold").setBackground("#d9ead3");
     sh.setFrozenRows(1);

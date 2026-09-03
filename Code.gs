@@ -5760,6 +5760,30 @@ function getNVKBaoCao(donViFilter, fDate, tDate) {
   return { rows: rows, soDong: rows.length };
 }
 
+/** Dựng lại sheet báo cáo `BaoCao_NVK` (mục BB, sheet thứ 3 trong 4
+ * sheet yêu cầu) - GHI ĐÈ toàn bộ nội dung sheet bằng ĐÚNG bộ lọc đang
+ * xem ở tab "Báo cáo" trên Web App, để xem/in/xuất trực tiếp trong
+ * Google Sheet (không bắt buộc phải mở Web App). Gọi getNVKBaoCao()
+ * sẵn có (đã tự chặn theo donViChoPhepCuaToi_) rồi ghi phẳng ra Sheet -
+ * KHÔNG lưu công thức, chỉ lưu SỐ đã tính tại thời điểm bấm nút. */
+function ghiBaoCaoNVKVaoSheet(donViFilter, fDate, tDate) {
+  try {
+    const res = getNVKBaoCao(donViFilter, fDate, tDate);
+    const sh = getOrCreateNVKBaoCaoSheet_();
+    sh.clear();
+    const header = ["Đơn vị", "Ngày", "Tồn đầu MT", "Tồn đầu BDMT", "Nhập MT", "Nhập BDMT", "Xuất MT", "Xuất BDMT", "Tồn CK MT", "Tồn CK BDMT", "Độ khô TB CK"];
+    const rows = res.rows.map(function (r) {
+      return [r.donVi, r.ngay, r.tonDauMT, r.tonDauBDMT, r.nhapMT, r.nhapBDMT, r.xuatMT, r.xuatBDMT, r.tonCKMT, r.tonCKBDMT, r.doKhoTB];
+    });
+    sh.getRange(1, 1, 1, header.length).setValues([header]).setFontWeight("bold").setBackground("#d9ead3");
+    sh.setFrozenRows(1);
+    if (rows.length) sh.getRange(2, 1, rows.length, header.length).setValues(rows);
+    return { success: true, message: "✅ Đã dựng lại sheet \"BaoCao_NVK\" (" + rows.length + " dòng).", soDong: rows.length };
+  } catch (err) {
+    return { success: false, message: "❌ Lỗi: " + err.toString() };
+  }
+}
+
 function getSoDuKhoHienTai(kho, donVi) {
   const lots = timFIFOLoKho_(kho, donVi);
   const mt = lots.reduce(function (s, l) { return s + l.mtConLai; }, 0);

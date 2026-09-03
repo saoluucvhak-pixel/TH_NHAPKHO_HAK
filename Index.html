@@ -2988,8 +2988,12 @@ function loadNVKBaoCao(){
           <div class="field"><label>Đơn vị</label><select id="nvk-bc-donVi"><option value="">-- Tất cả --</option>${donViOptions.map(u => `<option value="${esc(u)}">${esc(u)}</option>`).join('')}</select></div>
           <div class="field"><label>Từ ngày</label><input type="date" id="nvk-bc-from"></div>
           <div class="field"><label>Đến ngày</label><input type="date" id="nvk-bc-to" value="${todayISO_()}"></div>
-          <div class="field" style="display:flex;align-items:flex-end"><button class="btn primary" onclick="loadNVKBaoCaoData_()">🔍 Xem</button></div>
+          <div class="field" style="display:flex;align-items:flex-end;gap:6px">
+            <button class="btn primary" onclick="loadNVKBaoCaoData_()">🔍 Xem</button>
+            <button class="btn" onclick="ghiBaoCaoNVKVaoSheet_()">📤 Dựng vào Sheet</button>
+          </div>
         </div>
+        <div class="hint-text">Nút "Dựng vào Sheet" ghi ĐÚNG bảng đang xem bên dưới (theo bộ lọc hiện tại) vào sheet "BaoCao_NVK" trong Google Sheet - để xem/in/xuất trực tiếp trong Sheet, không cần mở Web App.</div>
       </div>
       <div class="card" id="nvk-bc-wrap"></div>`;
   }
@@ -3003,6 +3007,12 @@ function loadNVKBaoCaoData_(){
     state.nvkBaoCao = res;
     renderNVKBaoCaoTable_();
   });
+}
+
+function ghiBaoCaoNVKVaoSheet_(){
+  const donVi = document.getElementById('nvk-bc-donVi').value;
+  const f = document.getElementById('nvk-bc-from').value, t = document.getElementById('nvk-bc-to').value;
+  call('ghiBaoCaoNVKVaoSheet', [donVi, f, t], 'Đang dựng báo cáo vào Sheet...').then(res => handleResult(res));
 }
 
 function renderNVKBaoCaoTable_(){

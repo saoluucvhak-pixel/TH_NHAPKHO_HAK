@@ -3022,10 +3022,10 @@ function loadNVKBaoCao(){
           <div class="field"><label>Đến ngày</label><input type="date" id="nvk-bc-to" value="${todayISO_()}"></div>
           <div class="field" style="display:flex;align-items:flex-end;gap:6px">
             <button class="btn primary" onclick="loadNVKBaoCaoData_()">🔍 Xem</button>
-            <button class="btn" onclick="ghiBaoCaoNVKVaoSheet_()">📤 Dựng vào Sheet</button>
+            ${state.isAdmin ? `<button class="btn" onclick="ghiBaoCaoNVKVaoSheet_()">📤 Dựng vào Sheet</button>` : ''}
           </div>
         </div>
-        <div class="hint-text">Nút "Dựng vào Sheet" ghi ĐÚNG bảng đang xem bên dưới (theo bộ lọc hiện tại) vào sheet "BaoCao_NVK" trong Google Sheet - để xem/in/xuất trực tiếp trong Sheet, không cần mở Web App.</div>
+        ${state.isAdmin ? `<div class="hint-text">Nút "Dựng vào Sheet" ghi ĐÚNG bảng đang xem bên dưới (theo bộ lọc hiện tại) vào sheet "BaoCao_NVK" trong Google Sheet - để xem/in/xuất trực tiếp trong Sheet, không cần mở Web App. CHỈ Admin thấy nút này vì thao tác GHI ĐÈ toàn bộ sheet dùng chung (có thể xóa mất dữ liệu Đơn vị khác).</div>` : ''}
       </div>
       <div class="card" id="nvk-bc-wrap"></div>`;
   }

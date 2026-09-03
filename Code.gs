@@ -5878,7 +5878,20 @@ function getNVKBaoCao(donViFilter, fDate, tDate) {
  * sẵn có (đã tự chặn theo donViChoPhepCuaToi_) rồi ghi phẳng ra Sheet -
  * KHÔNG lưu công thức, chỉ lưu SỐ đã tính tại thời điểm bấm nút. */
 function ghiBaoCaoNVKVaoSheet(donViFilter, fDate, tDate) {
+  let lock;
   try {
+    lock = LockService.getScriptLock();
+    lock.waitLock(30000);
+    // CHỈ Admin (cùng nguyên tắc "dựng lại toàn sheet" với
+    // rebuildAllChitietTonKho): getNVKBaoCao() tự lọc kết quả theo
+    // donViChoPhepCuaToi_ của người gọi, nhưng hàm này GHI ĐÈ (sh.clear())
+    // TOÀN BỘ sheet dùng chung "BaoCao_NVK" - nếu để người dùng thường bấm,
+    // họ sẽ xóa mất dữ liệu các Đơn vị khác họ không được xem (mà Admin có
+    // thể đã dựng trước đó cho mục đích in ấn/chia sẻ), thay bằng đúng phần
+    // họ được phép xem mà không hề biết.
+    const email = getCurrentUserEmail_();
+    if (!utils.isAdmin(email)) return { success: false, message: "❌ Chỉ Admin mới được dựng báo cáo vào Sheet." };
+
     const res = getNVKBaoCao(donViFilter, fDate, tDate);
     const sh = getOrCreateNVKBaoCaoSheet_();
     sh.clear();
@@ -5892,6 +5905,8 @@ function ghiBaoCaoNVKVaoSheet(donViFilter, fDate, tDate) {
     return { success: true, message: "✅ Đã dựng lại sheet \"BaoCao_NVK\" (" + rows.length + " dòng).", soDong: rows.length };
   } catch (err) {
     return { success: false, message: "❌ Lỗi: " + err.toString() };
+  } finally {
+    if (lock) lock.releaseLock();
   }
 }
 

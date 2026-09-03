@@ -1788,38 +1788,56 @@ function getPhanQuyenList() {
 /** Thêm mới (payload.rowIndex trống) hoặc sửa (payload.rowIndex có giá
  * trị) 1 dòng Phân quyền - CHỈ Admin. */
 function luuPhanQuyen(payload) {
-  const email = getCurrentUserEmail_();
-  if (!utils.isAdmin(email)) return { success: false, message: "❌ Chỉ Admin mới được sửa Phân quyền." };
-  payload = payload || {};
-  const targetEmail = utils.normEmail(payload.email);
-  if (!targetEmail) return { success: false, message: "❌ Vui lòng nhập Email." };
-  const quyen = String(payload.quyen || "").trim().toLowerCase();
-  if (["nhap_sua", "xem", "admin"].indexOf(quyen) === -1) return { success: false, message: "❌ Quyền không hợp lệ." };
-  const donVi = quyen === "admin" ? "" : String(payload.donVi || "").trim();
-  if (quyen !== "admin" && !donVi) return { success: false, message: "❌ Vui lòng chọn Đơn vị (trừ khi cấp Quyền = admin)." };
+  let lock;
+  try {
+    lock = LockService.getScriptLock();
+    lock.waitLock(30000);
+    const email = getCurrentUserEmail_();
+    if (!utils.isAdmin(email)) return { success: false, message: "❌ Chỉ Admin mới được sửa Phân quyền." };
+    payload = payload || {};
+    const targetEmail = utils.normEmail(payload.email);
+    if (!targetEmail) return { success: false, message: "❌ Vui lòng nhập Email." };
+    const quyen = String(payload.quyen || "").trim().toLowerCase();
+    if (["nhap_sua", "xem", "admin"].indexOf(quyen) === -1) return { success: false, message: "❌ Quyền không hợp lệ." };
+    const donVi = quyen === "admin" ? "" : String(payload.donVi || "").trim();
+    if (quyen !== "admin" && !donVi) return { success: false, message: "❌ Vui lòng chọn Đơn vị (trừ khi cấp Quyền = admin)." };
 
-  const sh = getOrCreatePhanQuyenSheet_();
-  const rowVals = [targetEmail, donVi, quyen, String(payload.ghiChu || ""), new Date(), email];
-  if (payload.rowIndex) {
-    const rowIndex = Number(payload.rowIndex);
-    if (rowIndex < 2 || rowIndex > sh.getLastRow()) return { success: false, message: "❌ Dòng không hợp lệ." };
-    sh.getRange(rowIndex, 1, 1, 6).setValues([rowVals]);
-  } else {
-    sh.appendRow(rowVals);
+    const sh = getOrCreatePhanQuyenSheet_();
+    const rowVals = [targetEmail, donVi, quyen, String(payload.ghiChu || ""), new Date(), email];
+    if (payload.rowIndex) {
+      const rowIndex = Number(payload.rowIndex);
+      if (rowIndex < 2 || rowIndex > sh.getLastRow()) return { success: false, message: "❌ Dòng không hợp lệ." };
+      sh.getRange(rowIndex, 1, 1, 6).setValues([rowVals]);
+    } else {
+      sh.appendRow(rowVals);
+    }
+    SpreadsheetApp.flush();
+    __phanQuyenCache = null;
+    return { success: true, message: "✅ Đã lưu phân quyền cho " + targetEmail + "." };
+  } catch (err) {
+    return { success: false, message: "❌ Lỗi: " + err.toString() };
+  } finally {
+    if (lock) lock.releaseLock();
   }
-  SpreadsheetApp.flush();
-  __phanQuyenCache = null;
-  return { success: true, message: "✅ Đã lưu phân quyền cho " + targetEmail + "." };
 }
 
 function xoaPhanQuyen(rowIndex) {
-  const email = getCurrentUserEmail_();
-  if (!utils.isAdmin(email)) return { success: false, message: "❌ Chỉ Admin mới được xóa Phân quyền." };
-  const sh = getOrCreatePhanQuyenSheet_();
-  if (rowIndex < 2 || rowIndex > sh.getLastRow()) return { success: false, message: "❌ Dòng không hợp lệ." };
-  sh.deleteRow(rowIndex);
-  __phanQuyenCache = null;
-  return { success: true, message: "✅ Đã xóa phân quyền." };
+  let lock;
+  try {
+    lock = LockService.getScriptLock();
+    lock.waitLock(30000);
+    const email = getCurrentUserEmail_();
+    if (!utils.isAdmin(email)) return { success: false, message: "❌ Chỉ Admin mới được xóa Phân quyền." };
+    const sh = getOrCreatePhanQuyenSheet_();
+    if (rowIndex < 2 || rowIndex > sh.getLastRow()) return { success: false, message: "❌ Dòng không hợp lệ." };
+    sh.deleteRow(rowIndex);
+    __phanQuyenCache = null;
+    return { success: true, message: "✅ Đã xóa phân quyền." };
+  } catch (err) {
+    return { success: false, message: "❌ Lỗi: " + err.toString() };
+  } finally {
+    if (lock) lock.releaseLock();
+  }
 }
 
 // ============================================================
@@ -1854,7 +1872,11 @@ function getOrCreateDieuKienDuyetSheet_() {
   return sh;
 }
 
-function getDieuKienDuyetList() {
+/** Đọc thô toàn bộ cấu hình Điều kiện kiểm tra duyệt - dùng NỘI BỘ (VD
+ * kiemTraDinhMucVaCanhBao_ khi 1 người dùng thường vừa nộp báo cáo cần
+ * so định mức, KHÔNG phải chính họ "xem danh sách cấu hình" nên không
+ * qua kiểm tra Admin). KHÔNG expose ra client - xem getDieuKienDuyetList(). */
+function getDieuKienDuyetListRaw_() {
   const sh = getOrCreateDieuKienDuyetSheet_();
   const lastRow = sh.getLastRow();
   if (lastRow <= 1) return [];
@@ -1872,6 +1894,16 @@ function getDieuKienDuyetList() {
   })).filter(r => r.donVi);
 }
 
+/** Danh sách Điều kiện kiểm tra duyệt (CHỈ Admin xem được) - dùng cho
+ * màn Cài đặt > Điều kiện kiểm tra duyệt. Trước đây KHÔNG kiểm tra
+ * quyền (lộ khoảng % định mức nội bộ cho bất kỳ ai gọi được
+ * google.script.run) - nay chặn như getPhanQuyenList(). */
+function getDieuKienDuyetList() {
+  const email = getCurrentUserEmail_();
+  if (!utils.isAdmin(email)) return [];
+  return getDieuKienDuyetListRaw_();
+}
+
 /** Thêm mới (payload.rowIndex trống) hoặc sửa (payload.rowIndex có giá
  * trị) 1 dòng Điều kiện kiểm tra duyệt - CHỈ Admin. THEO YÊU CẦU MỚI
  * (mục Z): 1 Đơn vị có thể có NHIỀU dòng cho các khoảng ngày khác nhau
@@ -1879,37 +1911,55 @@ function getDieuKienDuyetList() {
  * quản lý các khoảng ngày không nên chồng lấn (nếu chồng lấn, xem
  * kiemTraDinhMucVaCanhBao_ để biết dòng nào được ưu tiên). */
 function luuDieuKienDuyet(payload) {
-  const email = getCurrentUserEmail_();
-  if (!utils.isAdmin(email)) return { success: false, message: "❌ Chỉ Admin mới được sửa Điều kiện kiểm tra duyệt." };
-  payload = payload || {};
-  const donVi = String(payload.donVi || "").trim();
-  if (!donVi) return { success: false, message: "❌ Vui lòng chọn Đơn vị." };
-  const tuNgay = String(payload.tuNgay || "").trim();   // "" hợp lệ = không giới hạn quá khứ
-  const denNgay = String(payload.denNgay || "").trim(); // "" hợp lệ = không giới hạn tương lai
-  if (tuNgay && denNgay && tuNgay > denNgay) return { success: false, message: "❌ \"Từ ngày\" phải trước hoặc bằng \"Đến ngày\"." };
-  const minPct = utils.parseNum(payload.minPct), maxPct = utils.parseNum(payload.maxPct);
-  if (minPct > maxPct) return { success: false, message: "❌ Định mức tối thiểu phải nhỏ hơn hoặc bằng tối đa." };
+  let lock;
+  try {
+    lock = LockService.getScriptLock();
+    lock.waitLock(30000);
+    const email = getCurrentUserEmail_();
+    if (!utils.isAdmin(email)) return { success: false, message: "❌ Chỉ Admin mới được sửa Điều kiện kiểm tra duyệt." };
+    payload = payload || {};
+    const donVi = String(payload.donVi || "").trim();
+    if (!donVi) return { success: false, message: "❌ Vui lòng chọn Đơn vị." };
+    const tuNgay = String(payload.tuNgay || "").trim();   // "" hợp lệ = không giới hạn quá khứ
+    const denNgay = String(payload.denNgay || "").trim(); // "" hợp lệ = không giới hạn tương lai
+    if (tuNgay && denNgay && tuNgay > denNgay) return { success: false, message: "❌ \"Từ ngày\" phải trước hoặc bằng \"Đến ngày\"." };
+    const minPct = utils.parseNum(payload.minPct), maxPct = utils.parseNum(payload.maxPct);
+    if (minPct > maxPct) return { success: false, message: "❌ Định mức tối thiểu phải nhỏ hơn hoặc bằng tối đa." };
 
-  const sh = getOrCreateDieuKienDuyetSheet_();
-  const rowVals = [donVi, tuNgay ? new Date(tuNgay) : "", denNgay ? new Date(denNgay) : "", minPct, maxPct, new Date(), email];
-  if (payload.rowIndex) {
-    const rowIndex = Number(payload.rowIndex);
-    if (rowIndex < 2 || rowIndex > sh.getLastRow()) return { success: false, message: "❌ Dòng không hợp lệ." };
-    sh.getRange(rowIndex, 1, 1, 7).setValues([rowVals]);
-  } else {
-    sh.appendRow(rowVals);
+    const sh = getOrCreateDieuKienDuyetSheet_();
+    const rowVals = [donVi, tuNgay ? new Date(tuNgay) : "", denNgay ? new Date(denNgay) : "", minPct, maxPct, new Date(), email];
+    if (payload.rowIndex) {
+      const rowIndex = Number(payload.rowIndex);
+      if (rowIndex < 2 || rowIndex > sh.getLastRow()) return { success: false, message: "❌ Dòng không hợp lệ." };
+      sh.getRange(rowIndex, 1, 1, 7).setValues([rowVals]);
+    } else {
+      sh.appendRow(rowVals);
+    }
+    SpreadsheetApp.flush();
+    return { success: true, message: "✅ Đã lưu điều kiện kiểm tra duyệt cho " + donVi + (tuNgay || denNgay ? " (" + (tuNgay || "…") + " → " + (denNgay || "…") + ")" : " (không giới hạn ngày)") + "." };
+  } catch (err) {
+    return { success: false, message: "❌ Lỗi: " + err.toString() };
+  } finally {
+    if (lock) lock.releaseLock();
   }
-  SpreadsheetApp.flush();
-  return { success: true, message: "✅ Đã lưu điều kiện kiểm tra duyệt cho " + donVi + (tuNgay || denNgay ? " (" + (tuNgay || "…") + " → " + (denNgay || "…") + ")" : " (không giới hạn ngày)") + "." };
 }
 
 function xoaDieuKienDuyet(rowIndex) {
-  const email = getCurrentUserEmail_();
-  if (!utils.isAdmin(email)) return { success: false, message: "❌ Chỉ Admin mới được xóa Điều kiện kiểm tra duyệt." };
-  const sh = getOrCreateDieuKienDuyetSheet_();
-  if (rowIndex < 2 || rowIndex > sh.getLastRow()) return { success: false, message: "❌ Dòng không hợp lệ." };
-  sh.deleteRow(rowIndex);
-  return { success: true, message: "✅ Đã xóa." };
+  let lock;
+  try {
+    lock = LockService.getScriptLock();
+    lock.waitLock(30000);
+    const email = getCurrentUserEmail_();
+    if (!utils.isAdmin(email)) return { success: false, message: "❌ Chỉ Admin mới được xóa Điều kiện kiểm tra duyệt." };
+    const sh = getOrCreateDieuKienDuyetSheet_();
+    if (rowIndex < 2 || rowIndex > sh.getLastRow()) return { success: false, message: "❌ Dòng không hợp lệ." };
+    sh.deleteRow(rowIndex);
+    return { success: true, message: "✅ Đã xóa." };
+  } catch (err) {
+    return { success: false, message: "❌ Lỗi: " + err.toString() };
+  } finally {
+    if (lock) lock.releaseLock();
+  }
 }
 
 /** Kiểm tra "Định mức" (COL.DINH_MUC, công thức Sheet, đọc LẠI sau khi
@@ -1934,7 +1984,7 @@ function xoaDieuKienDuyet(rowIndex) {
  * true/false, không lưu lại lý do cụ thể). Luôn gửi email cảnh báo
  * (submitter + Admin) như cũ khi lệch, bất kể Admin hay không. */
 function kiemTraDinhMucVaCanhBao_(donVi, ngayISO, rowIndex, sh, submitterEmail) {
-  const ungVien = getDieuKienDuyetList().filter(function (d) {
+  const ungVien = getDieuKienDuyetListRaw_().filter(function (d) {
     if (d.donVi !== donVi) return false;
     if (d.tuNgayISO && ngayISO < d.tuNgayISO) return false;
     if (d.denNgayISO && ngayISO > d.denNgayISO) return false;
@@ -2468,6 +2518,28 @@ function submitInventoryEntry(payload) {
     const ngayTonKho = new Date(payload.ngayTonKho);
     if (isNaN(ngayTonKho.getTime())) return { success: false, message: "❌ Ngày nhập tồn kho không hợp lệ." };
 
+    // Chặn số âm cho các trường khối lượng vật lý (MT/BDMT/Tồn đầu
+    // ngày/Nhập gỗ) NGAY Ở SERVER, không chỉ dựa vào validate client -
+    // phòng khi payload gọi thẳng qua google.script.run. "Điều chỉnh"/
+    // "Mượn-trả" KHÔNG nằm trong danh sách vì được phép âm/dương tùy
+    // trường hợp (xem timTonCuoiKyTruoc_).
+    const nonNegativeFields = [
+      ["tonDauNgay", "Tồn kho đầu ngày"], ["hoaNhonMT", "Hòa Nhơn - MT"], ["hoaNhonBDMT", "Hòa Nhơn - BDMT"],
+      ["queSonMT", "Quế Sơn - MT"], ["queSonBDMT", "Quế Sơn - BDMT"],
+      ["daiHiepMT", "Đại Hiệp - MT"], ["daiHiepBDMT", "Đại Hiệp - BDMT"],
+      ["hakqnMT", "HAKQN - MT"], ["hakqnBDMT", "HAKQN - BDMT"],
+      ["nhapGo", "Nhập gỗ keo trong ngày"],
+      ["tienSaMT", "Kho Tiên Sa - MT"], ["tienSaBDMT", "Kho Tiên Sa - BDMT"],
+      ["dungQuatMT", "Kho Dung Quất - MT"], ["dungQuatBDMT", "Kho Dung Quất - BDMT"],
+      ["klUocTinhConLai", "KL ước tính còn lại ở kho"],
+      ["candoiMTThucTe", "Khối lượng thực tế MT"]
+    ];
+    for (const [field, label] of nonNegativeFields) {
+      if (payload[field] !== undefined && payload[field] !== "" && utils.parseNum(payload[field]) < 0) {
+        return { success: false, message: "❌ \"" + label + "\" không được là số âm." };
+      }
+    }
+
     // THEO YÊU CẦU MỚI (mục X, v2026.8.17): kiểm tra Phân quyền TRƯỚC
     // khi ghi - email chưa được cấp quyền gì bị chặn hẳn; email có
     // quyền nhưng không phải "nhap_sua" cho ĐÚNG Đơn vị này cũng bị
@@ -2929,6 +3001,7 @@ function getDashboardStats() {
   try { tongSoDongFormRaw = readAllData_().data.length; } catch (e) { /* bỏ qua nếu lỗi đọc */ }
 
   return {
+    email,
     isAdmin: utils.isAdmin(email),
     units,
     tongTonCK,
@@ -3699,8 +3772,15 @@ function getHistoryList(filters) {
 
 function getEntryDetail(rowIndex) {
   const sh = getResponsesSheet_();
+  if (rowIndex < 2 || rowIndex > sh.getLastRow()) return null;
   const r = sh.getRange(rowIndex, 1, 1, CFG.TOTAL_COL_COUNT).getValues()[0];
   if (utils.isBlank(r[COL.DON_VI])) return null;
+  // Cùng nguyên tắc phân quyền với getHistoryList() - chặn ở server để
+  // người dùng thường không đọc được chi tiết báo cáo của Đơn vị mình
+  // không được cấp quyền (VD gọi trực tiếp google.script.run với
+  // rowIndex đoán được), kể cả khi Đơn vị đó không hiện ra ở Lịch Sử.
+  const allowedUnits = donViChoPhepCuaToi_(utils.normEmail(getCurrentUserEmail_()));
+  if (allowedUnits && allowedUnits.indexOf(String(r[COL.DON_VI]).trim()) === -1) return null;
   return rowToHistoryItem_(r, rowIndex);
 }
 
@@ -3763,7 +3843,33 @@ function updateEntry(rowIndex, updates) {
     syncChitietTonKhoForKey_(oldDonVi, oldNgayISO);
     if (newDonVi !== oldDonVi || newNgayISO !== oldNgayISO) syncChitietTonKhoForKey_(newDonVi, newNgayISO);
 
-    return { success: true, message: "✅ Đã lưu thay đổi." };
+    // Cảnh báo (KHÔNG tự động tính lại): nếu Admin vừa sửa MT/BDMT của
+    // Kho Tiên Sa/Dung Quất mà (Đơn vị, Ngày) NÀY đã từng có 1 lần "Cân
+    // đối BDMT xuất hàng" (sheet CanDoiBDMT, xem computeCanDoiBDMT_) thì
+    // dòng cân đối đó đang dùng số MT/BDMT kho CŨ (trước khi sửa) - kết
+    // quả Điều chỉnh MT/BDMT đã ghi sẽ SAI LỆCH so với số liệu mới, ảnh
+    // hưởng cả timTonCuoiKyTruoc_ (kiểm tra lệch đầu kỳ các ngày sau).
+    // Không tự tính lại ở đây vì cần "Độ khô TB Kho Nhà máy" đọc lại
+    // đúng công thức Sheet cho dòng - chỉ nhắc Admin tự vào tab "Cân đối
+    // BDMT xuất hàng" nộp lại cho đúng.
+    let canDoiWarning = "";
+    const khoFieldsChanged = ["tienSaMT", "tienSaBDMT", "dungQuatMT", "dungQuatBDMT"].some(f => f in updates);
+    if (khoFieldsChanged) {
+      try {
+        const canDoiSh = getOrCreateCanDoiBDMTSheet_();
+        const lastRow = canDoiSh.getLastRow();
+        if (lastRow >= 2) {
+          const canDoiData = canDoiSh.getRange(2, 1, lastRow - 1, 16).getValues();
+          const coCanDoiCu = canDoiData.some(r => String(r[15] || "").trim() === oldDonVi && ngayCanDoiToISO_(r[0]) === oldNgayISO);
+          if (coCanDoiCu) {
+            canDoiWarning = "\n\n⚠️ Đơn vị \"" + oldDonVi + "\" ngày " + utils.formatDate(beforeRow[COL.NGAY_TON_KHO]) +
+              " đã có \"Cân đối BDMT xuất hàng\" tính từ số Kho Tiên Sa/Dung Quất CŨ - hãy vào tab đó nộp lại để cập nhật đúng số liệu mới.";
+          }
+        }
+      } catch (e) { /* không để lỗi đọc CanDoiBDMT làm hỏng việc sửa dữ liệu chính */ }
+    }
+
+    return { success: true, message: "✅ Đã lưu thay đổi." + canDoiWarning };
   } catch (err) {
     return { success: false, message: "❌ Lỗi: " + err.toString() };
   } finally {
@@ -5664,7 +5770,10 @@ function ghiXuatBan(payload) {
  * tự chịu trách nhiệm kiểm tra lại "Chứng từ gốc" để xóa ĐỦ cả cặp/bộ
  * nếu cần (không tự động xóa dây chuyền, tránh xóa nhầm diện rộng). */
 function xoaNghiepVuKho(rowIndex) {
+  let lock;
   try {
+    lock = LockService.getScriptLock();
+    lock.waitLock(30000);
     const email = getCurrentUserEmail_();
     if (!utils.isAdmin(email)) return { success: false, message: "❌ Chỉ Admin mới được xóa Nghiệp vụ kho." };
     const sh = getOrCreateNghiepVuKhoSheet_();
@@ -5679,6 +5788,8 @@ function xoaNghiepVuKho(rowIndex) {
     return { success: true, message: "✅ Đã xóa dòng Nghiệp vụ kho." };
   } catch (err) {
     return { success: false, message: "❌ Lỗi: " + err.toString() };
+  } finally {
+    if (lock) lock.releaseLock();
   }
 }
 

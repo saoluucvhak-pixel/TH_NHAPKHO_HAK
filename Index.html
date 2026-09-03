@@ -538,7 +538,7 @@ function renderDashboard(){
     <div class="stat"><div class="label">Độ ẩm trung bình</div><div class="value" id="s-doam-tb">–</div><div class="hint">theo khối lượng tồn kho (4 đơn vị)</div></div>
     <div class="stat"><div class="label">Đơn vị chưa báo cáo hôm nay</div><div class="value danger" id="s-missing">–</div><div class="hint" id="s-missing-hint">/ ${state.units.length || 4} đơn vị</div></div>
     <div class="stat"><div class="label">Số lượng nhà máy vét bãi</div><div class="value timber" id="s-vetbai">–</div><div class="hint" id="s-vetbai-hint">bản ghi gần nhất mỗi đơn vị</div></div>
-    <div class="stat"><div class="label">Vai trò của bạn</div><div class="value" id="s-role" style="font-size:16px">–</div><div class="hint">${esc((window.SCRIPT_EMAIL||''))}</div></div>
+    <div class="stat"><div class="label">Vai trò của bạn</div><div class="value" id="s-role" style="font-size:16px">–</div><div class="hint" id="s-role-email"></div></div>
   </div>
   <div id="dash-vetbai-detail"></div>
   <div class="section-title">Tình trạng theo đơn vị</div>
@@ -595,6 +595,7 @@ function renderDashboard(){
     document.getElementById('s-vetbai').textContent = s.soLuongVetBai + ' / ' + s.units.length;
     document.getElementById('s-vetbai-hint').textContent = s.soLuongVetBai > 0 ? 'xem chi tiết bên dưới' : 'chưa có đơn vị nào vét bãi';
     document.getElementById('s-role').textContent = s.isAdmin ? '🔑 Admin' : '👤 Nhân viên';
+    document.getElementById('s-role-email').textContent = s.email || '';
 
     const vbWrap = document.getElementById('dash-vetbai-detail');
     if (s.vetBaiDetail && s.vetBaiDetail.length) {
@@ -1207,7 +1208,15 @@ function renderCreate(){
   // Sa/Dung Quất (vì "MT kho"/"BDMT kho" của tab Cân đối BDMT lấy trực
   // tiếp từ đó, xem updateCanDoiKhoPreview_).
   document.querySelectorAll('#create-parent-card, .child-tabbar').forEach(() => {});
-  c.addEventListener('input', () => { updateCreateChildTabIndicators_(); updateCanDoiKhoPreview_(); });
+  // #content (c) là node CỐ ĐỊNH của khung trang ngoài (chỉ innerHTML bị
+  // thay mỗi lần renderCreate() chạy) - PHẢI gắn cờ dataset để chỉ bind 1
+  // LẦN DUY NHẤT, nếu không mỗi lần quay lại trang "Nhập Tồn Kho" sẽ cộng
+  // dồn thêm 1 listener 'input' nữa trên CHÍNH c (không phải phần tử con
+  // bị xóa/replace), khiến mỗi lần gõ số bị xử lý lặp lại nhiều lần.
+  if (!c.dataset.createInputBound) {
+    c.dataset.createInputBound = '1';
+    c.addEventListener('input', () => { updateCreateChildTabIndicators_(); updateCanDoiKhoPreview_(); });
+  }
 
   attachNumberFormatting_(c);
   switchCreateChildTab(state.createChildTab);
@@ -1455,10 +1464,33 @@ function collectCreateForm_(){
   };
 }
 
+// Các trường khối lượng vật lý (MT/BDMT) không thể âm - KHÁC với "Điều
+// chỉnh"/"Mượn-trả" (được phép âm/dương tùy trường hợp, xem
+// timTonCuoiKyTruoc_ ở Code.gs) nên 2 trường đó KHÔNG nằm trong danh
+// sách này.
+const NON_NEGATIVE_FIELDS_ = [
+  ['tonDauNgay', 'Tồn kho đầu ngày'],
+  ['hoaNhonMT', 'Hòa Nhơn - MT'], ['hoaNhonBDMT', 'Hòa Nhơn - BDMT'],
+  ['queSonMT', 'Quế Sơn - MT'], ['queSonBDMT', 'Quế Sơn - BDMT'],
+  ['daiHiepMT', 'Đại Hiệp - MT'], ['daiHiepBDMT', 'Đại Hiệp - BDMT'],
+  ['hakqnMT', 'HAKQN - MT'], ['hakqnBDMT', 'HAKQN - BDMT'],
+  ['nhapGo', 'Nhập gỗ keo trong ngày'],
+  ['tienSaMT', 'Kho Tiên Sa - MT'], ['tienSaBDMT', 'Kho Tiên Sa - BDMT'],
+  ['dungQuatMT', 'Kho Dung Quất - MT'], ['dungQuatBDMT', 'Kho Dung Quất - BDMT'],
+  ['klUocTinhConLai', 'KL ước tính còn lại ở kho'],
+  ['candoiMTThucTe', 'Khối lượng thực tế MT']
+];
+
 function submitCreate(){
   const payload = collectCreateForm_();
   if (!payload.donVi) { toast('Vui lòng chọn Đơn vị.', 'warn'); return; }
   if (!payload.ngayTonKho) { toast('Vui lòng chọn Ngày nhập tồn kho.', 'warn'); return; }
+  for (const [key, label] of NON_NEGATIVE_FIELDS_) {
+    if (payload[key] !== '' && Number(payload[key]) < 0) {
+      toast('"' + label + '" không được là số âm.', 'warn');
+      return;
+    }
+  }
   if (payload.candoiCo && !payload.candoiKho) { toast('Vui lòng chọn Kho cần cân đối ở tab "Cân đối BDMT xuất hàng" (hoặc bỏ tick nếu không có).', 'warn'); return; }
   if (payload.candoiCo && payload.candoiDoAm === '') { toast('Vui lòng nhập "Độ ẩm cân đối" ở tab "Cân đối BDMT xuất hàng" (hoặc bỏ tick nếu không có) - để trống sẽ bị tính nhầm thành 0%.', 'warn'); return; }
   if (payload.candoiCo && payload.candoiMTThucTe === '') { toast('Vui lòng nhập "Khối lượng thực tế MT" ở tab "Cân đối BDMT xuất hàng" (hoặc bỏ tick nếu không có).', 'warn'); return; }

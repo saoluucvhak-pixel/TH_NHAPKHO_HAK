@@ -2021,18 +2021,8 @@ function xoaDieuKienDuyet(rowIndex) {
  * true/false, không lưu lại lý do cụ thể). Luôn gửi email cảnh báo
  * (submitter + Admin) như cũ khi lệch, bất kể Admin hay không. */
 function kiemTraDinhMucVaCanhBao_(donVi, ngayISO, rowIndex, sh, submitterEmail) {
-  const ungVien = getDieuKienDuyetListRaw_().filter(function (d) {
-    if (d.donVi !== donVi) return false;
-    if (d.tuNgayISO && ngayISO < d.tuNgayISO) return false;
-    if (d.denNgayISO && ngayISO > d.denNgayISO) return false;
-    return true;
-  });
-  if (!ungVien.length) return false; // Đơn vị chưa cấu hình định mức cho đúng khoảng ngày này -> bỏ qua, không báo gì
-
-  // Ưu tiên "Từ ngày" gần nhất (chuỗi rỗng coi như xa xưa nhất, luôn xếp
-  // sau các giá trị có ngày cụ thể khi so sánh chuỗi ISO yyyy-mm-dd).
-  ungVien.sort(function (a, b) { return (b.tuNgayISO || "0000-00-00").localeCompare(a.tuNgayISO || "0000-00-00"); });
-  const dieuKien = ungVien[0];
+  const dieuKien = timDieuKienDinhMucKhop_(donVi, ngayISO);
+  if (!dieuKien) return false; // Đơn vị chưa cấu hình định mức cho đúng khoảng ngày này -> bỏ qua, không báo gì
 
   const rawVal = sh.getRange(rowIndex, COL.DINH_MUC + 1).getValue();
   const dinhMucPct = utils.parseNum(rawVal) * 100; // cột lưu dạng thập phân (0.95 = 95%)
@@ -5301,6 +5291,39 @@ function getOrCreateNVKStagingSheet_() {
   return sh;
 }
 
+/** CHẠY 1 LẦN NẾU CẦN (Apps Script Editor > chọn hàm này > Run) - NÂNG
+ * CẤP sheet "ChitietKho_NVK" từ cấu trúc BẢN ĐẦU (mục BB, 12 cột, KHÔNG
+ * có "Sản xuất trong ngày MT") sang cấu trúc MỚI (mục BC, THÊM cột 13)
+ * - CÙNG khuôn mẫu với NANG_CAP_DIEUKIENDUYET_THEM_KHOANG_NGAY. CHỈ CẦN
+ * chạy nếu sheet "ChitietKho_NVK" đã được tạo/ghi dữ liệu TỪ TRƯỚC khi
+ * có mục BC (đã lỡ có vài dòng theo cấu trúc cũ, cột 13 trống -> Định
+ * mức tính ra sai/0). Nếu sheet chưa từng tồn tại hoặc đã đúng cấu trúc
+ * mới rồi thì hàm này KHÔNG làm gì (an toàn khi chạy nhầm/chạy lại nhiều
+ * lần). Sau khi thêm cột, TÍNH LẠI toàn bộ dòng đã có bằng cách gọi lại
+ * syncNVKStagingForKey_ cho ĐÚNG (Đơn vị, Ngày) của từng dòng - lấy
+ * thẳng từ sổ NghiepVuKho, không suy đoán. */
+function NANG_CAP_NVKSTAGING_THEM_SANXUAT() {
+  const ss = SpreadsheetApp.getActive();
+  const sh = ss.getSheetByName(CFG.SHEET_NVK_STAGING);
+  if (!sh) { getOrCreateNVKStagingSheet_(); return "✅ Sheet ChitietKho_NVK chưa tồn tại - đã tạo mới đúng cấu trúc mới (13 cột, có Sản xuất trong ngày MT)."; }
+  const headerM = String(sh.getRange(1, 13).getValue() || "");
+  if (headerM) return "✅ Sheet ChitietKho_NVK đã đúng cấu trúc mới (có cột \"" + headerM + "\") - không cần nâng cấp.";
+  sh.getRange(1, 13).setValue("Sản xuất trong ngày MT");
+  sh.getRange(1, 1, 1, 13).setFontWeight("bold").setBackground("#d9ead3");
+  SpreadsheetApp.flush();
+  const lastRow = sh.getLastRow();
+  let soDong = 0;
+  if (lastRow >= 2) {
+    sh.getRange(2, 1, lastRow - 1, 2).getValues().forEach(function (r) {
+      const donVi = String(r[0] || "").trim(), ngayISO = utils.formatDateISO(r[1]);
+      if (!donVi || !ngayISO) return;
+      syncNVKStagingForKey_(donVi, ngayISO);
+      soDong++;
+    });
+  }
+  return "✅ Đã nâng cấp sheet ChitietKho_NVK lên cấu trúc mới (13 cột) và tính lại \"Sản xuất trong ngày MT\" cho " + soDong + " dòng đã có.";
+}
+
 function getOrCreateNVKBaoCaoSheet_() {
   const ss = SpreadsheetApp.getActive();
   let sh = ss.getSheetByName(CFG.SHEET_NVK_BAOCAO);
@@ -5592,11 +5615,13 @@ function layNhapGoKeoNVKMap_() {
 }
 
 /** Tìm đúng dòng "Điều kiện kiểm tra duyệt" (sheet DieuKienDuyet, Admin
- * cấu hình - dùng CHUNG với hệ thống cũ, KHÔNG tạo cấu hình riêng cho
- * NVK) khớp Đơn vị + chứa Ngày - CÙNG quy tắc ưu tiên "Từ ngày" gần nhất
- * với kiemTraDinhMucVaCanhBao_ (xem mục BC). Trả về null nếu chưa cấu
- * hình cho Đơn vị/khoảng ngày này. */
-function timDieuKienDinhMucKhopNVK_(donVi, ngayISO) {
+ * cấu hình) khớp Đơn vị + chứa Ngày - ưu tiên "Từ ngày" gần nhất khi có
+ * nhiều dòng chồng lấn. DÙNG CHUNG cho CẢ hệ thống cũ
+ * (kiemTraDinhMucVaCanhBao_) LẪN NVK (ghiNhapGoKeoNVK, mục BC) - tách ra
+ * đây (thay vì lặp lại logic ở 2 nơi) để tránh 2 luồng lỡ tính lệch nhau
+ * nếu sau này quy tắc ưu tiên khi chồng lấn được sửa lại. Trả về null
+ * nếu chưa cấu hình cho Đơn vị/khoảng ngày này. */
+function timDieuKienDinhMucKhop_(donVi, ngayISO) {
   const ungVien = getDieuKienDuyetListRaw_().filter(function (d) {
     if (d.donVi !== donVi) return false;
     if (d.tuNgayISO && ngayISO < d.tuNgayISO) return false;
@@ -5668,12 +5693,20 @@ function ghiNhapGoKeoNVK(donVi, ngayISO, mt) {
     } catch (e) { /* không để lỗi đọc file Phiếu cân ngoài làm hỏng việc ghi Nhập gỗ keo */ }
 
     // "Định mức" so với khoảng Admin cấu hình (DieuKienDuyet, dùng
-    // chung với hệ thống cũ).
+    // chung với hệ thống cũ). CHỈ so sánh khi ĐÃ CÓ ít nhất 1 dòng "Sản
+    // xuất" trong ngày - nếu chưa (VD người dùng ghi "Nhập gỗ keo" buổi
+    // sáng TRƯỚC khi ghi "Sản xuất" trong ngày), sanXuatMT=0 sẽ luôn ra
+    // Định mức ảo = 100% (thiếu dữ liệu, KHÔNG phải thật sự lệch định
+    // mức) - báo "lệch định mức" lúc này là cảnh báo giả, dễ làm người
+    // dùng hoang mang không cần thiết.
     let dinhMucPct = null;
     try {
       const sanXuatMT = tongSanXuatMTTrongNgayNVK_(donVi, ngayISO);
-      dinhMucPct = mt > 0 ? (1 - sanXuatMT / mt) * 100 : null;
-      const dieuKien = timDieuKienDinhMucKhopNVK_(donVi, ngayISO);
+      dinhMucPct = (mt > 0 && sanXuatMT > 0) ? (1 - sanXuatMT / mt) * 100 : null;
+      if (mt > 0 && sanXuatMT <= 0) {
+        canhBao.push("Chưa ghi \"Sản xuất\" nào cho \"" + donVi + "\" ngày " + ngayISO + " - Định mức sẽ tự tính lại khi có dữ liệu Sản xuất trong ngày.");
+      }
+      const dieuKien = dinhMucPct !== null ? timDieuKienDinhMucKhop_(donVi, ngayISO) : null;
       if (dieuKien && dinhMucPct !== null && (dinhMucPct < dieuKien.minPct || dinhMucPct > dieuKien.maxPct)) {
         const khoangNgay = (dieuKien.tuNgayDisplay || "…") + " → " + (dieuKien.denNgayDisplay || "…");
         const lyDo = "Lệch định mức: Định mức tính được " + dinhMucPct.toFixed(2) + "% (Sản xuất " + fmtNumVN_(sanXuatMT) +

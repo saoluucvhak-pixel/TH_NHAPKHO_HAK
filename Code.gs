@@ -3302,31 +3302,32 @@ function getExistingEntryForKey(donVi, ngayISO) {
 /**
  * Dùng cho màn "Nhập Tồn Kho" khi đang ở chế độ NHẬP MỚI (v2026.8.8) -
  * THEO YÊU CẦU MỚI: "Tồn kho đầu ngày (MT)" của Nhà máy tự động lấy
- * đúng bằng "Cộng MT" của bản ghi GẦN NHẤT TRƯỚC ngày đang nhập (cùng
- * Đơn vị) trong Chitiettonkho - đúng logic kế toán liên tục: tồn đầu
- * hôm nay = tồn cuối (Cộng MT) hôm trước. Web App vẫn cho SỬA TAY sau
- * khi tự điền (không khóa cứng) - xem checkExistingForCreate() ở
- * Index.html. Trả về null nếu chưa có dữ liệu ngày nào trước đó cho
- * đơn vị này (VD ngày đầu tiên mở sổ) - lúc đó form giữ nguyên hành vi
- * cũ, để trống cho người dùng tự nhập.
+ * đúng bằng Đầu kỳ dự kiến (= Tồn CK của bản ghi GẦN NHẤT TRƯỚC ngày
+ * đang nhập, cùng Đơn vị) - đúng logic kế toán liên tục: tồn đầu hôm
+ * nay = tồn cuối hôm trước. Web App vẫn cho SỬA TAY sau khi tự điền
+ * (không khóa cứng) - xem checkExistingForCreate() ở Index.html. Trả
+ * về null nếu chưa có dữ liệu ngày nào trước đó cho đơn vị này (VD
+ * ngày đầu tiên mở sổ) - lúc đó form giữ nguyên hành vi cũ, để trống
+ * cho người dùng tự nhập.
+ *
+ * SỬA LỖI (v2026.9.24, mục BE): TRƯỚC ĐÂY tự điền bằng "Cộng MT" (chỉ
+ * gồm 4 Kho Nhà máy: Hòa Nhơn/Quế Sơn/Đại Hiệp/HAKQN) - KHÔNG khớp với
+ * công thức "Đầu kỳ dự kiến" mà timTonCuoiKyTruoc_ dùng để kiểm tra
+ * "lệch đầu kỳ" (dùng Tồn CK, đã gồm cả Kho Xuất hàng Tiên Sa/Dung
+ * Quất) - gây ra rất nhiều báo cáo "lệch đầu kỳ" GIẢ (số tự điền sẵn
+ * sai ngay từ đầu, người nhập không sửa). SỬA: dùng CHUNG đúng 1 hàm
+ * timTonCuoiKyTruoc_ (đã dùng cho việc kiểm tra) để tự điền - đảm bảo
+ * số tự điền sẵn LUÔN khớp đúng ngưỡng kiểm tra, không còn lệch giả.
  */
 function getPreviousDayCongMT(donVi, ngayISO) {
   donVi = String(donVi || "").trim();
   if (!donVi || !ngayISO) return null;
-  const { data } = readAllChitietData_();
-  let best = null;
-  data.forEach(r => {
-    if (String(r[COL.DON_VI] || "").trim() !== donVi) return;
-    const rISO = utils.formatDateISO(r[COL.NGAY_TON_KHO]);
-    if (!rISO || rISO >= ngayISO) return; // chỉ lấy ngày TRƯỚC ngày đang nhập
-    if (!best || rISO > best.ngayISO) best = { ngayISO: rISO, congMT: utils.parseNum(r[COL.CONG_MT]) };
-  });
-  if (!best) return null;
-  const p = best.ngayISO.split("-");
+  const info = timTonCuoiKyTruoc_(donVi, ngayISO);
+  if (!info) return null;
   return {
-    ngayISO: best.ngayISO,
-    ngayDisplay: p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : best.ngayISO,
-    congMT: best.congMT
+    ngayISO: info.ngayISO,
+    ngayDisplay: info.ngayDisplay,
+    congMT: info.tonCuoiKyDuKien
   };
 }
 

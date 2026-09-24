@@ -1379,7 +1379,7 @@ function checkExistingForCreate(){
           attachNumberFormatting_();
           updateCreateChildTabIndicators_();
           banner.innerHTML += `<div class="hint-text" style="background:var(--moss-light);color:var(--moss);padding:10px 12px;border-radius:8px;margin:0 0 14px 0">
-            🔄 Đã tự điền "Tồn kho đầu ngày" = Cộng MT ngày ${esc(prev.ngayDisplay)} (ngày gần nhất trước đó) = <b>${fmtNum(prev.congMT)}</b> MT. Có thể sửa lại nếu cần.</div>`;
+            🔄 Đã tự điền "Tồn kho đầu ngày" = Đầu kỳ dự kiến (tính từ báo cáo ngày ${esc(prev.ngayDisplay)}, ngày gần nhất trước đó) = <b>${fmtNum(prev.congMT)}</b> MT. Có thể sửa lại nếu cần.</div>`;
         } else {
           banner.innerHTML += `<div class="hint-text" style="background:var(--timber-light);color:#8C511F;padding:10px 12px;border-radius:8px;margin:0 0 14px 0">
             ⚠️ Chưa có dữ liệu ngày nào trước đó cho đơn vị này - vui lòng tự nhập "Tồn kho đầu ngày".</div>`;

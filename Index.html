@@ -2289,7 +2289,7 @@ function renderKiemTraDauKyReportTable(){
   if (!res || !res.rows.length) { wrap.innerHTML = '<div class="empty"><div class="ic">📭</div>Không có báo cáo nào khớp bộ lọc này.</div>'; return; }
   const rowsHtml = res.rows.map(r => {
     if (!r.coDuLieuTruoc) {
-      return `<tr><td>${esc(r.donVi)}</td><td>${esc(r.ngay)}</td><td colspan="6" class="muted">Chưa có báo cáo chính thức ngày nào trước đó (ngày đầu mở sổ) - không có gì để so sánh.</td><td class="num">${fmtNum(r.tonDauNgayThucTe)}</td><td class="num">–</td></tr>`;
+      return `<tr><td>${esc(r.donVi)}</td><td>${esc(r.ngay)}</td><td colspan="5" class="muted">Chưa có báo cáo chính thức ngày nào trước đó (ngày đầu mở sổ) - không có gì để so sánh.</td><td class="num">${fmtNum(r.tonDauNgayThucTe)}</td><td class="num">–</td><td class="num">–</td></tr>`;
     }
     const rowBg = r.khop ? '' : 'style="background:var(--rose-light,#fbeaea)"';
     // Mỗi cột hiện ĐÚNG khoản ĐÃ ĐÓNG GÓP vào tổng (kèm dấu +/− thật, tự
@@ -2303,6 +2303,12 @@ function renderKiemTraDauKyReportTable(){
     // tự đổi dấu: Điều chỉnh MT > 0 thì TRỪ - hiểu là "lượng MT cần xuất
     // thêm phải trừ ra"; Điều chỉnh MT <= 0 thì vẫn CỘNG như cũ) - tooltip
     // hiện rõ giá trị Điều chỉnh MT GỐC (trước khi đổi dấu) để đối chiếu.
+    // mục BD (v2026.9.3): "Mượn/trả" KHÔNG còn nằm trong công thức "Đầu
+    // kỳ dự kiến" nữa (đối chiếu 712 dòng dữ liệu thật cho thấy người
+    // nhập liệu không hề trừ khoản này khi ghép Tồn đầu ngày hôm sau) -
+    // cột này giờ CHỈ hiển thị THAM KHẢO (không dấu +/−, không tính vào
+    // cột "= Đầu kỳ dự kiến" nữa) để người dùng vẫn biết hôm trước có
+    // phát sinh Mượn/trả hay không.
     const dieuChinhTitle = r.dieuChinhMT > 0
       ? `Điều chỉnh MT gốc ${fmtNum(r.dieuChinhMT)} MT (dương - kho thực tế nhiều hơn sổ sách, hiểu là "cần xuất thêm") → TRỪ vào Đầu kỳ dự kiến`
       : `Điều chỉnh MT gốc ${fmtNum(r.dieuChinhMT)} MT (≤ 0) → vẫn CỘNG vào Đầu kỳ dự kiến như công thức cũ`;
@@ -2311,10 +2317,10 @@ function renderKiemTraDauKyReportTable(){
       <td class="num">${fmtNum(r.tonCKTruoc)}</td>
       <td class="num">${signed(-r.khoiLuongThucTeMT)}</td>
       <td class="num" title="${dieuChinhTitle}">${signed(r.dieuChinhMTTerm)}</td>
-      <td class="num">${signed(-r.muonTraTru)}</td>
       <td class="num"><b>${fmtNum(r.tonCuoiKyDuKien)}</b></td>
       <td class="num">${fmtNum(r.tonDauNgayThucTe)}</td>
       <td class="num">${r.khop ? '✅ 0' : '⚠️ '+fmtNum(r.chenhLech)}</td>
+      <td class="num muted" title="Chỉ tham khảo - KHÔNG tính vào Đầu kỳ dự kiến (mục BD)">${fmtNum(r.muonTraTruoc)}</td>
     </tr>`;
   }).join('');
   wrap.innerHTML = `
@@ -2322,8 +2328,9 @@ function renderKiemTraDauKyReportTable(){
     <div style="overflow-x:auto"><table><thead><tr>
         <th>Đơn vị</th><th>Ngày báo cáo</th><th>Ngày trước</th>
         <th class="num">Tồn CK trước</th><th class="num">Khối lượng thực tế MT</th>
-        <th class="num">Điều chỉnh MT</th><th class="num">Mượn/trả</th>
+        <th class="num">Điều chỉnh MT</th>
         <th class="num">= Đầu kỳ dự kiến</th><th class="num">Đầu kỳ đã nhập</th><th class="num">Chênh lệch</th>
+        <th class="num">Mượn/trả (tham khảo)</th>
       </tr></thead><tbody>${rowsHtml}</tbody></table></div>`;
 }
 

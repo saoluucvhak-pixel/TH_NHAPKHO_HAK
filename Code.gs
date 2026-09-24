@@ -2656,16 +2656,15 @@ function submitInventoryEntry(payload) {
       dauKyInfo = timTonCuoiKyTruoc_(donVi, utils.formatDateISO(ngayTonKho));
       if (dauKyInfo !== null && Math.abs(utils.parseNum(payload.tonDauNgay) - dauKyInfo.tonCuoiKyDuKien) > 0.01) {
         lechDauKy = true;
-        // mục AT (v2026.8.23; SỬA LẠI Mượn/trả trừ luôn kể cả <=0); mục AX
-        // (v2026.8.24, BỎ khoản Chở ra Tiên Sa/Dung Quất, ĐỔI Điều chỉnh
-        // MT thành trừ khi > 0 - xem timTonCuoiKyTruoc_): breakdown ĐẦY ĐỦ
-        // các khoản của công thức (Khối lượng thực tế MT trừ, Điều chỉnh
-        // MT +/− tùy dấu, Mượn/trả trừ LUÔN bất kể dấu).
+        // mục AX (v2026.8.24, BỎ khoản Chở ra Tiên Sa/Dung Quất, ĐỔI Điều
+        // chỉnh MT thành trừ khi > 0); mục BD (v2026.9.3, BỎ HẲN số hạng
+        // Mượn/trả khỏi công thức - xem ghi chú timTonCuoiKyTruoc_): giờ
+        // breakdown chỉ còn 2 khoản (Khối lượng thực tế MT trừ, Điều
+        // chỉnh MT +/− tùy dấu).
         lyDoLechDauKy = "Lệch đầu kỳ: Tồn kho đầu ngày nhập (" + fmtNumVN_(payload.tonDauNgay) + " MT) không khớp Đầu kỳ dự kiến (" +
           fmtNumVN_(dauKyInfo.tonCuoiKyDuKien) + " MT) tính từ báo cáo chính thức ngày " + dauKyInfo.ngayDisplay + " = Tồn CK " + fmtNumVN_(dauKyInfo.tonCK) + " MT" +
           (dauKyInfo.khoiLuongThucTeMT ? " − Khối lượng thực tế MT (Cân đối BDMT xuất hàng cùng ngày) " + fmtNumVN_(dauKyInfo.khoiLuongThucTeMT) + " MT" : "") +
-          (dauKyInfo.dieuChinhMTTerm ? (dauKyInfo.dieuChinhMTTerm > 0 ? " + " : " − ") + "Điều chỉnh MT (Cân đối BDMT xuất hàng cùng ngày) " + fmtNumVN_(Math.abs(dauKyInfo.dieuChinhMTTerm)) + " MT" : "") +
-          (dauKyInfo.muonTraTru ? " − Mượn/trả (ngày đó) " + fmtNumVN_(dauKyInfo.muonTraTru) + " MT" : "") + ".";
+          (dauKyInfo.dieuChinhMTTerm ? (dauKyInfo.dieuChinhMTTerm > 0 ? " + " : " − ") + "Điều chỉnh MT (Cân đối BDMT xuất hàng cùng ngày) " + fmtNumVN_(Math.abs(dauKyInfo.dieuChinhMTTerm)) + " MT" : "") + ".";
       }
     }
     row[COL.TRANG_THAI_DUYET] = lechDauKy ? "Chờ duyệt" : "";
@@ -3396,9 +3395,9 @@ function tongKhoiLuongThucTeMTCanDoiDungNgay_(donVi, ngayISO) {
  * "báo cáo lệch đầu kỳ" khi nộp mới (mục X, v2026.8.17; SỬA LẠI công
  * thức ở mục AD, v2026.8.18; SỬA LẠI LẦN NỮA ở mục AT, v2026.8.23; THÊM
  * mục AU/AV (Chở ra Tiên Sa/Dung Quất), SỬA LỖI CHÊNH NGÀY ở mục AW - CẢ
- * 3 mục AU/AV/AW SAU ĐÓ ĐÃ BỊ GỠ BỎ HOÀN TOÀN ở mục AX (v2026.8.24), xem
- * chú thích mục AX ở đầu file để biết lý do và công thức "Điều chỉnh MT"
- * mới):
+ * 3 mục AU/AV/AW SAU ĐÓ ĐÃ BỊ GỠ BỎ HOÀN TOÀN ở mục AX (v2026.8.24); BỎ
+ * HẲN số hạng Mượn/trả ở mục BD (v2026.9.3), xem chú thích mục BD dưới
+ * đây để biết lý do):
  *   Đầu kỳ dự kiến
  *     = TON_CK của bản ghi CHÍNH THỨC ngày liền trước (đã sẵn = Cộng MT
  *       Kho Nhà máy + Kho Tiên Sa MT + Kho Dung Quất MT - công thức
@@ -3415,14 +3414,16 @@ function tongKhoiLuongThucTeMTCanDoiDungNgay_(donVi, ngayISO) {
  *       Xem tongDieuChinhMTCanDoiDungNgay_ + biến dieuChinhMTTerm bên
  *       dưới. Khối lượng thực tế MT và Điều chỉnh MT ĐỀU đến từ CÙNG 1
  *       lần tất toán Cân đối BDMT (nếu có) - KHÔNG phải 1 trong 2.
- *     − "Mượn/trả" của CHÍNH bản ghi ngày liền trước đó - TRỪ LUÔN, KỂ
- *       CẢ KHI Mượn/trả <= 0 (mục AT: TRƯỚC ĐÂY chỉ trừ khi > 0, giờ trừ
- *       trực tiếp giá trị Mượn/trả bất kể dấu - Mượn/trả âm thì phép trừ
- *       sẽ tự CỘNG NGƯỢC LẠI, đúng bản chất số học của phép trừ 1 số
- *       âm).
- * KHÔNG còn khoản "Khối lượng chở ra Tiên Sa/Dung Quất trong ngày" (mục
- * AU/AV/AW) - ĐÃ GỠ BỎ HOÀN TOÀN ở mục AX theo đúng yêu cầu người dùng
- * "BỎ KHO TIÊN SA VÀ DUNG QUẤT RA, ĐỂ LẠI NHƯ CŨ".
+ * mục BD (v2026.9.3) - BỎ HẲN số hạng "− Mượn/trả" (trước đây trừ ngay
+ * cả khi <= 0, xem mục AT): anh dùng ĐỐI CHIẾU LẠI VỚI SỐ LIỆU THẬT
+ * (712 dòng Chitiettonkho, export 03/09/2026) qua "Test Kho" phát hiện
+ * phần lớn các dòng "lệch đầu kỳ" có chênh lệch KHỚP CHÍNH XÁC với giá
+ * trị "Mượn/trả" ngày hôm trước - tức là NGƯỜI NHẬP LIỆU THỰC TẾ không
+ * hề trừ khoản Mượn/trả khi ghép "Tồn kho đầu ngày" hôm sau (chỉ chép
+ * nguyên Tồn CK hôm trước) - ĐÃ HỎI LẠI VÀ XÁC NHẬN qua AskUserQuestion:
+ * bỏ hẳn số hạng này cho khớp với cách dùng thật, KHÔNG còn coi Mượn/trả
+ * là 1 phần của "Đầu kỳ dự kiến" nữa (function vẫn trả về `muonTra` để
+ * hiển thị THAM KHẢO ở báo cáo "Test Kho", không dùng để tính nữa).
  * KHÔNG dùng lại giá trị TON_CK đã lưu sẵn trong biến cục bộ cũ (best) -
  * đổi sang giữ nguyên `bestRow` để đọc thêm được cột MUON_TRA của CHÍNH
  * dòng đó (đỡ phải quét lại Chitiettonkho 1 lần nữa).
@@ -3444,8 +3445,9 @@ function timTonCuoiKyTruoc_(donVi, ngayISO) {
   const tonCK = utils.parseNum(bestRow[COL.TON_CK]);
   const khoiLuongThucTeMT = tongKhoiLuongThucTeMTCanDoiDungNgay_(donVi, bestISO);
   const dieuChinhMT = tongDieuChinhMTCanDoiDungNgay_(donVi, bestISO);
+  // mục BD (v2026.9.3): "Mượn/trả" KHÔNG còn trừ vào Đầu kỳ dự kiến (xem
+  // ghi chú hàm ở trên) - CHỈ giữ lại để hiển thị tham khảo ở "Test Kho".
   const muonTra = utils.parseNum(bestRow[COL.MUON_TRA]);
-  const muonTraTru = muonTra; // mục AT (sửa lại): trừ luôn, kể cả <= 0 (âm thì tự cộng ngược lại)
   // mục AX (v2026.8.24), THEO YÊU CẦU MỚI ("lượng MT cần xuất thêm thì
   // phải trừ ra", đã hỏi lại và xác nhận qua AskUserQuestion): Điều
   // chỉnh MT > 0 (kho thực tế nhiều hơn sổ sách - hiểu là "cần xuất
@@ -3460,8 +3462,7 @@ function timTonCuoiKyTruoc_(donVi, ngayISO) {
     dieuChinhMT,
     dieuChinhMTTerm,
     muonTra,
-    muonTraTru,
-    tonCuoiKyDuKien: tonCK - khoiLuongThucTeMT + dieuChinhMTTerm - muonTraTru
+    tonCuoiKyDuKien: tonCK - khoiLuongThucTeMT + dieuChinhMTTerm
   };
 }
 
@@ -3469,8 +3470,10 @@ function timTonCuoiKyTruoc_(donVi, ngayISO) {
  * tra Tồn kho đầu ngày ĐÃ NHẬP của mỗi báo cáo so với "Đầu kỳ dự kiến"
  * tính từ báo cáo CHÍNH THỨC ngày liền trước cùng Đơn vị (xem
  * timTonCuoiKyTruoc_) - liệt kê RÕ TỪNG THÀNH PHẦN của công thức (Tồn CK
- * hôm trước, − Khối lượng thực tế MT, + Điều chỉnh MT, − Mượn/trả) để
- * người dùng tự thấy CHÊNH LỆCH (nếu có) đến từ đâu, thay vì chỉ biết
+ * hôm trước, − Khối lượng thực tế MT, + Điều chỉnh MT - mục BD v2026.9.3:
+ * "Mượn/trả" KHÔNG còn là 1 thành phần của công thức, chỉ hiện tham khảo
+ * riêng, xem ghi chú timTonCuoiKyTruoc_) để người dùng tự thấy CHÊNH
+ * LỆCH (nếu có) đến từ đâu, thay vì chỉ biết
  * "có lệch" như cảnh báo lúc nộp báo cáo (mục AD/lyDoLechDauKy). KHÁC
  * với cảnh báo lúc nộp báo cáo (chỉ chạy 1 lần đúng lúc nộp, chỉ áp
  * dụng người không phải Admin) - báo cáo này XEM LẠI ĐƯỢC MỌI LÚC, MỌI
@@ -3508,7 +3511,9 @@ function getKiemTraDauKyReport(donViFilter, fDate, tDate) {
       // mục AX: khoản Điều chỉnh MT THỰC SỰ dùng trong công thức (đã áp
       // dụng dấu +/− tùy Điều chỉnh MT dương/âm - xem timTonCuoiKyTruoc_).
       dieuChinhMTTerm: info.dieuChinhMTTerm,
-      muonTraTruoc: info.muonTra, muonTraTru: info.muonTraTru,
+      // mục BD (v2026.9.3): "Mượn/trả" KHÔNG còn tính vào Đầu kỳ dự kiến
+      // - chỉ hiện THAM KHẢO (xem ghi chú timTonCuoiKyTruoc_).
+      muonTraTruoc: info.muonTra,
       tonCuoiKyDuKien: info.tonCuoiKyDuKien,
       tonDauNgayThucTe, chenhLech,
       khop: Math.abs(chenhLech) <= 0.01

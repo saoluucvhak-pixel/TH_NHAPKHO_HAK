@@ -380,9 +380,30 @@ function parseFormattedNumber_(str){
     // phẩy=thập phân) - bỏ hết dấu chấm rồi đổi phẩy thành chấm chuẩn.
     cleaned = str.replace(/\./g, '').replace(',', '.');
   } else {
-    // Không có dấu phẩy -> số thô đang gõ dở (dấu chấm nếu có là thập
-    // phân bình thường) - giữ nguyên.
-    cleaned = str;
+    // SỬA LỖI (v2026.10.2, mục BF) - KHÔNG có dấu phẩy có 2 khả năng:
+    // (a) số thô từ server (chấm = thập phân, luôn TỐI ĐA 2 chữ số sau
+    // chấm vì mọi MT/BDMT trong hệ thống chỉ hiển thị tối đa 2 số thập
+    // phân), HOẶC (b) số NGUYÊN người dùng gõ xong tự thêm dấu chấm
+    // phân cách hàng nghìn lúc đang gõ (liveFormatNumberInputValue_) -
+    // dấu chấm đó LUÔN đứng trước ĐÚNG 3 chữ số. Bản TRƯỚC Ở ĐÂY luôn
+    // coi dấu chấm là thập phân -> SAI với trường hợp (b): gõ "23579"
+    // (không có phần thập phân) hiện thành "23.579" lúc đang gõ, đến
+    // lúc BLUR hàm này hiểu nhầm thành số thập phân 23,579 (chênh 1000
+    // lần so với số thật) - đúng hiện tượng người dùng phản ánh "số
+    // nhảy lung tung". SỬA: phân biệt bằng số chữ số sau dấu chấm CUỐI -
+    // ĐÚNG 3 chữ số = chấm phân cách hàng nghìn (bỏ HẾT); KHÁC 3 chữ số
+    // (1-2 chữ số, đúng với quy ước tối đa 2 số thập phân của hệ thống)
+    // = chấm thập phân thật (giữ lại, chỉ bỏ các chấm phân cách nghìn
+    // ĐỨNG TRƯỚC nó nếu có).
+    const lastDot = str.lastIndexOf('.');
+    if (lastDot === -1) {
+      cleaned = str;
+    } else {
+      const afterLastDot = str.slice(lastDot + 1);
+      cleaned = /^\d{3}$/.test(afterLastDot)
+        ? str.replace(/\./g, '')
+        : str.slice(0, lastDot).replace(/\./g, '') + '.' + afterLastDot;
+    }
   }
   cleaned = cleaned.replace(/[^0-9.\-]/g, '');
   const n = parseFloat(cleaned);
@@ -413,13 +434,30 @@ function attachNumberFormatting_(root){
     // ĐÚNG vị trí con trỏ bằng cách đếm số ký tự "có nghĩa" (chữ số/dấu
     // phẩy/dấu trừ) đứng trước con trỏ ở giá trị CŨ rồi đặt lại con trỏ
     // ở đúng vị trí tương ứng trong giá trị MỚI đã format.
-    el.addEventListener('input', () => {
+    el.addEventListener('input', (e) => {
       const oldVal = el.value;
       const oldPos = el.selectionStart;
       const isKept = ch => /[0-9,\-]/.test(ch);
+      // SỬA LỖI (v2026.10.2, mục BF): nhiều bàn phím số điện thoại/máy
+      // tính bảng dùng "." làm dấu thập phân (dù hệ thống quy ước ","
+      // kiểu vi-VN) - liveFormatNumberInputValue_ TRƯỚC ĐÂY xóa thẳng
+      // dấu "." người dùng vừa gõ (chỉ giữ số + dấu phẩy) nên số thập
+      // phân gõ bằng "." bị mất hẳn, ghép nhầm thành số nguyên rồi hiểu
+      // sai % tiếp theo - đúng hiện tượng "số nhảy lung tung". SỬA: nếu
+      // ký tự VỪA GÕ (theo InputEvent.inputType/data, không suy đoán
+      // qua vị trí để khỏi nhầm với xóa ký tự) là "." hoặc "," VÀ ô
+      // CHƯA có dấu phẩy nào khác, coi đây là Ý ĐỊNH đặt dấu thập phân -
+      // đổi thành "," chuẩn thay vì xóa mất.
+      let workingVal = oldVal;
+      if (e && e.inputType === 'insertText' && (e.data === '.' || e.data === ',') && oldPos > 0) {
+        const rest = oldVal.slice(0, oldPos - 1) + oldVal.slice(oldPos);
+        if (!rest.includes(',')) {
+          workingVal = oldVal.slice(0, oldPos - 1) + ',' + oldVal.slice(oldPos);
+        }
+      }
       let keptBefore = 0;
-      for (let i = 0; i < oldPos; i++) { if (isKept(oldVal[i])) keptBefore++; }
-      const newVal = liveFormatNumberInputValue_(oldVal);
+      for (let i = 0; i < oldPos; i++) { if (isKept(workingVal[i])) keptBefore++; }
+      const newVal = liveFormatNumberInputValue_(workingVal);
       if (newVal === oldVal) return; // không đổi gì -> khỏi đụng con trỏ
       el.value = newVal;
       let count = 0, newPos = newVal.length;

@@ -380,9 +380,30 @@ function parseFormattedNumber_(str){
     // phẩy=thập phân) - bỏ hết dấu chấm rồi đổi phẩy thành chấm chuẩn.
     cleaned = str.replace(/\./g, '').replace(',', '.');
   } else {
-    // Không có dấu phẩy -> số thô đang gõ dở (dấu chấm nếu có là thập
-    // phân bình thường) - giữ nguyên.
-    cleaned = str;
+    // SỬA LỖI (v2026.10.2, mục BF) - KHÔNG có dấu phẩy có 2 khả năng:
+    // (a) số thô từ server (chấm = thập phân, luôn TỐI ĐA 2 chữ số sau
+    // chấm vì mọi MT/BDMT trong hệ thống chỉ hiển thị tối đa 2 số thập
+    // phân), HOẶC (b) số NGUYÊN người dùng gõ xong tự thêm dấu chấm
+    // phân cách hàng nghìn lúc đang gõ (liveFormatNumberInputValue_) -
+    // dấu chấm đó LUÔN đứng trước ĐÚNG 3 chữ số. Bản TRƯỚC Ở ĐÂY luôn
+    // coi dấu chấm là thập phân -> SAI với trường hợp (b): gõ "23579"
+    // (không có phần thập phân) hiện thành "23.579" lúc đang gõ, đến
+    // lúc BLUR hàm này hiểu nhầm thành số thập phân 23,579 (chênh 1000
+    // lần so với số thật) - đúng hiện tượng người dùng phản ánh "số
+    // nhảy lung tung". SỬA: phân biệt bằng số chữ số sau dấu chấm CUỐI -
+    // ĐÚNG 3 chữ số = chấm phân cách hàng nghìn (bỏ HẾT); KHÁC 3 chữ số
+    // (1-2 chữ số, đúng với quy ước tối đa 2 số thập phân của hệ thống)
+    // = chấm thập phân thật (giữ lại, chỉ bỏ các chấm phân cách nghìn
+    // ĐỨNG TRƯỚC nó nếu có).
+    const lastDot = str.lastIndexOf('.');
+    if (lastDot === -1) {
+      cleaned = str;
+    } else {
+      const afterLastDot = str.slice(lastDot + 1);
+      cleaned = /^\d{3}$/.test(afterLastDot)
+        ? str.replace(/\./g, '')
+        : str.slice(0, lastDot).replace(/\./g, '') + '.' + afterLastDot;
+    }
   }
   cleaned = cleaned.replace(/[^0-9.\-]/g, '');
   const n = parseFloat(cleaned);
@@ -413,13 +434,30 @@ function attachNumberFormatting_(root){
     // ĐÚNG vị trí con trỏ bằng cách đếm số ký tự "có nghĩa" (chữ số/dấu
     // phẩy/dấu trừ) đứng trước con trỏ ở giá trị CŨ rồi đặt lại con trỏ
     // ở đúng vị trí tương ứng trong giá trị MỚI đã format.
-    el.addEventListener('input', () => {
+    el.addEventListener('input', (e) => {
       const oldVal = el.value;
       const oldPos = el.selectionStart;
       const isKept = ch => /[0-9,\-]/.test(ch);
+      // SỬA LỖI (v2026.10.2, mục BF): nhiều bàn phím số điện thoại/máy
+      // tính bảng dùng "." làm dấu thập phân (dù hệ thống quy ước ","
+      // kiểu vi-VN) - liveFormatNumberInputValue_ TRƯỚC ĐÂY xóa thẳng
+      // dấu "." người dùng vừa gõ (chỉ giữ số + dấu phẩy) nên số thập
+      // phân gõ bằng "." bị mất hẳn, ghép nhầm thành số nguyên rồi hiểu
+      // sai % tiếp theo - đúng hiện tượng "số nhảy lung tung". SỬA: nếu
+      // ký tự VỪA GÕ (theo InputEvent.inputType/data, không suy đoán
+      // qua vị trí để khỏi nhầm với xóa ký tự) là "." hoặc "," VÀ ô
+      // CHƯA có dấu phẩy nào khác, coi đây là Ý ĐỊNH đặt dấu thập phân -
+      // đổi thành "," chuẩn thay vì xóa mất.
+      let workingVal = oldVal;
+      if (e && e.inputType === 'insertText' && (e.data === '.' || e.data === ',') && oldPos > 0) {
+        const rest = oldVal.slice(0, oldPos - 1) + oldVal.slice(oldPos);
+        if (!rest.includes(',')) {
+          workingVal = oldVal.slice(0, oldPos - 1) + ',' + oldVal.slice(oldPos);
+        }
+      }
       let keptBefore = 0;
-      for (let i = 0; i < oldPos; i++) { if (isKept(oldVal[i])) keptBefore++; }
-      const newVal = liveFormatNumberInputValue_(oldVal);
+      for (let i = 0; i < oldPos; i++) { if (isKept(workingVal[i])) keptBefore++; }
+      const newVal = liveFormatNumberInputValue_(workingVal);
       if (newVal === oldVal) return; // không đổi gì -> khỏi đụng con trỏ
       el.value = newVal;
       let count = 0, newPos = newVal.length;
@@ -1379,7 +1417,7 @@ function checkExistingForCreate(){
           attachNumberFormatting_();
           updateCreateChildTabIndicators_();
           banner.innerHTML += `<div class="hint-text" style="background:var(--moss-light);color:var(--moss);padding:10px 12px;border-radius:8px;margin:0 0 14px 0">
-            🔄 Đã tự điền "Tồn kho đầu ngày" = Cộng MT ngày ${esc(prev.ngayDisplay)} (ngày gần nhất trước đó) = <b>${fmtNum(prev.congMT)}</b> MT. Có thể sửa lại nếu cần.</div>`;
+            🔄 Đã tự điền "Tồn kho đầu ngày" = Đầu kỳ dự kiến (tính từ báo cáo ngày ${esc(prev.ngayDisplay)}, ngày gần nhất trước đó) = <b>${fmtNum(prev.congMT)}</b> MT. Có thể sửa lại nếu cần.</div>`;
         } else {
           banner.innerHTML += `<div class="hint-text" style="background:var(--timber-light);color:#8C511F;padding:10px 12px;border-radius:8px;margin:0 0 14px 0">
             ⚠️ Chưa có dữ liệu ngày nào trước đó cho đơn vị này - vui lòng tự nhập "Tồn kho đầu ngày".</div>`;
@@ -2289,7 +2327,7 @@ function renderKiemTraDauKyReportTable(){
   if (!res || !res.rows.length) { wrap.innerHTML = '<div class="empty"><div class="ic">📭</div>Không có báo cáo nào khớp bộ lọc này.</div>'; return; }
   const rowsHtml = res.rows.map(r => {
     if (!r.coDuLieuTruoc) {
-      return `<tr><td>${esc(r.donVi)}</td><td>${esc(r.ngay)}</td><td colspan="6" class="muted">Chưa có báo cáo chính thức ngày nào trước đó (ngày đầu mở sổ) - không có gì để so sánh.</td><td class="num">${fmtNum(r.tonDauNgayThucTe)}</td><td class="num">–</td></tr>`;
+      return `<tr><td>${esc(r.donVi)}</td><td>${esc(r.ngay)}</td><td colspan="5" class="muted">Chưa có báo cáo chính thức ngày nào trước đó (ngày đầu mở sổ) - không có gì để so sánh.</td><td class="num">${fmtNum(r.tonDauNgayThucTe)}</td><td class="num">–</td><td class="num">–</td></tr>`;
     }
     const rowBg = r.khop ? '' : 'style="background:var(--rose-light,#fbeaea)"';
     // Mỗi cột hiện ĐÚNG khoản ĐÃ ĐÓNG GÓP vào tổng (kèm dấu +/− thật, tự
@@ -2303,6 +2341,12 @@ function renderKiemTraDauKyReportTable(){
     // tự đổi dấu: Điều chỉnh MT > 0 thì TRỪ - hiểu là "lượng MT cần xuất
     // thêm phải trừ ra"; Điều chỉnh MT <= 0 thì vẫn CỘNG như cũ) - tooltip
     // hiện rõ giá trị Điều chỉnh MT GỐC (trước khi đổi dấu) để đối chiếu.
+    // mục BD (v2026.9.3): "Mượn/trả" KHÔNG còn nằm trong công thức "Đầu
+    // kỳ dự kiến" nữa (đối chiếu 712 dòng dữ liệu thật cho thấy người
+    // nhập liệu không hề trừ khoản này khi ghép Tồn đầu ngày hôm sau) -
+    // cột này giờ CHỈ hiển thị THAM KHẢO (không dấu +/−, không tính vào
+    // cột "= Đầu kỳ dự kiến" nữa) để người dùng vẫn biết hôm trước có
+    // phát sinh Mượn/trả hay không.
     const dieuChinhTitle = r.dieuChinhMT > 0
       ? `Điều chỉnh MT gốc ${fmtNum(r.dieuChinhMT)} MT (dương - kho thực tế nhiều hơn sổ sách, hiểu là "cần xuất thêm") → TRỪ vào Đầu kỳ dự kiến`
       : `Điều chỉnh MT gốc ${fmtNum(r.dieuChinhMT)} MT (≤ 0) → vẫn CỘNG vào Đầu kỳ dự kiến như công thức cũ`;
@@ -2311,10 +2355,10 @@ function renderKiemTraDauKyReportTable(){
       <td class="num">${fmtNum(r.tonCKTruoc)}</td>
       <td class="num">${signed(-r.khoiLuongThucTeMT)}</td>
       <td class="num" title="${dieuChinhTitle}">${signed(r.dieuChinhMTTerm)}</td>
-      <td class="num">${signed(-r.muonTraTru)}</td>
       <td class="num"><b>${fmtNum(r.tonCuoiKyDuKien)}</b></td>
       <td class="num">${fmtNum(r.tonDauNgayThucTe)}</td>
       <td class="num">${r.khop ? '✅ 0' : '⚠️ '+fmtNum(r.chenhLech)}</td>
+      <td class="num muted" title="Chỉ tham khảo - KHÔNG tính vào Đầu kỳ dự kiến (mục BD)">${fmtNum(r.muonTraTruoc)}</td>
     </tr>`;
   }).join('');
   wrap.innerHTML = `
@@ -2322,8 +2366,9 @@ function renderKiemTraDauKyReportTable(){
     <div style="overflow-x:auto"><table><thead><tr>
         <th>Đơn vị</th><th>Ngày báo cáo</th><th>Ngày trước</th>
         <th class="num">Tồn CK trước</th><th class="num">Khối lượng thực tế MT</th>
-        <th class="num">Điều chỉnh MT</th><th class="num">Mượn/trả</th>
+        <th class="num">Điều chỉnh MT</th>
         <th class="num">= Đầu kỳ dự kiến</th><th class="num">Đầu kỳ đã nhập</th><th class="num">Chênh lệch</th>
+        <th class="num">Mượn/trả (tham khảo)</th>
       </tr></thead><tbody>${rowsHtml}</tbody></table></div>`;
 }
 
@@ -2658,7 +2703,8 @@ function renderNVKGhiForm(){
     { v: 'xuat', label: '📤 Xuất kho thường (Trao đổi / Cân đối kho)' },
     { v: 'trungchuyen', label: '🔀 Trung chuyển (chuyển kho nội bộ)' },
     { v: 'muontra', label: '🤝 Mượn / Trả' },
-    { v: 'xuatban', label: '💰 Xuất bán (tự động cân đối chênh lệch khô)' }
+    { v: 'xuatban', label: '💰 Xuất bán (tự động cân đối chênh lệch khô)' },
+    { v: 'nhapgokeo', label: '🪵 Nhập gỗ keo (nguyên liệu, đối chiếu Phiếu cân)' }
   ];
   host.innerHTML = `
     <div class="card no-print">
@@ -2773,6 +2819,16 @@ function renderNVKGhiSubForm_(donViOptions, khoChonDuoc, today){
       <div class="hint-text">Hệ thống TỰ ĐỘNG tính chênh lệch khô (ĐÚNG công thức "Cân đối BDMT xuất hàng" đã dùng từ trước) và tự sinh thêm bút toán cân đối ở Kho Nhà máy + bút toán đối ứng đưa Kho xuất bán về 0 - xem lại ở tab "Lịch sử" (cột Trạng thái = "Tự động").</div>
       <button class="btn primary" onclick="submitNVKXuatBan()">💾 Lưu Xuất bán</button>
       <div id="nvk-b-ketqua" style="margin-top:10px"></div>`;
+  } else if (state.nvkGhiLoai === 'nhapgokeo') {
+    html = `
+      <div class="grid cols-4">
+        <div class="field"><label>Đơn vị</label><select id="nvk-gk-donVi">${donViOpts}</select></div>
+        <div class="field"><label>Ngày</label><input type="date" id="nvk-gk-ngay" value="${today}"></div>
+        <div class="field"><label>Nhập gỗ keo trong ngày (MT)</label><input type="text" inputmode="decimal" class="num-fmt" id="nvk-gk-mt"></div>
+      </div>
+      <div class="hint-text">Số MT gỗ keo tươi NGUYÊN LIỆU nhập trong ngày (nhập tay, giống hệ thống cũ) - hệ thống TỰ đối chiếu với Phiếu cân thực tế (lệch quá 5% sẽ cảnh báo qua email) và tự tính lại "Định mức" (= 100% - Sản xuất/Nhập gỗ keo) so với khoảng Admin cấu hình ở Cài đặt &gt; Điều kiện kiểm tra duyệt. Nộp lại cùng Đơn vị + Ngày sẽ GHI ĐÈ số cũ.</div>
+      <button class="btn primary" onclick="submitNVKNhapGoKeo()">💾 Lưu Nhập gỗ keo</button>
+      <div id="nvk-gk-ketqua" style="margin-top:10px"></div>`;
   }
   wrap.innerHTML = html;
   attachNumberFormatting_(wrap);
@@ -2911,6 +2967,29 @@ function submitNVKXuatBan(){
       document.getElementById('nvk-b-mt').value = '';
       document.getElementById('nvk-b-doam').value = '';
       document.getElementById('nvk-b-ghichu').value = '';
+    } else {
+      box.innerHTML = '';
+    }
+  });
+}
+
+function submitNVKNhapGoKeo(){
+  const donVi = document.getElementById('nvk-gk-donVi').value;
+  const ngayISO = document.getElementById('nvk-gk-ngay').value;
+  const mt = getNumFieldValue_('nvk-gk-mt');
+  if (!donVi) { toast('Vui lòng chọn Đơn vị.', 'warn'); return; }
+  if (!ngayISO) { toast('Vui lòng chọn Ngày.', 'warn'); return; }
+  if (!mt || !(Number(mt) > 0)) { toast('Vui lòng nhập "Nhập gỗ keo" lớn hơn 0.', 'warn'); return; }
+  call('ghiNhapGoKeoNVK', [donVi, ngayISO, mt], 'Đang lưu + đối chiếu...').then(res => {
+    handleResult(res);
+    const box = document.getElementById('nvk-gk-ketqua');
+    if (!box) return;
+    if (res.success) {
+      box.innerHTML = `<div class="card" style="background:var(--paper-2)">
+        <div class="kv"><div class="k">Định mức tính được</div><div class="v">${res.dinhMucPct==null?'–':fmtNum(res.dinhMucPct)+'%'}</div></div>
+        ${res.canhBao && res.canhBao.length ? `<div class="hint-text" style="color:var(--danger,#c0392b);margin-top:6px">${res.canhBao.map(esc).join('<br>')}</div>` : ''}
+      </div>`;
+      document.getElementById('nvk-gk-mt').value = '';
     } else {
       box.innerHTML = '';
     }
@@ -3056,11 +3135,13 @@ function renderNVKBaoCaoTable_(){
       <th>Đơn vị</th><th>Ngày</th>
       <th class="num">Tồn đầu MT</th><th class="num">Nhập MT</th><th class="num">Xuất MT</th>
       <th class="num">Tồn CK MT</th><th class="num">Tồn CK BDMT</th><th class="num">Độ khô TB</th>
+      <th class="num">Nhập gỗ keo MT</th><th class="num">Định mức</th>
     </tr></thead><tbody>
     ${res.rows.map(r => `<tr>
       <td>${esc(r.donVi)}</td><td>${esc(r.ngay)}</td>
       <td class="num">${fmtNum(r.tonDauMT)}</td><td class="num">${fmtNum(r.nhapMT)}</td><td class="num">${fmtNum(r.xuatMT)}</td>
       <td class="num"><b>${fmtNum(r.tonCKMT)}</b></td><td class="num">${fmtNum(r.tonCKBDMT)}</td><td class="num">${fmtPct(r.doKhoTB)}</td>
+      <td class="num">${r.nhapGoKeoMT==null?'–':fmtNum(r.nhapGoKeoMT)}</td><td class="num">${r.dinhMuc==null?'–':fmtPct(r.dinhMuc)}</td>
     </tr>`).join('')}
     </tbody></table></div>`;
 }

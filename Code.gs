@@ -1428,6 +1428,45 @@
  *     "Kho mượn - X"), Báo cáo (Tồn đầu/Nhập/Xuất/Tồn CK theo Đơn vị+
  *     Ngày), và Đối chiếu hệ thống cũ (so Tồn CK 2 hệ thống, đánh dấu
  *     Khớp/Lệch - công cụ CHÍNH để kiểm thử trong giai đoạn song song).
+ *  BC) "NHẬP GỖ KEO (NGUYÊN LIỆU)" CHO NVK (v2026.9.3) - hệ thống cũ có
+ *     cột "Nhập gỗ keo trong ngày" (nhập tay, đối chiếu Phiếu cân +
+ *     dùng tính "Định mức" AK = 100% - AJ/Q, xem mục H), nhưng NVK (mục
+ *     BB) khi thiết kế ban đầu THIẾU HẲN khái niệm này - 3 hình thức
+ *     Nhập của NVK (Sản xuất/Nhập cân đối kho/Nhập trao đổi) đều là dăm
+ *     THÀNH PHẨM vào Kho Nhà máy, không phải NGUYÊN LIỆU gỗ tươi đưa
+ *     vào TRƯỚC sản xuất - nên NVK không có cách nào cảnh báo "hao hụt
+ *     sản xuất bất thường" như hệ thống cũ. Bổ sung (không sửa kiến
+ *     trúc sổ nhật ký NghiepVuKho vì đây không phải 1 giao dịch kho -
+ *     không có Kho nhập/xuất, không ảnh hưởng FIFO/Tồn CK):
+ *       - Sheet MỚI `NhapGoKeo_NVK` (CFG.SHEET_NVK_NHAPGOKEO): 1 dòng /
+ *         (Đơn vị, Ngày), GHI ĐÈ khi nộp lại (giống logCanDoiBDMT_) -
+ *         xem getOrCreateNhapGoKeoNVKSheet_/ghiNhapGoKeoNVK.
+ *       - "Định mức" = 100% - Nhập trong kỳ/Nhập gỗ keo - ĐÚNG NGUYÊN
+ *         VĂN công thức hệ thống cũ (mục H). "Nhập trong kỳ" gốc (AJ)
+ *         nằm trong công thức Sheet thủ công (mục D) nên Web App KHÔNG
+ *         đọc được nguyên văn - đã dò lại bằng cách đối chiếu ngược với
+ *         712 dòng Chitiettonkho thật (export 03/09/2026): "Nhập trong
+ *         kỳ" = (Tồn CK − Tồn đầu ngày) + Điều chỉnh + Mượn/trả CỦA
+ *         CHÍNH dòng đó - khớp CHÍNH XÁC 712/712 dòng (không lệch dù 1
+ *         đồng), coi như đã xác nhận đúng công thức gốc. BẢN ĐẦU mục BC
+ *         này (trước khi dò lại) dùng NHẦM riêng "Sản xuất" làm tử số -
+ *         thiếu hẳn phần Nhập cân đối kho/Trao đổi/Trung chuyển/Mượn-Trả
+ *         trong ngày, SAI - đã sửa. Áp dụng cho NVK: Tồn CK/Tồn đầu ngày
+ *         lấy từ tonKhoNVKTaiNgay_ (replay FIFO 6 Kho thật); NVK không
+ *         có khái niệm "Điều chỉnh" riêng (hệ thống cũ dùng cho chênh
+ *         lệch độ ẩm nhập tay) nên bỏ qua số hạng đó (KHÁC BIỆT DUY NHẤT
+ *         còn lại so với hệ thống cũ); "Mượn/trả" lấy đúng phần CHẠM VÀO
+ *         KHO THẬT trong sổ NghiepVuKho (xem
+ *         dieuChinhMuonTraThucTrongNgayNVK_) - "Kho mượn - X" ảo vốn đã
+ *         không nằm trong tonKhoNVKTaiNgay_ nên không cần trừ riêng.
+ *         Xem syncNVKStagingForKey_ (cột 13 "Nhập trong kỳ MT").
+ *       - Đối chiếu Phiếu cân + cảnh báo qua email dùng lại NGUYÊN VĂN
+ *         docTongPhieuCanNgoai_ (đã có, độc lập hệ thống cũ) - CHỈ CẢNH
+ *         BÁO (không có "Chờ duyệt" vì NVK là sổ nhật ký append-only,
+ *         không có khái niệm trạng thái chờ duyệt như Form Responses 1).
+ *     Index.html: tab "Ghi nghiệp vụ" thêm Nhóm nghiệp vụ mới "🪵 Nhập
+ *     gỗ keo (nguyên liệu)"; tab "Báo cáo" thêm 2 cột "Nhập gỗ keo (MT)"
+ *     + "Định mức".
  * ============================================================
  */
 
@@ -1466,6 +1505,13 @@ const CFG = {
   SHEET_NVK_STAGING: "ChitietKho_NVK",     // sheet trung gian (tự đồng bộ)
   SHEET_NVK_BAOCAO: "BaoCao_NVK",          // sheet báo cáo (dựng theo yêu cầu)
   SHEET_NVK_LOG: "AuditNVK",               // sheet log riêng cho Nghiệp vụ kho
+  // "Nhập gỗ keo (nguyên liệu)" cho NVK (mục BC, v2026.9.3) - xem ghi
+  // chú thiết kế ở mục BC đầu file: sheet RIÊNG (1 dòng/Đơn vị+Ngày,
+  // GHI ĐÈ khi nộp lại) lưu số MT gỗ keo tươi nguyên liệu nhập trong
+  // ngày - hệ thống cũ có (cột "Nhập gỗ keo trong ngày"), NVK ban đầu
+  // (mục BB) THIẾU hẳn khái niệm này (chỉ có "Sản xuất" = dăm ra lò
+  // vào Kho Nhà máy, không có nguyên liệu gỗ tươi đưa vào trước đó).
+  SHEET_NVK_NHAPGOKEO: "NhapGoKeo_NVK",
   // 4 Kho Nhà máy - ĐÚNG 4 cột đã có trong báo cáo cũ (Hòa Nhơn/Quế
   // Sơn/Đại Hiệp/HAKQN). Mỗi Đơn vị có 1 Kho Nhà máy "của mình" (dùng
   // làm mặc định/đích cho các bút toán tự động) - xem
@@ -1984,18 +2030,8 @@ function xoaDieuKienDuyet(rowIndex) {
  * true/false, không lưu lại lý do cụ thể). Luôn gửi email cảnh báo
  * (submitter + Admin) như cũ khi lệch, bất kể Admin hay không. */
 function kiemTraDinhMucVaCanhBao_(donVi, ngayISO, rowIndex, sh, submitterEmail) {
-  const ungVien = getDieuKienDuyetListRaw_().filter(function (d) {
-    if (d.donVi !== donVi) return false;
-    if (d.tuNgayISO && ngayISO < d.tuNgayISO) return false;
-    if (d.denNgayISO && ngayISO > d.denNgayISO) return false;
-    return true;
-  });
-  if (!ungVien.length) return false; // Đơn vị chưa cấu hình định mức cho đúng khoảng ngày này -> bỏ qua, không báo gì
-
-  // Ưu tiên "Từ ngày" gần nhất (chuỗi rỗng coi như xa xưa nhất, luôn xếp
-  // sau các giá trị có ngày cụ thể khi so sánh chuỗi ISO yyyy-mm-dd).
-  ungVien.sort(function (a, b) { return (b.tuNgayISO || "0000-00-00").localeCompare(a.tuNgayISO || "0000-00-00"); });
-  const dieuKien = ungVien[0];
+  const dieuKien = timDieuKienDinhMucKhop_(donVi, ngayISO);
+  if (!dieuKien) return false; // Đơn vị chưa cấu hình định mức cho đúng khoảng ngày này -> bỏ qua, không báo gì
 
   const rawVal = sh.getRange(rowIndex, COL.DINH_MUC + 1).getValue();
   const dinhMucPct = utils.parseNum(rawVal) * 100; // cột lưu dạng thập phân (0.95 = 95%)
@@ -2620,16 +2656,15 @@ function submitInventoryEntry(payload) {
       dauKyInfo = timTonCuoiKyTruoc_(donVi, utils.formatDateISO(ngayTonKho));
       if (dauKyInfo !== null && Math.abs(utils.parseNum(payload.tonDauNgay) - dauKyInfo.tonCuoiKyDuKien) > 0.01) {
         lechDauKy = true;
-        // mục AT (v2026.8.23; SỬA LẠI Mượn/trả trừ luôn kể cả <=0); mục AX
-        // (v2026.8.24, BỎ khoản Chở ra Tiên Sa/Dung Quất, ĐỔI Điều chỉnh
-        // MT thành trừ khi > 0 - xem timTonCuoiKyTruoc_): breakdown ĐẦY ĐỦ
-        // các khoản của công thức (Khối lượng thực tế MT trừ, Điều chỉnh
-        // MT +/− tùy dấu, Mượn/trả trừ LUÔN bất kể dấu).
+        // mục AX (v2026.8.24, BỎ khoản Chở ra Tiên Sa/Dung Quất, ĐỔI Điều
+        // chỉnh MT thành trừ khi > 0); mục BD (v2026.9.3, BỎ HẲN số hạng
+        // Mượn/trả khỏi công thức - xem ghi chú timTonCuoiKyTruoc_): giờ
+        // breakdown chỉ còn 2 khoản (Khối lượng thực tế MT trừ, Điều
+        // chỉnh MT +/− tùy dấu).
         lyDoLechDauKy = "Lệch đầu kỳ: Tồn kho đầu ngày nhập (" + fmtNumVN_(payload.tonDauNgay) + " MT) không khớp Đầu kỳ dự kiến (" +
           fmtNumVN_(dauKyInfo.tonCuoiKyDuKien) + " MT) tính từ báo cáo chính thức ngày " + dauKyInfo.ngayDisplay + " = Tồn CK " + fmtNumVN_(dauKyInfo.tonCK) + " MT" +
           (dauKyInfo.khoiLuongThucTeMT ? " − Khối lượng thực tế MT (Cân đối BDMT xuất hàng cùng ngày) " + fmtNumVN_(dauKyInfo.khoiLuongThucTeMT) + " MT" : "") +
-          (dauKyInfo.dieuChinhMTTerm ? (dauKyInfo.dieuChinhMTTerm > 0 ? " + " : " − ") + "Điều chỉnh MT (Cân đối BDMT xuất hàng cùng ngày) " + fmtNumVN_(Math.abs(dauKyInfo.dieuChinhMTTerm)) + " MT" : "") +
-          (dauKyInfo.muonTraTru ? " − Mượn/trả (ngày đó) " + fmtNumVN_(dauKyInfo.muonTraTru) + " MT" : "") + ".";
+          (dauKyInfo.dieuChinhMTTerm ? (dauKyInfo.dieuChinhMTTerm > 0 ? " + " : " − ") + "Điều chỉnh MT (Cân đối BDMT xuất hàng cùng ngày) " + fmtNumVN_(Math.abs(dauKyInfo.dieuChinhMTTerm)) + " MT" : "") + ".";
       }
     }
     row[COL.TRANG_THAI_DUYET] = lechDauKy ? "Chờ duyệt" : "";
@@ -3267,31 +3302,32 @@ function getExistingEntryForKey(donVi, ngayISO) {
 /**
  * Dùng cho màn "Nhập Tồn Kho" khi đang ở chế độ NHẬP MỚI (v2026.8.8) -
  * THEO YÊU CẦU MỚI: "Tồn kho đầu ngày (MT)" của Nhà máy tự động lấy
- * đúng bằng "Cộng MT" của bản ghi GẦN NHẤT TRƯỚC ngày đang nhập (cùng
- * Đơn vị) trong Chitiettonkho - đúng logic kế toán liên tục: tồn đầu
- * hôm nay = tồn cuối (Cộng MT) hôm trước. Web App vẫn cho SỬA TAY sau
- * khi tự điền (không khóa cứng) - xem checkExistingForCreate() ở
- * Index.html. Trả về null nếu chưa có dữ liệu ngày nào trước đó cho
- * đơn vị này (VD ngày đầu tiên mở sổ) - lúc đó form giữ nguyên hành vi
- * cũ, để trống cho người dùng tự nhập.
+ * đúng bằng Đầu kỳ dự kiến (= Tồn CK của bản ghi GẦN NHẤT TRƯỚC ngày
+ * đang nhập, cùng Đơn vị) - đúng logic kế toán liên tục: tồn đầu hôm
+ * nay = tồn cuối hôm trước. Web App vẫn cho SỬA TAY sau khi tự điền
+ * (không khóa cứng) - xem checkExistingForCreate() ở Index.html. Trả
+ * về null nếu chưa có dữ liệu ngày nào trước đó cho đơn vị này (VD
+ * ngày đầu tiên mở sổ) - lúc đó form giữ nguyên hành vi cũ, để trống
+ * cho người dùng tự nhập.
+ *
+ * SỬA LỖI (v2026.9.24, mục BE): TRƯỚC ĐÂY tự điền bằng "Cộng MT" (chỉ
+ * gồm 4 Kho Nhà máy: Hòa Nhơn/Quế Sơn/Đại Hiệp/HAKQN) - KHÔNG khớp với
+ * công thức "Đầu kỳ dự kiến" mà timTonCuoiKyTruoc_ dùng để kiểm tra
+ * "lệch đầu kỳ" (dùng Tồn CK, đã gồm cả Kho Xuất hàng Tiên Sa/Dung
+ * Quất) - gây ra rất nhiều báo cáo "lệch đầu kỳ" GIẢ (số tự điền sẵn
+ * sai ngay từ đầu, người nhập không sửa). SỬA: dùng CHUNG đúng 1 hàm
+ * timTonCuoiKyTruoc_ (đã dùng cho việc kiểm tra) để tự điền - đảm bảo
+ * số tự điền sẵn LUÔN khớp đúng ngưỡng kiểm tra, không còn lệch giả.
  */
 function getPreviousDayCongMT(donVi, ngayISO) {
   donVi = String(donVi || "").trim();
   if (!donVi || !ngayISO) return null;
-  const { data } = readAllChitietData_();
-  let best = null;
-  data.forEach(r => {
-    if (String(r[COL.DON_VI] || "").trim() !== donVi) return;
-    const rISO = utils.formatDateISO(r[COL.NGAY_TON_KHO]);
-    if (!rISO || rISO >= ngayISO) return; // chỉ lấy ngày TRƯỚC ngày đang nhập
-    if (!best || rISO > best.ngayISO) best = { ngayISO: rISO, congMT: utils.parseNum(r[COL.CONG_MT]) };
-  });
-  if (!best) return null;
-  const p = best.ngayISO.split("-");
+  const info = timTonCuoiKyTruoc_(donVi, ngayISO);
+  if (!info) return null;
   return {
-    ngayISO: best.ngayISO,
-    ngayDisplay: p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : best.ngayISO,
-    congMT: best.congMT
+    ngayISO: info.ngayISO,
+    ngayDisplay: info.ngayDisplay,
+    congMT: info.tonCuoiKyDuKien
   };
 }
 
@@ -3360,9 +3396,9 @@ function tongKhoiLuongThucTeMTCanDoiDungNgay_(donVi, ngayISO) {
  * "báo cáo lệch đầu kỳ" khi nộp mới (mục X, v2026.8.17; SỬA LẠI công
  * thức ở mục AD, v2026.8.18; SỬA LẠI LẦN NỮA ở mục AT, v2026.8.23; THÊM
  * mục AU/AV (Chở ra Tiên Sa/Dung Quất), SỬA LỖI CHÊNH NGÀY ở mục AW - CẢ
- * 3 mục AU/AV/AW SAU ĐÓ ĐÃ BỊ GỠ BỎ HOÀN TOÀN ở mục AX (v2026.8.24), xem
- * chú thích mục AX ở đầu file để biết lý do và công thức "Điều chỉnh MT"
- * mới):
+ * 3 mục AU/AV/AW SAU ĐÓ ĐÃ BỊ GỠ BỎ HOÀN TOÀN ở mục AX (v2026.8.24); BỎ
+ * HẲN số hạng Mượn/trả ở mục BD (v2026.9.3), xem chú thích mục BD dưới
+ * đây để biết lý do):
  *   Đầu kỳ dự kiến
  *     = TON_CK của bản ghi CHÍNH THỨC ngày liền trước (đã sẵn = Cộng MT
  *       Kho Nhà máy + Kho Tiên Sa MT + Kho Dung Quất MT - công thức
@@ -3379,14 +3415,16 @@ function tongKhoiLuongThucTeMTCanDoiDungNgay_(donVi, ngayISO) {
  *       Xem tongDieuChinhMTCanDoiDungNgay_ + biến dieuChinhMTTerm bên
  *       dưới. Khối lượng thực tế MT và Điều chỉnh MT ĐỀU đến từ CÙNG 1
  *       lần tất toán Cân đối BDMT (nếu có) - KHÔNG phải 1 trong 2.
- *     − "Mượn/trả" của CHÍNH bản ghi ngày liền trước đó - TRỪ LUÔN, KỂ
- *       CẢ KHI Mượn/trả <= 0 (mục AT: TRƯỚC ĐÂY chỉ trừ khi > 0, giờ trừ
- *       trực tiếp giá trị Mượn/trả bất kể dấu - Mượn/trả âm thì phép trừ
- *       sẽ tự CỘNG NGƯỢC LẠI, đúng bản chất số học của phép trừ 1 số
- *       âm).
- * KHÔNG còn khoản "Khối lượng chở ra Tiên Sa/Dung Quất trong ngày" (mục
- * AU/AV/AW) - ĐÃ GỠ BỎ HOÀN TOÀN ở mục AX theo đúng yêu cầu người dùng
- * "BỎ KHO TIÊN SA VÀ DUNG QUẤT RA, ĐỂ LẠI NHƯ CŨ".
+ * mục BD (v2026.9.3) - BỎ HẲN số hạng "− Mượn/trả" (trước đây trừ ngay
+ * cả khi <= 0, xem mục AT): anh dùng ĐỐI CHIẾU LẠI VỚI SỐ LIỆU THẬT
+ * (712 dòng Chitiettonkho, export 03/09/2026) qua "Test Kho" phát hiện
+ * phần lớn các dòng "lệch đầu kỳ" có chênh lệch KHỚP CHÍNH XÁC với giá
+ * trị "Mượn/trả" ngày hôm trước - tức là NGƯỜI NHẬP LIỆU THỰC TẾ không
+ * hề trừ khoản Mượn/trả khi ghép "Tồn kho đầu ngày" hôm sau (chỉ chép
+ * nguyên Tồn CK hôm trước) - ĐÃ HỎI LẠI VÀ XÁC NHẬN qua AskUserQuestion:
+ * bỏ hẳn số hạng này cho khớp với cách dùng thật, KHÔNG còn coi Mượn/trả
+ * là 1 phần của "Đầu kỳ dự kiến" nữa (function vẫn trả về `muonTra` để
+ * hiển thị THAM KHẢO ở báo cáo "Test Kho", không dùng để tính nữa).
  * KHÔNG dùng lại giá trị TON_CK đã lưu sẵn trong biến cục bộ cũ (best) -
  * đổi sang giữ nguyên `bestRow` để đọc thêm được cột MUON_TRA của CHÍNH
  * dòng đó (đỡ phải quét lại Chitiettonkho 1 lần nữa).
@@ -3408,8 +3446,9 @@ function timTonCuoiKyTruoc_(donVi, ngayISO) {
   const tonCK = utils.parseNum(bestRow[COL.TON_CK]);
   const khoiLuongThucTeMT = tongKhoiLuongThucTeMTCanDoiDungNgay_(donVi, bestISO);
   const dieuChinhMT = tongDieuChinhMTCanDoiDungNgay_(donVi, bestISO);
+  // mục BD (v2026.9.3): "Mượn/trả" KHÔNG còn trừ vào Đầu kỳ dự kiến (xem
+  // ghi chú hàm ở trên) - CHỈ giữ lại để hiển thị tham khảo ở "Test Kho".
   const muonTra = utils.parseNum(bestRow[COL.MUON_TRA]);
-  const muonTraTru = muonTra; // mục AT (sửa lại): trừ luôn, kể cả <= 0 (âm thì tự cộng ngược lại)
   // mục AX (v2026.8.24), THEO YÊU CẦU MỚI ("lượng MT cần xuất thêm thì
   // phải trừ ra", đã hỏi lại và xác nhận qua AskUserQuestion): Điều
   // chỉnh MT > 0 (kho thực tế nhiều hơn sổ sách - hiểu là "cần xuất
@@ -3424,8 +3463,7 @@ function timTonCuoiKyTruoc_(donVi, ngayISO) {
     dieuChinhMT,
     dieuChinhMTTerm,
     muonTra,
-    muonTraTru,
-    tonCuoiKyDuKien: tonCK - khoiLuongThucTeMT + dieuChinhMTTerm - muonTraTru
+    tonCuoiKyDuKien: tonCK - khoiLuongThucTeMT + dieuChinhMTTerm
   };
 }
 
@@ -3433,8 +3471,10 @@ function timTonCuoiKyTruoc_(donVi, ngayISO) {
  * tra Tồn kho đầu ngày ĐÃ NHẬP của mỗi báo cáo so với "Đầu kỳ dự kiến"
  * tính từ báo cáo CHÍNH THỨC ngày liền trước cùng Đơn vị (xem
  * timTonCuoiKyTruoc_) - liệt kê RÕ TỪNG THÀNH PHẦN của công thức (Tồn CK
- * hôm trước, − Khối lượng thực tế MT, + Điều chỉnh MT, − Mượn/trả) để
- * người dùng tự thấy CHÊNH LỆCH (nếu có) đến từ đâu, thay vì chỉ biết
+ * hôm trước, − Khối lượng thực tế MT, + Điều chỉnh MT - mục BD v2026.9.3:
+ * "Mượn/trả" KHÔNG còn là 1 thành phần của công thức, chỉ hiện tham khảo
+ * riêng, xem ghi chú timTonCuoiKyTruoc_) để người dùng tự thấy CHÊNH
+ * LỆCH (nếu có) đến từ đâu, thay vì chỉ biết
  * "có lệch" như cảnh báo lúc nộp báo cáo (mục AD/lyDoLechDauKy). KHÁC
  * với cảnh báo lúc nộp báo cáo (chỉ chạy 1 lần đúng lúc nộp, chỉ áp
  * dụng người không phải Admin) - báo cáo này XEM LẠI ĐƯỢC MỌI LÚC, MỌI
@@ -3472,7 +3512,9 @@ function getKiemTraDauKyReport(donViFilter, fDate, tDate) {
       // mục AX: khoản Điều chỉnh MT THỰC SỰ dùng trong công thức (đã áp
       // dụng dấu +/− tùy Điều chỉnh MT dương/âm - xem timTonCuoiKyTruoc_).
       dieuChinhMTTerm: info.dieuChinhMTTerm,
-      muonTraTruoc: info.muonTra, muonTraTru: info.muonTraTru,
+      // mục BD (v2026.9.3): "Mượn/trả" KHÔNG còn tính vào Đầu kỳ dự kiến
+      // - chỉ hiện THAM KHẢO (xem ghi chú timTonCuoiKyTruoc_).
+      muonTraTruoc: info.muonTra,
       tonCuoiKyDuKien: info.tonCuoiKyDuKien,
       tonDauNgayThucTe, chenhLech,
       khop: Math.abs(chenhLech) <= 0.01
@@ -5255,12 +5297,47 @@ function getOrCreateNVKStagingSheet_() {
       "Đơn vị", "Ngày", "Tồn đầu ngày MT", "Tồn đầu ngày BDMT",
       "Nhập trong ngày MT", "Nhập trong ngày BDMT",
       "Xuất trong ngày MT", "Xuất trong ngày BDMT",
-      "Tồn CK MT", "Tồn CK BDMT", "Độ khô TB CK", "Cập nhật lúc"
+      "Tồn CK MT", "Tồn CK BDMT", "Độ khô TB CK", "Cập nhật lúc",
+      "Nhập trong kỳ MT" // mục BC - dùng tính Định mức, xem syncNVKStagingForKey_
     ]);
-    sh.getRange(1, 1, 1, 12).setFontWeight("bold").setBackground("#d9ead3");
+    sh.getRange(1, 1, 1, 13).setFontWeight("bold").setBackground("#d9ead3");
     sh.setFrozenRows(1);
   }
   return sh;
+}
+
+/** CHẠY 1 LẦN NẾU CẦN (Apps Script Editor > chọn hàm này > Run) - NÂNG
+ * CẤP sheet "ChitietKho_NVK" từ cấu trúc BẢN ĐẦU (mục BB, 12 cột, KHÔNG
+ * có "Nhập trong kỳ MT") sang cấu trúc MỚI (mục BC, THÊM cột 13) - CÙNG
+ * khuôn mẫu với NANG_CAP_DIEUKIENDUYET_THEM_KHOANG_NGAY. CHỈ CẦN chạy
+ * nếu sheet "ChitietKho_NVK" đã được tạo/ghi dữ liệu TỪ TRƯỚC khi có
+ * mục BC (đã lỡ có vài dòng theo cấu trúc cũ, cột 13 trống hoặc tính
+ * theo công thức SAI của bản đầu mục BC -> Định mức tính ra sai). Nếu
+ * sheet chưa từng tồn tại hoặc đã đúng cấu trúc mới rồi thì hàm này
+ * KHÔNG làm gì (an toàn khi chạy nhầm/chạy lại nhiều lần). Sau khi thêm
+ * cột, TÍNH LẠI toàn bộ dòng đã có bằng cách gọi lại syncNVKStagingForKey_
+ * cho ĐÚNG (Đơn vị, Ngày) của từng dòng - lấy thẳng từ sổ NghiepVuKho,
+ * không suy đoán. */
+function NANG_CAP_NVKSTAGING_THEM_NHAPTRONGKY() {
+  const ss = SpreadsheetApp.getActive();
+  const sh = ss.getSheetByName(CFG.SHEET_NVK_STAGING);
+  if (!sh) { getOrCreateNVKStagingSheet_(); return "✅ Sheet ChitietKho_NVK chưa tồn tại - đã tạo mới đúng cấu trúc mới (13 cột, có Nhập trong kỳ MT)."; }
+  const headerM = String(sh.getRange(1, 13).getValue() || "");
+  const lastRow = sh.getLastRow();
+  if (headerM === "Nhập trong kỳ MT") return "✅ Sheet ChitietKho_NVK đã đúng cấu trúc mới - không cần nâng cấp.";
+  sh.getRange(1, 13).setValue("Nhập trong kỳ MT");
+  sh.getRange(1, 1, 1, 13).setFontWeight("bold").setBackground("#d9ead3");
+  SpreadsheetApp.flush();
+  let soDong = 0;
+  if (lastRow >= 2) {
+    sh.getRange(2, 1, lastRow - 1, 2).getValues().forEach(function (r) {
+      const donVi = String(r[0] || "").trim(), ngayISO = utils.formatDateISO(r[1]);
+      if (!donVi || !ngayISO) return;
+      syncNVKStagingForKey_(donVi, ngayISO);
+      soDong++;
+    });
+  }
+  return "✅ Đã nâng cấp/tính lại đúng cột \"Nhập trong kỳ MT\" cho " + soDong + " dòng đã có (kể cả dòng trước đây tính theo công thức SAI \"Sản xuất trong ngày MT\" của bản đầu mục BC).";
 }
 
 function getOrCreateNVKBaoCaoSheet_() {
@@ -5492,6 +5569,212 @@ function ghiNhapKho(payload) {
     logNVK_(email, donVi, chungTu, "Ghi \"" + hinhThuc + "\" " + fmtNumVN_(mt) + " MT vào \"" + kho + "\"");
     syncNVKStagingForKey_(donVi, utils.formatDateISO(ngay));
     return { success: true, message: "✅ Đã ghi \"" + hinhThuc + "\" " + fmtNumVN_(mt) + " MT vào \"" + kho + "\" (Chứng từ " + chungTu + ")." };
+  } catch (err) {
+    return { success: false, message: "❌ Lỗi: " + err.toString() };
+  } finally {
+    if (lock) lock.releaseLock();
+  }
+}
+
+// ----------------------------------------------------------------
+// "NHẬP GỖ KEO (NGUYÊN LIỆU)" CHO NVK (mục BC) - xem ghi chú thiết kế
+// đầy đủ ở mục BC đầu file. KHÔNG phải 1 giao dịch kho (không Kho nhập/
+// xuất, không đụng FIFO/Tồn CK) - chỉ 1 số liệu nguyên liệu/ngày dùng để
+// đối chiếu Phiếu cân + tính "Định mức", giống hệt vai trò cột "Nhập gỗ
+// keo trong ngày" ở hệ thống cũ.
+// ----------------------------------------------------------------
+function getOrCreateNhapGoKeoNVKSheet_() {
+  const ss = SpreadsheetApp.getActive();
+  let sh = ss.getSheetByName(CFG.SHEET_NVK_NHAPGOKEO);
+  if (!sh) {
+    sh = ss.insertSheet(CFG.SHEET_NVK_NHAPGOKEO);
+    sh.appendRow(["Ngày", "Đơn vị", "Nhập gỗ keo (MT)", "Email", "Thời gian ghi"]);
+    sh.getRange(1, 1, 1, 5).setFontWeight("bold").setBackground("#d9ead3");
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+/** Tồn đầu ngày + Tồn CK (MT/BDMT) của 1 (Đơn vị, Ngày) - replay FIFO
+ * qua TOÀN BỘ 6 Kho THẬT (4 Nhà máy + 2 Kho xuất hàng, KHÔNG gồm "Kho
+ * mượn - X" ảo) - CÙNG định nghĩa "Tồn CK" của hệ thống cũ (mục H: Cộng
+ * MT + Kho Tiên Sa MT + Kho Dung Quất MT). Dùng chung cho
+ * syncNVKStagingForKey_ VÀ ghiNhapGoKeoNVK (mục BC). */
+function tonKhoNVKTaiNgay_(donVi, ngayISO) {
+  const khoTong = CFG.KHO_NHA_MAY.concat(CFG.KHO_XUAT_HANG);
+  function tonTaiThoiDiem_(denNgayISO) {
+    let mt = 0, bdmt = 0;
+    khoTong.forEach(function (kho) {
+      timFIFOLoKho_(kho, donVi, denNgayISO).forEach(function (l) { mt += l.mtConLai; bdmt += l.mtConLai * l.doKho; });
+    });
+    return { mt: mt, bdmt: bdmt };
+  }
+  const ngayTruoc = utils.formatDateISO(new Date(new Date(ngayISO + "T00:00:00").getTime() - 86400000));
+  return { tonDauNgay: tonTaiThoiDiem_(ngayTruoc), tonCK: tonTaiThoiDiem_(ngayISO) };
+}
+
+/** "Mượn/trả THẬT" (MT) của 1 (Đơn vị, Ngày) trong sổ NghiepVuKho - chỉ
+ * tính phần chạm vào Kho THẬT (bỏ qua chân ảo "Kho mượn - X", vì
+ * tonKhoNVKTaiNgay_ ở trên vốn đã không gồm kho ảo đó): "Mượn" RÚT MT ra
+ * khỏi 1 Kho thật (loai=Xuất, hinhThuc=Mượn); "Trả" TRẢ MT vào lại 1 Kho
+ * thật (loai=Nhập, hinhThuc=Trả). Trả về (Mượn thật − Trả thật) - đúng
+ * dấu để CỘNG NGƯỢC vào "Tồn CK − Tồn đầu ngày" khi tính "Nhập trong kỳ"
+ * (mục H/BC): Mượn làm Tồn CK giảm oan (không phải do thiếu sản xuất)
+ * nên cộng lại; Trả làm Tồn CK tăng oan nên trừ lại. */
+function dieuChinhMuonTraThucTrongNgayNVK_(donVi, ngayISO) {
+  const sh = getOrCreateNghiepVuKhoSheet_();
+  const lastRow = sh.getLastRow();
+  if (lastRow < 2) return 0;
+  let muonThucMT = 0, traThucMT = 0;
+  sh.getRange(2, 1, lastRow - 1, NVK_TOTAL_COL).getValues().forEach(function (r) {
+    if (String(r[COL_NVK.DON_VI] || "").trim() !== donVi) return;
+    if (utils.formatDateISO(r[COL_NVK.NGAY_CHUNG_TU]) !== ngayISO) return;
+    const loai = String(r[COL_NVK.LOAI] || "").trim();
+    const hinhThuc = String(r[COL_NVK.HINH_THUC] || "").trim();
+    const mt = utils.parseNum(r[COL_NVK.KHOI_LUONG_MT]);
+    if (loai === "Xuất" && hinhThuc === "Mượn") muonThucMT += mt;
+    else if (loai === "Nhập" && hinhThuc === "Trả") traThucMT += mt;
+  });
+  return muonThucMT - traThucMT;
+}
+
+/** Đọc TOÀN BỘ sheet NhapGoKeo_NVK 1 lần thành Map "donVi|ngayISO" ->
+ * MT - dùng cho getNVKBaoCao (tránh đọc lại sheet cho từng dòng báo
+ * cáo). */
+function layNhapGoKeoNVKMap_() {
+  const sh = getOrCreateNhapGoKeoNVKSheet_();
+  const lastRow = sh.getLastRow();
+  const map = new Map();
+  if (lastRow < 2) return map;
+  sh.getRange(2, 1, lastRow - 1, 5).getValues().forEach(function (r) {
+    const ngayISO = utils.formatDateISO(r[0]);
+    const donVi = String(r[1] || "").trim();
+    if (!donVi || !ngayISO) return;
+    map.set(donVi + "|" + ngayISO, utils.parseNum(r[2]));
+  });
+  return map;
+}
+
+/** Tìm đúng dòng "Điều kiện kiểm tra duyệt" (sheet DieuKienDuyet, Admin
+ * cấu hình) khớp Đơn vị + chứa Ngày - ưu tiên "Từ ngày" gần nhất khi có
+ * nhiều dòng chồng lấn. DÙNG CHUNG cho CẢ hệ thống cũ
+ * (kiemTraDinhMucVaCanhBao_) LẪN NVK (ghiNhapGoKeoNVK, mục BC) - tách ra
+ * đây (thay vì lặp lại logic ở 2 nơi) để tránh 2 luồng lỡ tính lệch nhau
+ * nếu sau này quy tắc ưu tiên khi chồng lấn được sửa lại. Trả về null
+ * nếu chưa cấu hình cho Đơn vị/khoảng ngày này. */
+function timDieuKienDinhMucKhop_(donVi, ngayISO) {
+  const ungVien = getDieuKienDuyetListRaw_().filter(function (d) {
+    if (d.donVi !== donVi) return false;
+    if (d.tuNgayISO && ngayISO < d.tuNgayISO) return false;
+    if (d.denNgayISO && ngayISO > d.denNgayISO) return false;
+    return true;
+  });
+  if (!ungVien.length) return null;
+  ungVien.sort(function (a, b) { return (b.tuNgayISO || "0000-00-00").localeCompare(a.tuNgayISO || "0000-00-00"); });
+  return ungVien[0];
+}
+
+/** Ghi/cập nhật "Nhập gỗ keo trong ngày" cho NVK (mục BC) - GHI ĐÈ theo
+ * khóa (Đơn vị, Ngày), giống logCanDoiBDMT_. Sau khi ghi, TỰ đối chiếu
+ * Phiếu cân thực tế (dùng lại NGUYÊN VĂN docTongPhieuCanNgoai_) + tính
+ * "Định mức" (= 100% - Nhập trong kỳ/Nhập gỗ keo, xem
+ * syncNVKStagingForKey_) so với khoảng Admin cấu hình ở DieuKienDuyet -
+ * CHỈ CẢNH BÁO (gửi email, KHÔNG có "Chờ duyệt" vì NghiepVuKho là sổ
+ * nhật ký append-only, không có trạng thái chờ duyệt như Form
+ * Responses 1). */
+function ghiNhapGoKeoNVK(donVi, ngayISO, mt) {
+  let lock;
+  try {
+    lock = LockService.getScriptLock();
+    lock.waitLock(30000);
+    const email = utils.normEmail(getCurrentUserEmail_());
+    donVi = String(donVi || "").trim();
+    if (!donVi) return { success: false, message: "❌ Vui lòng chọn Đơn vị." };
+    const q = kiemTraQuyenGhiNVK_(email, donVi);
+    if (!q.ok) return { success: false, message: q.message };
+    if (!ngayISO) return { success: false, message: "❌ Vui lòng chọn Ngày." };
+    const ngay = new Date(ngayISO + "T00:00:00");
+    if (isNaN(ngay.getTime())) return { success: false, message: "❌ Ngày không hợp lệ." };
+    mt = utils.parseNum(mt);
+    if (!(mt > 0)) return { success: false, message: "❌ \"Nhập gỗ keo\" phải lớn hơn 0." };
+
+    const sh = getOrCreateNhapGoKeoNVKSheet_();
+    const rowVals = [ngay, donVi, mt, email, new Date()];
+    const lastRow = sh.getLastRow();
+    let existingRow = -1;
+    if (lastRow >= 2) {
+      const data = sh.getRange(2, 1, lastRow - 1, 2).getValues();
+      for (let i = 0; i < data.length; i++) {
+        if (String(data[i][1] || "").trim() === donVi && utils.formatDateISO(data[i][0]) === ngayISO) { existingRow = i + 2; break; }
+      }
+    }
+    if (existingRow > 0) sh.getRange(existingRow, 1, 1, rowVals.length).setValues([rowVals]);
+    else sh.appendRow(rowVals);
+    logNVK_(email, donVi, "", "Ghi \"Nhập gỗ keo trong ngày\" " + fmtNumVN_(mt) + " MT (ngày " + ngayISO + ")");
+
+    const canhBao = [];
+
+    // Đối chiếu Phiếu cân (5%, cùng ngưỡng với hệ thống cũ).
+    try {
+      const kq = docTongPhieuCanNgoai_(donVi, ngayISO);
+      if (kq && kq.tongMT > 0) {
+        const pctLech = Math.abs(mt - kq.tongMT) / kq.tongMT;
+        if (pctLech > 0.05) {
+          const lyDo = "Lệch phiếu cân: \"Nhập gỗ keo trong ngày\" nhập tay (" + fmtNumVN_(mt) + " MT) lệch " +
+            (pctLech * 100).toFixed(2) + "% so với TỔNG Phiếu cân thực tế ngày " + ngayISO + " (" + fmtNumVN_(kq.tongMT) + " MT, " + kq.soDong + " phiếu cân) - vượt ngưỡng cho phép 5%.";
+          canhBao.push(lyDo);
+          guiEmailAnToan_({
+            to: [email].concat(CFG.ADMIN_EMAILS).filter(function (v, i, a) { return v && a.indexOf(v) === i; }).join(","),
+            subject: "⚠️ [Nghiệp Vụ Kho] Nhập gỗ keo LỆCH PHIẾU CÂN - " + donVi,
+            body: "Nhập gỗ keo ngày " + ngayISO + " của \"" + donVi + "\" (người ghi: " + email + "):\n\n" + lyDo +
+              "\n\n(Email tự động từ hệ thống Nghiệp Vụ Kho (thử nghiệm) - Web App Quản Lý Tồn Kho Dăm - HAK Group)"
+          }, "NVK lệch phiếu cân - " + donVi);
+        }
+      }
+    } catch (e) { /* không để lỗi đọc file Phiếu cân ngoài làm hỏng việc ghi Nhập gỗ keo */ }
+
+    // "Định mức" so với khoảng Admin cấu hình (DieuKienDuyet, dùng chung
+    // với hệ thống cũ) = 100% - Nhập trong kỳ/Nhập gỗ keo - ĐÚNG NGUYÊN
+    // VĂN công thức hệ thống cũ (mục H, đã kiểm chứng khớp 712/712 dòng
+    // dữ liệu thật - xem syncNVKStagingForKey_). Luôn gọi lại
+    // syncNVKStagingForKey_ ở đây (dù "Nhập gỗ keo" KHÔNG phải giao dịch
+    // kho) để: (1) lấy đúng "Nhập trong kỳ" mới nhất từ CHÍNH nguồn dữ
+    // liệu Báo cáo đang hiển thị (tránh tính lại 1 công thức khác dễ lỡ
+    // lệch nhau), (2) đảm bảo Đơn vị/Ngày này LUÔN có 1 dòng trong Báo
+    // cáo NVK - nếu không, "Nhập gỗ keo" vừa nhập sẽ bị "mồ côi" (không
+    // hiện ở đâu cả) khi ngày đó chưa có bất kỳ giao dịch Nhập/Xuất kho
+    // nào khác. CHỈ so định mức khi ngày đó ĐÃ CÓ giao dịch Nhập/Xuất
+    // kho thật (staging.nhapMT/xuatMT > 0) - nếu chưa (VD ghi "Nhập gỗ
+    // keo" buổi sáng TRƯỚC khi ghi Nhập/Xuất kho trong ngày), Nhập trong
+    // kỳ = 0 sẽ luôn ra Định mức ảo = 100% (thiếu dữ liệu, KHÔNG phải
+    // thật sự lệch định mức) - báo "lệch định mức" lúc này là cảnh báo
+    // giả, dễ làm người dùng hoang mang không cần thiết.
+    let dinhMucPct = null;
+    try {
+      const staging = syncNVKStagingForKey_(donVi, ngayISO);
+      const coHoatDong = staging.nhapMT > 0.001 || staging.xuatMT > 0.001;
+      dinhMucPct = (mt > 0 && coHoatDong) ? (1 - staging.nhapTrongKyMT / mt) * 100 : null;
+      if (mt > 0 && !coHoatDong) {
+        canhBao.push("Chưa có giao dịch Nhập/Xuất kho nào ghi cho \"" + donVi + "\" ngày " + ngayISO + " - Định mức sẽ tự tính lại khi có dữ liệu.");
+      }
+      const dieuKien = dinhMucPct !== null ? timDieuKienDinhMucKhop_(donVi, ngayISO) : null;
+      if (dieuKien && dinhMucPct !== null && (dinhMucPct < dieuKien.minPct || dinhMucPct > dieuKien.maxPct)) {
+        const khoangNgay = (dieuKien.tuNgayDisplay || "…") + " → " + (dieuKien.denNgayDisplay || "…");
+        const lyDo = "Lệch định mức: Định mức tính được " + dinhMucPct.toFixed(2) + "% (Nhập trong kỳ " + fmtNumVN_(staging.nhapTrongKyMT) +
+          " MT / Nhập gỗ keo " + fmtNumVN_(mt) + " MT) nằm NGOÀI khoảng cho phép (" + dieuKien.minPct + "% - " + dieuKien.maxPct + "%) áp dụng cho giai đoạn " + khoangNgay + ".";
+        canhBao.push(lyDo);
+        guiEmailAnToan_({
+          to: [email].concat(CFG.ADMIN_EMAILS).filter(function (v, i, a) { return v && a.indexOf(v) === i; }).join(","),
+          subject: "⚠️ [Nghiệp Vụ Kho] Nhập gỗ keo LỆCH ĐỊNH MỨC - " + donVi,
+          body: "Nhập gỗ keo ngày " + ngayISO + " của \"" + donVi + "\" (người ghi: " + email + "):\n\n" + lyDo +
+            "\n\n(Email tự động từ hệ thống Nghiệp Vụ Kho (thử nghiệm) - Web App Quản Lý Tồn Kho Dăm - HAK Group)"
+        }, "NVK lệch định mức - " + donVi);
+      }
+    } catch (e) { /* không để lỗi kiểm tra định mức làm hỏng việc ghi Nhập gỗ keo */ }
+
+    let msg = "✅ Đã ghi \"Nhập gỗ keo\" " + fmtNumVN_(mt) + " MT cho \"" + donVi + "\" ngày " + ngayISO + ".";
+    if (canhBao.length) msg += "\n\n⚠️ " + canhBao.join("\n⚠️ ");
+    return { success: true, message: msg, dinhMucPct: dinhMucPct, canhBao: canhBao };
   } catch (err) {
     return { success: false, message: "❌ Lỗi: " + err.toString() };
   } finally {
@@ -5801,19 +6084,21 @@ function xoaNghiepVuKho(rowIndex) {
  * gọi sau MỌI lần ghi (giống syncChitietTonKhoForKey_ cũ). "Tồn CK" =
  * tổng FIFO của 4 Kho Nhà máy + 2 Kho xuất hàng (KHÔNG gồm Kho mượn -
  * đúng định nghĩa "Tồn CK" của hệ thống cũ, mục H: Cộng MT + Kho Tiên
- * Sa MT + Kho Dung Quất MT) - để đối chiếu được với Tồn CK cũ. */
+ * Sa MT + Kho Dung Quất MT) - để đối chiếu được với Tồn CK cũ. Cột 13
+ * "Nhập trong kỳ MT" (mục BC, ĐÃ SỬA v2026.9.3 lần 2 - bản đầu dùng
+ * NHẦM riêng "Sản xuất" làm tử số Định mức, thiếu Nhập cân đối kho/Trao
+ * đổi/Trung chuyển/Mượn-Trả trong ngày) = (Tồn CK − Tồn đầu ngày) +
+ * "Mượn/trả THẬT" trong ngày - ĐÚNG NGUYÊN VĂN công thức "Nhập trong
+ * kỳ" của hệ thống cũ (Tồn CK − Tồn đầu ngày + Điều chỉnh + Mượn/trả,
+ * xem dieuChinhMuonTraThucTrongNgayNVK_) - ĐÃ KIỂM CHỨNG khớp CHÍNH XÁC
+ * 712/712 dòng dữ liệu thật (Chitiettonkho) khi áp cùng công thức cho
+ * hệ thống cũ; NVK không có khái niệm "Điều chỉnh" riêng (hệ thống cũ
+ * dùng cho chênh lệch độ ẩm nhập tay) nên không có số hạng tương ứng -
+ * KHÁC BIỆT DUY NHẤT còn lại so với hệ thống cũ, thường nhỏ/hiếm gặp
+ * trong dữ liệu thật. Trả về object để ghiNhapGoKeoNVK dùng lại ngay
+ * (tránh tính 2 lần). */
 function syncNVKStagingForKey_(donVi, ngayISO) {
-  const khoTong = CFG.KHO_NHA_MAY.concat(CFG.KHO_XUAT_HANG);
-  function tonTaiThoiDiem_(denNgayISO) {
-    let mt = 0, bdmt = 0;
-    khoTong.forEach(function (kho) {
-      timFIFOLoKho_(kho, donVi, denNgayISO).forEach(function (l) { mt += l.mtConLai; bdmt += l.mtConLai * l.doKho; });
-    });
-    return { mt: mt, bdmt: bdmt };
-  }
-  const ngayTruoc = utils.formatDateISO(new Date(new Date(ngayISO + "T00:00:00").getTime() - 86400000));
-  const tonDauNgay = tonTaiThoiDiem_(ngayTruoc);
-  const tonCK = tonTaiThoiDiem_(ngayISO);
+  const { tonDauNgay, tonCK } = tonKhoNVKTaiNgay_(donVi, ngayISO);
 
   const sh = getOrCreateNghiepVuKhoSheet_();
   const lastRow = sh.getLastRow();
@@ -5828,6 +6113,7 @@ function syncNVKStagingForKey_(donVi, ngayISO) {
       else { xuatMT += mt; xuatBDMT += bdmt; }
     });
   }
+  const nhapTrongKyMT = (tonCK.mt - tonDauNgay.mt) + dieuChinhMuonTraThucTrongNgayNVK_(donVi, ngayISO);
 
   const stagingSh = getOrCreateNVKStagingSheet_();
   const rowValues = [
@@ -5835,7 +6121,7 @@ function syncNVKStagingForKey_(donVi, ngayISO) {
     tonDauNgay.mt, tonDauNgay.bdmt,
     nhapMT, nhapBDMT, xuatMT, xuatBDMT,
     tonCK.mt, tonCK.bdmt, tonCK.mt > 0 ? tonCK.bdmt / tonCK.mt : 0,
-    new Date()
+    new Date(), nhapTrongKyMT
   ];
   const lastRow2 = stagingSh.getLastRow();
   let existingRow = -1;
@@ -5847,6 +6133,8 @@ function syncNVKStagingForKey_(donVi, ngayISO) {
   }
   if (existingRow > 0) stagingSh.getRange(existingRow, 1, 1, rowValues.length).setValues([rowValues]);
   else stagingSh.appendRow(rowValues);
+
+  return { tonDauNgayMT: tonDauNgay.mt, tonCKMT: tonCK.mt, nhapMT: nhapMT, xuatMT: xuatMT, nhapTrongKyMT: nhapTrongKyMT };
 }
 
 function getNVKBaoCao(donViFilter, fDate, tDate) {
@@ -5854,13 +6142,24 @@ function getNVKBaoCao(donViFilter, fDate, tDate) {
   const sh = getOrCreateNVKStagingSheet_();
   const lastRow = sh.getLastRow();
   if (lastRow < 2) return { rows: [], soDong: 0 };
-  let rows = sh.getRange(2, 1, lastRow - 1, 12).getValues().map(function (r) {
+  const nhapGoKeoMap = layNhapGoKeoNVKMap_(); // mục BC
+  let rows = sh.getRange(2, 1, lastRow - 1, 13).getValues().map(function (r) {
+    const donVi = String(r[0] || "").trim(), ngayISO = utils.formatDateISO(r[1]);
+    const nhapTrongKyMT = utils.parseNum(r[12]);
+    const nhapGoKeoMT = nhapGoKeoMap.has(donVi + "|" + ngayISO) ? nhapGoKeoMap.get(donVi + "|" + ngayISO) : null;
+    // mục BC: Định mức = 100% - Nhập trong kỳ/Nhập gỗ keo - ĐÚNG NGUYÊN
+    // VĂN công thức hệ thống cũ (xem mục H đầu file, đã kiểm chứng khớp
+    // 712/712 dòng dữ liệu thật) - null nếu chưa ghi "Nhập gỗ keo" ngày
+    // đó (KHÔNG mặc định 0%, tránh hiểu lầm "đạt định mức tuyệt đối" khi
+    // thực ra chưa có số liệu để so).
+    const dinhMuc = (nhapGoKeoMT !== null && nhapGoKeoMT > 0) ? (1 - nhapTrongKyMT / nhapGoKeoMT) : null;
     return {
-      donVi: String(r[0] || "").trim(), ngayISO: utils.formatDateISO(r[1]), ngay: utils.formatDate(r[1]),
+      donVi: donVi, ngayISO: ngayISO, ngay: utils.formatDate(r[1]),
       tonDauMT: utils.parseNum(r[2]), tonDauBDMT: utils.parseNum(r[3]),
       nhapMT: utils.parseNum(r[4]), nhapBDMT: utils.parseNum(r[5]),
       xuatMT: utils.parseNum(r[6]), xuatBDMT: utils.parseNum(r[7]),
-      tonCKMT: utils.parseNum(r[8]), tonCKBDMT: utils.parseNum(r[9]), doKhoTB: utils.parseNum(r[10])
+      tonCKMT: utils.parseNum(r[8]), tonCKBDMT: utils.parseNum(r[9]), doKhoTB: utils.parseNum(r[10]),
+      nhapTrongKyMT: nhapTrongKyMT, nhapGoKeoMT: nhapGoKeoMT, dinhMuc: dinhMuc
     };
   }).filter(function (r) { return r.donVi && r.ngayISO; });
   if (allowedUnits) rows = rows.filter(function (r) { return allowedUnits.includes(r.donVi); });
@@ -5895,9 +6194,10 @@ function ghiBaoCaoNVKVaoSheet(donViFilter, fDate, tDate) {
     const res = getNVKBaoCao(donViFilter, fDate, tDate);
     const sh = getOrCreateNVKBaoCaoSheet_();
     sh.clear();
-    const header = ["Đơn vị", "Ngày", "Tồn đầu MT", "Tồn đầu BDMT", "Nhập MT", "Nhập BDMT", "Xuất MT", "Xuất BDMT", "Tồn CK MT", "Tồn CK BDMT", "Độ khô TB CK"];
+    const header = ["Đơn vị", "Ngày", "Tồn đầu MT", "Tồn đầu BDMT", "Nhập MT", "Nhập BDMT", "Xuất MT", "Xuất BDMT", "Tồn CK MT", "Tồn CK BDMT", "Độ khô TB CK", "Nhập gỗ keo (MT)", "Định mức"];
     const rows = res.rows.map(function (r) {
-      return [r.donVi, r.ngay, r.tonDauMT, r.tonDauBDMT, r.nhapMT, r.nhapBDMT, r.xuatMT, r.xuatBDMT, r.tonCKMT, r.tonCKBDMT, r.doKhoTB];
+      return [r.donVi, r.ngay, r.tonDauMT, r.tonDauBDMT, r.nhapMT, r.nhapBDMT, r.xuatMT, r.xuatBDMT, r.tonCKMT, r.tonCKBDMT, r.doKhoTB,
+        r.nhapGoKeoMT === null ? "" : r.nhapGoKeoMT, r.dinhMuc === null ? "" : r.dinhMuc];
     });
     sh.getRange(1, 1, 1, header.length).setValues([header]).setFontWeight("bold").setBackground("#d9ead3");
     sh.setFrozenRows(1);

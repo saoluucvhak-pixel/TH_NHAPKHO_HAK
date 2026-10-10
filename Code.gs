@@ -1631,10 +1631,44 @@ function getCurrentUserEmail_() {
 }
 
 function doGet(e) {
-  return HtmlService.createTemplateFromFile("Index").evaluate()
+  const tpl = HtmlService.createTemplateFromFile("Index");
+  // Mục BE (v2026.10.10): nhận số liệu do phần mềm "Kho dăm keo HAK"
+  // (bản cài trên máy) truyền sang qua tham số URL để ĐIỀN SẴN trang Nhập
+  // Tồn Kho - người dùng vẫn phải đăng nhập Google, xem lại rồi tự bấm
+  // Lưu (đi qua submitInventoryEntry như nhập tay: đủ Phân quyền + kiểm
+  // tra lệch đầu kỳ/định mức/phiếu cân). Xem layPrefillTuThamSo_.
+  tpl.prefillJson = layPrefillTuThamSo_(e && e.parameter);
+  return tpl.evaluate()
     .setTitle("QUẢN LÝ TỒN KHO DĂM - HAK GROUP")
     .addMetaTag("viewport", "width=device-width, initial-scale=1")
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+/**
+ * Mục BE (v2026.10.10): lọc tham số URL do phần mềm kho truyền sang
+ * (nguon=app_kho) thành JSON an toàn để nhúng vào Index.html - CHỈ nhận
+ * đúng các khóa đã biết: Đơn vị phải nằm trong CFG.UNITS, ngày đúng dạng
+ * yyyy-MM-dd, các trường số phải là số hữu hạn (làm tròn 2 chữ số).
+ * Không có tham số / sai nguồn -> "null" (trang mở bình thường như cũ).
+ */
+function layPrefillTuThamSo_(p) {
+  if (!p || p.nguon !== "app_kho") return "null";
+  const out = { nguon: "app_kho" };
+  const donVi = String(p.donVi || "").trim();
+  if (CFG.UNITS.indexOf(donVi) !== -1) out.donVi = donVi;
+  const ngay = String(p.ngayTonKho || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(ngay)) out.ngayTonKho = ngay;
+  ["hoaNhonMT", "hoaNhonBDMT", "queSonMT", "queSonBDMT", "daiHiepMT", "daiHiepBDMT",
+   "hakqnMT", "hakqnBDMT", "tienSaMT", "tienSaBDMT", "dungQuatMT", "dungQuatBDMT",
+   "dieuChinh", "muonTra", "nhapGo", "tonDauNgayApp", "soPhieuApp"].forEach(function (k) {
+    if (p[k] === undefined || p[k] === "") return;
+    const n = Number(p[k]);
+    if (isFinite(n)) out[k] = Math.round(n * 100) / 100;
+  });
+  if (p.phienBanApp) out.phienBanApp = String(p.phienBanApp).replace(/[^0-9A-Za-z._ -]/g, "").slice(0, 20);
+  return JSON.stringify(out)
+    .replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026")
+    .replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
 }
 
 // ============================================================

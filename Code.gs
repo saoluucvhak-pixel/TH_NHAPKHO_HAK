@@ -1631,10 +1631,58 @@ function getCurrentUserEmail_() {
 }
 
 function doGet(e) {
-  return HtmlService.createTemplateFromFile("Index").evaluate()
+  const tpl = HtmlService.createTemplateFromFile("Index");
+  // Mục BE (v2026.10.10): nhận số liệu do phần mềm "Kho dăm keo HAK"
+  // (bản cài trên máy) truyền sang qua tham số URL để ĐIỀN SẴN trang Nhập
+  // Tồn Kho - người dùng vẫn phải đăng nhập Google, xem lại rồi tự bấm
+  // Lưu (đi qua submitInventoryEntry như nhập tay: đủ Phân quyền + kiểm
+  // tra lệch đầu kỳ/định mức/phiếu cân). Xem layPrefillTuThamSo_.
+  tpl.prefillJson = layPrefillTuThamSo_(e && e.parameter);
+  return tpl.evaluate()
     .setTitle("QUẢN LÝ TỒN KHO DĂM - HAK GROUP")
     .addMetaTag("viewport", "width=device-width, initial-scale=1")
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+/**
+ * Mục BE (v2026.10.10): lọc tham số URL do phần mềm kho truyền sang
+ * (nguon=app_kho) thành JSON an toàn để nhúng vào Index.html - CHỈ nhận
+ * đúng các khóa đã biết: Đơn vị phải nằm trong CFG.UNITS, ngày đúng dạng
+ * yyyy-MM-dd, các trường số phải là số hữu hạn (làm tròn 2 chữ số).
+ * Không có tham số / sai nguồn -> "null" (trang mở bình thường như cũ).
+ */
+function layPrefillTuThamSo_(p) {
+  if (!p || p.nguon !== "app_kho") return "null";
+  const out = { nguon: "app_kho" };
+  const donVi = String(p.donVi || "").trim();
+  if (CFG.UNITS.indexOf(donVi) !== -1) out.donVi = donVi;
+  const ngay = String(p.ngayTonKho || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(ngay)) out.ngayTonKho = ngay;
+  ["hoaNhonMT", "hoaNhonBDMT", "queSonMT", "queSonBDMT", "daiHiepMT", "daiHiepBDMT",
+   "hakqnMT", "hakqnBDMT", "tienSaMT", "tienSaBDMT", "dungQuatMT", "dungQuatBDMT",
+   "dieuChinh", "muonTra", "nhapGo", "tonDauNgayApp", "soPhieuApp",
+   "klUocTinhConLai", "chenhLechVetBai", "candoiDoAm", "candoiMTThucTe"].forEach(function (k) {
+    if (p[k] === undefined || p[k] === "") return;
+    const n = Number(p[k]);
+    if (isFinite(n)) out[k] = Math.round(n * 100) / 100;
+  });
+  // Kiểm kê vét bãi + Cân đối BDMT xuất hàng (mục BE, bổ sung): chỉ nhận
+  // khi phần mềm kho đánh dấu có (=1), ngày đúng dạng, kho thuộc
+  // CFG.KHO_XUAT_HANG.
+  if (p.kiemKeVetBai === "1") {
+    out.kiemKeVetBai = true;
+    const tdv = String(p.thoiDiemVetBai || "").trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(tdv)) out.thoiDiemVetBai = tdv;
+  } else { delete out.klUocTinhConLai; delete out.chenhLechVetBai; }
+  if (p.candoiCo === "1" && CFG.KHO_XUAT_HANG.indexOf(String(p.candoiKho || "")) !== -1) {
+    out.candoiCo = true;
+    out.candoiKho = String(p.candoiKho);
+    if (p.candoiGhiChuApp) out.candoiGhiChuApp = String(p.candoiGhiChuApp).replace(/[<>&"'`\\]/g, " ").slice(0, 300);
+  } else { delete out.candoiDoAm; delete out.candoiMTThucTe; }
+  if (p.phienBanApp) out.phienBanApp = String(p.phienBanApp).replace(/[^0-9A-Za-z._ -]/g, "").slice(0, 20);
+  return JSON.stringify(out)
+    .replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026")
+    .replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
 }
 
 // ============================================================
@@ -2764,6 +2812,21 @@ function submitInventoryEntry(payload) {
         utils.parseNum(payload.candoiDoAm), utils.parseNum(payload.candoiMTThucTe),
         donVi, ngayTonKho, email
       );
+      // Mục BE (bổ sung): cân đối gửi từ phần mềm Kho dăm keo HAK - phần
+      // chênh lệch đã được tất toán bằng phiếu CDXB/KQL trong phần mềm
+      // (số tồn Kho Nhà máy/Kho xuất hàng gửi lên ĐÃ GỒM bút toán đó), nên
+      // GHI Điều chỉnh MT/BDMT = 0 để Đầu kỳ dự kiến ngày sau CHỈ trừ
+      // "Khối lượng thực tế MT" (lượng đã xuất bán), không trừ/cộng lần 2.
+      if (!candoiResult.error && payload.candoiNguon === "app_kho") {
+        const ghiChu = String(payload.candoiGhiChuApp || "").slice(0, 300);
+        candoiResult.dieuChinhBDMTTinhLai = candoiResult.dieuChinhBDMT;
+        candoiResult.dieuChinhMTTinhLai = candoiResult.dieuChinhMT;
+        candoiResult.dieuChinhBDMT = 0;
+        candoiResult.dieuChinhMT = 0;
+        const dg = "Đã tất toán trong phần mềm Kho dăm keo HAK" + (ghiChu ? " (" + ghiChu + ")" : "") + " - không điều chỉnh thêm trên Web App.";
+        candoiResult.dienGiaiBDMT = dg;
+        candoiResult.dienGiaiMT = dg;
+      }
       if (!candoiResult.error) logCanDoiBDMT_(candoiResult);
     }
 

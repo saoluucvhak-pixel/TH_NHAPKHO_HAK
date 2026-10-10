@@ -254,6 +254,10 @@
   <div class="modal-bg" id="modal-bg"><div class="modal" id="modal"></div></div>
 
 <script>
+/* Mục BE (v2026.10.10): số liệu do phần mềm "Kho dăm keo HAK" truyền
+ * sang (null nếu mở Web App bình thường) - xem layPrefillTuThamSo_ ở
+ * Code.gs và apDungPrefillTuApp_ bên dưới. */
+const PREFILL_APP_ = <?!= prefillJson ?>;
 /* ============================================================
  * STATE & HELPERS
  * ============================================================ */
@@ -311,6 +315,7 @@ function resetCreateData(){
   // phát hiện đổi sang 1 khóa NHẬP MỚI khác (không riêng gì lúc rời chế
   // độ Sửa) nhằm xóa sạch số liệu cũ, tránh nộp nhầm (mục bugfix).
   state._lastCreateCheckKey = null;
+  state.prefillApp = null; // mục BE: bỏ số liệu điền sẵn từ phần mềm kho sau khi đã lưu
 }
 resetCreateData();
 
@@ -1355,22 +1360,25 @@ function updateCanDoiBDMTThucTePreview_(){
  * độ NHẬP MỚI, xóa banner.
  */
 function checkExistingForCreate(){
+  return checkExistingForCreateGoc_().then(apDungPrefillNeuKhop_);
+}
+function checkExistingForCreateGoc_(){
   const donVi = (document.getElementById('f-donVi')||{}).value || '';
   const ngayISO = (document.getElementById('f-ngayTonKho')||{}).value || '';
   const banner = document.getElementById('create-mode-banner');
   const btn = document.getElementById('btn-submit-create');
   const hint = document.getElementById('create-actionbar-hint');
-  if (!banner || !btn) return;
+  if (!banner || !btn) return Promise.resolve();
 
   if (!donVi || !ngayISO) {
     banner.innerHTML = '';
     state.createData.isEditingExisting = false;
     btn.textContent = '💾 Lưu báo cáo mới';
     if (hint) hint.textContent = 'Chọn Đơn vị + Ngày tồn kho để hệ thống kiểm tra: chưa có dữ liệu thì nhập mới, đã có thì tự chuyển sang sửa.';
-    return;
+    return Promise.resolve();
   }
 
-  call('getExistingEntryForKey', [donVi, ngayISO], null).then(existing => {
+  return call('getExistingEntryForKey', [donVi, ngayISO], null).then(existing => {
     // Người dùng có thể đã đổi Đơn vị/Ngày khác trong lúc chờ phản hồi -
     // chỉ áp dụng kết quả nếu vẫn còn khớp lựa chọn hiện tại.
     const curDonVi = (document.getElementById('f-donVi')||{}).value || '';
@@ -1407,7 +1415,7 @@ function checkExistingForCreate(){
       // THEO YÊU CẦU MỚI (v2026.8.8): tự điền "Tồn kho đầu ngày (MT)" =
       // "Cộng MT" của ngày gần nhất TRƯỚC đó (cùng đơn vị) - vẫn cho sửa
       // tay sau khi điền, không khóa cứng ô này.
-      call('getPreviousDayCongMT', [donVi, ngayISO], null).then(prev => {
+      return call('getPreviousDayCongMT', [donVi, ngayISO], null).then(prev => {
         const curDonVi2 = (document.getElementById('f-donVi')||{}).value || '';
         const curNgay2 = (document.getElementById('f-ngayTonKho')||{}).value || '';
         if (curDonVi2 !== donVi || curNgay2 !== ngayISO) return; // đã đổi lựa chọn trong lúc chờ
@@ -1498,7 +1506,10 @@ function collectCreateForm_(){
     kiemKeVetBai: document.getElementById('f-kiemKe').checked,
     thoiDiemVetBai: g('f-thoiDiem'), klUocTinhConLai: n('f-klUocTinh'), chenhLechVetBai: n('f-chenhLech'),
     candoiCo: document.getElementById('f-candoiCo').checked,
-    candoiKho: g('f-candoiKho'), candoiDoAm: n('f-candoiDoAm'), candoiMTThucTe: n('f-candoiMTThucTe')
+    candoiKho: g('f-candoiKho'), candoiDoAm: n('f-candoiDoAm'), candoiMTThucTe: n('f-candoiMTThucTe'),
+    // Mục BE: cân đối do phần mềm kho gửi sang (đã tất toán bằng CDXB/KQL trong phần mềm)
+    candoiNguon: (state.prefillApp && state.prefillApp.candoiCo && state.prefillApp.donVi === g('f-donVi') && state.prefillApp.ngayTonKho === g('f-ngayTonKho')) ? 'app_kho' : '',
+    candoiGhiChuApp: (state.prefillApp && state.prefillApp.candoiGhiChuApp) || ''
   };
 }
 
@@ -1579,6 +1590,7 @@ function showCanDoiBDMTResult_(r){
       <div class="kv"><div class="k">Điều chỉnh BDMT</div><div class="v" style="font-weight:700">${fmtNum(r.dieuChinhBDMT)}</div></div>
       <div class="hint-text" style="margin:2px 0 10px 0">${esc(r.dienGiaiBDMT)}</div>
       <div class="kv"><div class="k">Điều chỉnh MT</div><div class="v" style="font-weight:700">${fmtNum(r.dieuChinhMT)}</div></div>
+      ${r.dieuChinhMTTinhLai !== undefined ? `<div class="hint-text" style="margin:2px 0 10px 0">Nếu tính theo công thức Web App: Điều chỉnh BDMT ${fmtNum(r.dieuChinhBDMTTinhLai)} · Điều chỉnh MT ${fmtNum(r.dieuChinhMTTinhLai)} (chỉ để tham khảo, không ghi sổ).</div>` : ''}
       <div class="hint-text" style="margin:2px 0 0 0">${esc(r.dienGiaiMT)}</div>
       <div class="hint-text" style="margin-top:12px;background:var(--moss-light);color:var(--moss);padding:10px 12px;border-radius:8px">Đã ghi dòng cân đối này vào sheet "CanDoiBDMT".</div>
     </div>
@@ -2634,8 +2646,87 @@ call('getMyAccess', [], null).then(access => {
 
   call('getUnitList', [], null).then(list => { state.units = list; });
   loadSoLuongChoDuyet();
-  goTo('dashboard');
+  if (PREFILL_APP_ && PREFILL_APP_.donVi && PREFILL_APP_.ngayTonKho) apDungPrefillTuApp_();
+  else goTo('dashboard');
 });
+
+/* ============================================================
+ * MỤC BE (v2026.10.10): ĐIỀN SẴN TỪ PHẦN MỀM "KHO DĂM KEO HAK"
+ * ------------------------------------------------------------
+ * Phần mềm kho (bản cài trên máy) mở Web App kèm tham số URL
+ * (nguon=app_kho) - trang tự chuyển sang "Nhập Tồn Kho", chọn Đơn vị +
+ * Ngày, chờ kiểm tra "đã có báo cáo chưa" (checkExistingForCreate) xong
+ * mới điền số liệu (để không bị bước đó xóa/ghi đè). KHÔNG tự lưu -
+ * người dùng xem lại rồi bấm Lưu/Cập nhật như bình thường. "Tồn kho đầu
+ * ngày" KHÔNG ghi đè: giữ số Web App tự điền (Đầu kỳ dự kiến) hoặc số
+ * của báo cáo đang sửa; số theo phần mềm kho chỉ hiện để đối chiếu.
+ * ============================================================ */
+function apDungPrefillTuApp_(){
+  const P = PREFILL_APP_;
+  const opts = state.isAdmin ? ['HAK (Bà Nà)','CNHAK (QS)','Đại Hiệp (Đại Lộc)','HAKQN (QS Trung)'] : myUnitOptions(true);
+  if (opts.indexOf(P.donVi) === -1) {
+    goTo('dashboard');
+    toast('Số liệu từ phần mềm kho dành cho đơn vị "' + P.donVi + '" nhưng email này không có quyền Nhập/Sửa đơn vị đó.', 'err');
+    return;
+  }
+  state.prefillApp = P;
+  // Ghi vào state.createData (không chỉ DOM) vì renderCreate() có thể
+  // vẽ lại trang khi danh sách Đơn vị tải xong.
+  state.createData.donVi = P.donVi;
+  state.createData.ngayTonKho = P.ngayTonKho;
+  Object.keys(PREFILL_FIELDS_).forEach(k => { if (P[k] !== undefined) state.createData[k] = P[k]; });
+  if (P.kiemKeVetBai) Object.assign(state.createData, { kiemKeVetBai: true, thoiDiemVetBai: P.thoiDiemVetBai || '', klUocTinhConLai: P.klUocTinhConLai ?? '', chenhLechVetBai: P.chenhLechVetBai ?? '' });
+  if (P.candoiCo) Object.assign(state.createData, { candoiCo: true, candoiKho: P.candoiKho, candoiDoAm: P.candoiDoAm ?? '', candoiMTThucTe: P.candoiMTThucTe ?? '' });
+  goTo('create'); // renderCreate tự gọi checkExistingForCreate -> apDungPrefillNeuKhop_
+}
+const PREFILL_FIELDS_ = { hoaNhonMT:'f-hoaNhonMT', hoaNhonBDMT:'f-hoaNhonBDMT', queSonMT:'f-queSonMT', queSonBDMT:'f-queSonBDMT',
+  daiHiepMT:'f-daiHiepMT', daiHiepBDMT:'f-daiHiepBDMT', hakqnMT:'f-hakqnMT', hakqnBDMT:'f-hakqnBDMT',
+  tienSaMT:'f-tienSaMT', tienSaBDMT:'f-tienSaBDMT', dungQuatMT:'f-dungQuatMT', dungQuatBDMT:'f-dungQuatBDMT',
+  dieuChinh:'f-dieuChinh', muonTra:'f-muonTra', nhapGo:'f-nhapGo' };
+/** Chạy SAU mỗi lần checkExistingForCreate xong (kể cả khi trang được vẽ
+ * lại) - chỉ điền khi Đơn vị + Ngày đang chọn vẫn đúng như phần mềm kho
+ * gửi sang (người dùng đổi sang khóa khác thì thôi không điền). Ghi đè
+ * lên số của báo cáo cũ (chế độ Sửa) trừ "Tồn kho đầu ngày". */
+function apDungPrefillNeuKhop_(){
+  const P = state.prefillApp;
+  if (!P) return;
+  const dv = (document.getElementById('f-donVi')||{}).value, ng = (document.getElementById('f-ngayTonKho')||{}).value;
+  if (dv !== P.donVi || ng !== P.ngayTonKho) return;
+  let n = 0;
+  Object.keys(PREFILL_FIELDS_).forEach(k => {
+    if (P[k] === undefined) return;
+    const el = document.getElementById(PREFILL_FIELDS_[k]);
+    if (el) { el.value = P[k]; n++; }
+  });
+  const setV = (id, v) => { const el = document.getElementById(id); if (el && v !== undefined) el.value = v; };
+  const extra = [];
+  if (P.kiemKeVetBai) {
+    const chk = document.getElementById('f-kiemKe');
+    if (chk) { chk.checked = true; document.getElementById('kiemke-fields').classList.remove('hidden'); }
+    setV('f-thoiDiem', P.thoiDiemVetBai); setV('f-klUocTinh', P.klUocTinhConLai); setV('f-chenhLech', P.chenhLechVetBai);
+    extra.push('Kiểm kê vét bãi');
+  }
+  if (P.candoiCo) {
+    const chk = document.getElementById('f-candoiCo');
+    if (chk) { chk.checked = true; document.getElementById('candoi-fields').classList.remove('hidden'); }
+    setV('f-candoiKho', P.candoiKho); setV('f-candoiDoAm', P.candoiDoAm); setV('f-candoiMTThucTe', P.candoiMTThucTe);
+    extra.push('Cân đối BDMT xuất hàng (' + P.candoiKho + ' – đã tất toán trong phần mềm kho, Web App ghi Điều chỉnh = 0)');
+  }
+  attachNumberFormatting_();
+  updateCanDoiDoKho_();
+  updateCanDoiKhoPreview_();
+  updateCanDoiBDMTThucTePreview_();
+  updateCreateChildTabIndicators_();
+  const banner = document.getElementById('create-mode-banner');
+  if (banner && !banner.querySelector('.prefill-app-note')) {
+    const tonDauWeb = getNumFieldValue_('f-tonDauNgay');
+    const lechTonDau = P.tonDauNgayApp !== undefined && tonDauWeb !== '' && Math.abs(Number(tonDauWeb) - P.tonDauNgayApp) > 0.01;
+    banner.insertAdjacentHTML('beforeend', `<div class="hint-text prefill-app-note" style="background:#E8F0FB;color:#1F4E8C;padding:10px 12px;border-radius:8px;margin:0 0 14px 0">
+      📥 Đã điền sẵn ${n} ô từ <b>phần mềm Kho dăm keo HAK</b>${P.phienBanApp ? ' (bản ' + esc(P.phienBanApp) + ')' : ''} cho ngày ${esc(P.ngayTonKho)}${P.soPhieuApp !== undefined ? ' – ' + fmtNum(P.soPhieuApp) + ' phiếu trong ngày' : ''}.
+      ${extra.length ? 'Đã tick sẵn: <b>' + esc(extra.join(', ')) + '</b>. ' : ''}Kiểm tra lại từng tab rồi bấm Lưu/Cập nhật – số liệu CHƯA được lưu cho tới khi bạn bấm nút.
+      ${P.tonDauNgayApp !== undefined ? `<br>Tồn kho đầu ngày theo phần mềm kho: <b>${fmtNum(P.tonDauNgayApp)}</b> MT${lechTonDau ? ` – <b>khác</b> số đang điền (${fmtNum(tonDauWeb)} MT), kiểm tra trước khi lưu.` : tonDauWeb === '' ? '.' : ' (khớp).'}` : ''}</div>`);
+  }
+}
 
 /* ============================================================
  * "NGHIỆP VỤ KHO" (mục BB ở đầu Code.gs) - trang MỚI, HOÀN TOÀN TÁCH

@@ -1677,6 +1677,7 @@ function layPrefillTuThamSo_(p) {
   if (p.candoiCo === "1" && CFG.KHO_XUAT_HANG.indexOf(String(p.candoiKho || "")) !== -1) {
     out.candoiCo = true;
     out.candoiKho = String(p.candoiKho);
+    if (p.candoiGhiChuApp) out.candoiGhiChuApp = String(p.candoiGhiChuApp).replace(/[<>&"'`\\]/g, " ").slice(0, 300);
   } else { delete out.candoiDoAm; delete out.candoiMTThucTe; }
   if (p.phienBanApp) out.phienBanApp = String(p.phienBanApp).replace(/[^0-9A-Za-z._ -]/g, "").slice(0, 20);
   return JSON.stringify(out)
@@ -2811,6 +2812,21 @@ function submitInventoryEntry(payload) {
         utils.parseNum(payload.candoiDoAm), utils.parseNum(payload.candoiMTThucTe),
         donVi, ngayTonKho, email
       );
+      // Mục BE (bổ sung): cân đối gửi từ phần mềm Kho dăm keo HAK - phần
+      // chênh lệch đã được tất toán bằng phiếu CDXB/KQL trong phần mềm
+      // (số tồn Kho Nhà máy/Kho xuất hàng gửi lên ĐÃ GỒM bút toán đó), nên
+      // GHI Điều chỉnh MT/BDMT = 0 để Đầu kỳ dự kiến ngày sau CHỈ trừ
+      // "Khối lượng thực tế MT" (lượng đã xuất bán), không trừ/cộng lần 2.
+      if (!candoiResult.error && payload.candoiNguon === "app_kho") {
+        const ghiChu = String(payload.candoiGhiChuApp || "").slice(0, 300);
+        candoiResult.dieuChinhBDMTTinhLai = candoiResult.dieuChinhBDMT;
+        candoiResult.dieuChinhMTTinhLai = candoiResult.dieuChinhMT;
+        candoiResult.dieuChinhBDMT = 0;
+        candoiResult.dieuChinhMT = 0;
+        const dg = "Đã tất toán trong phần mềm Kho dăm keo HAK" + (ghiChu ? " (" + ghiChu + ")" : "") + " - không điều chỉnh thêm trên Web App.";
+        candoiResult.dienGiaiBDMT = dg;
+        candoiResult.dienGiaiMT = dg;
+      }
       if (!candoiResult.error) logCanDoiBDMT_(candoiResult);
     }
 

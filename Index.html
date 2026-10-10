@@ -2671,6 +2671,8 @@ function apDungPrefillTuApp_(){
   state.createData.donVi = P.donVi;
   state.createData.ngayTonKho = P.ngayTonKho;
   Object.keys(PREFILL_FIELDS_).forEach(k => { if (P[k] !== undefined) state.createData[k] = P[k]; });
+  if (P.kiemKeVetBai) Object.assign(state.createData, { kiemKeVetBai: true, thoiDiemVetBai: P.thoiDiemVetBai || '', klUocTinhConLai: P.klUocTinhConLai ?? '', chenhLechVetBai: P.chenhLechVetBai ?? '' });
+  if (P.candoiCo) Object.assign(state.createData, { candoiCo: true, candoiKho: P.candoiKho, candoiDoAm: P.candoiDoAm ?? '', candoiMTThucTe: P.candoiMTThucTe ?? '' });
   goTo('create'); // renderCreate tự gọi checkExistingForCreate -> apDungPrefillNeuKhop_
 }
 const PREFILL_FIELDS_ = { hoaNhonMT:'f-hoaNhonMT', hoaNhonBDMT:'f-hoaNhonBDMT', queSonMT:'f-queSonMT', queSonBDMT:'f-queSonBDMT',
@@ -2692,8 +2694,24 @@ function apDungPrefillNeuKhop_(){
     const el = document.getElementById(PREFILL_FIELDS_[k]);
     if (el) { el.value = P[k]; n++; }
   });
+  const setV = (id, v) => { const el = document.getElementById(id); if (el && v !== undefined) el.value = v; };
+  const extra = [];
+  if (P.kiemKeVetBai) {
+    const chk = document.getElementById('f-kiemKe');
+    if (chk) { chk.checked = true; document.getElementById('kiemke-fields').classList.remove('hidden'); }
+    setV('f-thoiDiem', P.thoiDiemVetBai); setV('f-klUocTinh', P.klUocTinhConLai); setV('f-chenhLech', P.chenhLechVetBai);
+    extra.push('Kiểm kê vét bãi');
+  }
+  if (P.candoiCo) {
+    const chk = document.getElementById('f-candoiCo');
+    if (chk) { chk.checked = true; document.getElementById('candoi-fields').classList.remove('hidden'); }
+    setV('f-candoiKho', P.candoiKho); setV('f-candoiDoAm', P.candoiDoAm); setV('f-candoiMTThucTe', P.candoiMTThucTe);
+    extra.push('Cân đối BDMT xuất hàng (' + P.candoiKho + ')');
+  }
   attachNumberFormatting_();
+  updateCanDoiDoKho_();
   updateCanDoiKhoPreview_();
+  updateCanDoiBDMTThucTePreview_();
   updateCreateChildTabIndicators_();
   const banner = document.getElementById('create-mode-banner');
   if (banner && !banner.querySelector('.prefill-app-note')) {
@@ -2701,7 +2719,7 @@ function apDungPrefillNeuKhop_(){
     const lechTonDau = P.tonDauNgayApp !== undefined && tonDauWeb !== '' && Math.abs(Number(tonDauWeb) - P.tonDauNgayApp) > 0.01;
     banner.insertAdjacentHTML('beforeend', `<div class="hint-text prefill-app-note" style="background:#E8F0FB;color:#1F4E8C;padding:10px 12px;border-radius:8px;margin:0 0 14px 0">
       📥 Đã điền sẵn ${n} ô từ <b>phần mềm Kho dăm keo HAK</b>${P.phienBanApp ? ' (bản ' + esc(P.phienBanApp) + ')' : ''} cho ngày ${esc(P.ngayTonKho)}${P.soPhieuApp !== undefined ? ' – ' + fmtNum(P.soPhieuApp) + ' phiếu trong ngày' : ''}.
-      Kiểm tra lại từng tab rồi bấm Lưu/Cập nhật – số liệu CHƯA được lưu cho tới khi bạn bấm nút.
+      ${extra.length ? 'Đã tick sẵn: <b>' + esc(extra.join(', ')) + '</b>. ' : ''}Kiểm tra lại từng tab rồi bấm Lưu/Cập nhật – số liệu CHƯA được lưu cho tới khi bạn bấm nút.
       ${P.tonDauNgayApp !== undefined ? `<br>Tồn kho đầu ngày theo phần mềm kho: <b>${fmtNum(P.tonDauNgayApp)}</b> MT${lechTonDau ? ` – <b>khác</b> số đang điền (${fmtNum(tonDauWeb)} MT), kiểm tra trước khi lưu.` : tonDauWeb === '' ? '.' : ' (khớp).'}` : ''}</div>`);
   }
 }

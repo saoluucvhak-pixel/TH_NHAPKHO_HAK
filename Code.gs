@@ -1660,11 +1660,24 @@ function layPrefillTuThamSo_(p) {
   if (/^\d{4}-\d{2}-\d{2}$/.test(ngay)) out.ngayTonKho = ngay;
   ["hoaNhonMT", "hoaNhonBDMT", "queSonMT", "queSonBDMT", "daiHiepMT", "daiHiepBDMT",
    "hakqnMT", "hakqnBDMT", "tienSaMT", "tienSaBDMT", "dungQuatMT", "dungQuatBDMT",
-   "dieuChinh", "muonTra", "nhapGo", "tonDauNgayApp", "soPhieuApp"].forEach(function (k) {
+   "dieuChinh", "muonTra", "nhapGo", "tonDauNgayApp", "soPhieuApp",
+   "klUocTinhConLai", "chenhLechVetBai", "candoiDoAm", "candoiMTThucTe"].forEach(function (k) {
     if (p[k] === undefined || p[k] === "") return;
     const n = Number(p[k]);
     if (isFinite(n)) out[k] = Math.round(n * 100) / 100;
   });
+  // Kiểm kê vét bãi + Cân đối BDMT xuất hàng (mục BE, bổ sung): chỉ nhận
+  // khi phần mềm kho đánh dấu có (=1), ngày đúng dạng, kho thuộc
+  // CFG.KHO_XUAT_HANG.
+  if (p.kiemKeVetBai === "1") {
+    out.kiemKeVetBai = true;
+    const tdv = String(p.thoiDiemVetBai || "").trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(tdv)) out.thoiDiemVetBai = tdv;
+  } else { delete out.klUocTinhConLai; delete out.chenhLechVetBai; }
+  if (p.candoiCo === "1" && CFG.KHO_XUAT_HANG.indexOf(String(p.candoiKho || "")) !== -1) {
+    out.candoiCo = true;
+    out.candoiKho = String(p.candoiKho);
+  } else { delete out.candoiDoAm; delete out.candoiMTThucTe; }
   if (p.phienBanApp) out.phienBanApp = String(p.phienBanApp).replace(/[^0-9A-Za-z._ -]/g, "").slice(0, 20);
   return JSON.stringify(out)
     .replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026")

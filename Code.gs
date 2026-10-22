@@ -1630,6 +1630,16 @@ function getCurrentUserEmail_() {
   try { return Session.getActiveUser().getEmail() || ""; } catch (e) { return ""; }
 }
 
+/** Mục BF (v2026.10.22): chặn các hàm cấu hình/quản trị VIẾT HOA (LUU_*,
+ * BAT_/TAT_LICH_*, NANG_CAP_*...) - mọi hàm KHÔNG có "_" ở cuối tên đều
+ * gọi được từ trình duyệt qua google.script.run, nên phải tự kiểm tra
+ * Admin ở server. Chạy từ Apps Script Editor bằng tài khoản Admin vẫn
+ * bình thường. */
+function yeuCauAdmin_() {
+  const email = getCurrentUserEmail_();
+  if (!utils.isAdmin(email)) throw new Error("❌ Chỉ Admin mới được chạy hàm này" + (email ? " (" + email + ")" : "") + ".");
+}
+
 function doGet(e) {
   const tpl = HtmlService.createTemplateFromFile("Index");
   // Mục BE (v2026.10.10): nhận số liệu do phần mềm "Kho dăm keo HAK"
@@ -2593,7 +2603,10 @@ function submitInventoryEntry(payload) {
     lock.waitLock(30000);
 
     if (!payload) throw new Error("Không nhận được dữ liệu.");
-    const email = utils.normEmail(payload.overrideEmail || getCurrentUserEmail_());
+    // Mục BF (v2026.10.22): CHỈ lấy email từ phiên đăng nhập - KHÔNG nhận
+    // email do trình duyệt gửi lên (trước đây payload.overrideEmail cho
+    // phép bất kỳ ai tự xưng là Admin qua google.script.run).
+    const email = utils.normEmail(getCurrentUserEmail_());
     const isAdmin = utils.isAdmin(email);
 
     const donVi = String(payload.donVi || "").trim();
@@ -3356,6 +3369,9 @@ function guiEmailThuNghiem(toEmail) {
 function getExistingEntryForKey(donVi, ngayISO) {
   donVi = String(donVi || "").trim();
   if (!donVi || !ngayISO) return null;
+  // Mục BF: chỉ trả số liệu Đơn vị người gọi được Xem/Nhập.
+  const allowedUnits = donViChoPhepCuaToi_(utils.normEmail(getCurrentUserEmail_()));
+  if (allowedUnits && allowedUnits.indexOf(donVi) === -1) return null;
   const { data } = readAllChitietData_();
   const idx = findChitietIndex_(data, donVi, ngayISO);
   if (idx === -1) return null;
@@ -3385,6 +3401,9 @@ function getExistingEntryForKey(donVi, ngayISO) {
 function getPreviousDayCongMT(donVi, ngayISO) {
   donVi = String(donVi || "").trim();
   if (!donVi || !ngayISO) return null;
+  // Mục BF: chỉ trả số liệu Đơn vị người gọi được Xem/Nhập.
+  const allowedUnits = donViChoPhepCuaToi_(utils.normEmail(getCurrentUserEmail_()));
+  if (allowedUnits && allowedUnits.indexOf(donVi) === -1) return null;
   const info = timTonCuoiKyTruoc_(donVi, ngayISO);
   if (!info) return null;
   return {
@@ -4083,6 +4102,7 @@ function duyetBaoCao(rowIndex, chapNhan) {
  * "DieuKienDuyet" (nếu chưa có) để Admin vào thẳng Cài đặt cấu hình
  * ngay, không cần đợi lần đọc/ghi đầu tiên tự tạo. */
 function DAM_BAO_COT_TRANG_THAI_DUYET() {
+  yeuCauAdmin_();
   const ss = SpreadsheetApp.getActive();
   [CFG.SHEET_RESPONSES, CFG.SHEET_CHITIET].forEach(function (name) {
     const sh = ss.getSheetByName(name);
@@ -4113,6 +4133,7 @@ function DAM_BAO_COT_TRANG_THAI_DUYET() {
  * mọi lúc, giữ nguyên hành vi như trước khi nâng cấp) cho tới khi Admin
  * tự sửa lại khoảng ngày cụ thể ở Cài đặt > Điều kiện kiểm tra duyệt. */
 function NANG_CAP_DIEUKIENDUYET_THEM_KHOANG_NGAY() {
+  yeuCauAdmin_();
   const ss = SpreadsheetApp.getActive();
   const sh = ss.getSheetByName(CFG.SHEET_DIEUKIENDUYET);
   if (!sh) { getOrCreateDieuKienDuyetSheet_(); return "✅ Sheet DieuKienDuyet chưa tồn tại - đã tạo mới đúng cấu trúc mới (7 cột, có khoảng ngày áp dụng)."; }
@@ -4427,17 +4448,22 @@ function getTonkhoDamgoReport(ngayISO, mode) {
   if (!ngayISO) return { success: false, message: "❌ Vui lòng chọn ngày báo cáo." };
   mode = (mode === "full") ? "full" : "actual";
   const { data } = readAllChitietData_();
+  // Mục BF (v2026.10.22): chỉ dựng báo cáo cho Đơn vị người gọi được
+  // Xem/Nhập (Grand Total cũng chỉ cộng các Đơn vị đó). Admin và trigger
+  // Telegram (email rỗng) -> null = đủ 4 Đơn vị như cũ.
+  const allowedUnits = donViChoPhepCuaToi_(utils.normEmail(getCurrentUserEmail_()));
+  const donViBaoCao = allowedUnits ? REPORT_UNIT_ORDER.filter(u => allowedUnits.indexOf(u) !== -1) : REPORT_UNIT_ORDER;
 
   const recByUnit = {};      // bản ghi ĐÚNG ngày được chọn (null nếu chưa báo cáo)
   const effectiveByUnit = {}; // bản ghi thực sự dùng để hiển thị (= recByUnit, hoặc bản ghi thay thế nếu mode="full")
   const fallbackDateByUnit = {}; // ngày của bản ghi thay thế (chỉ có khi mode="full" và tìm được)
-  REPORT_UNIT_ORDER.forEach(u => { recByUnit[u] = null; effectiveByUnit[u] = null; fallbackDateByUnit[u] = null; });
+  donViBaoCao.forEach(u => { recByUnit[u] = null; effectiveByUnit[u] = null; fallbackDateByUnit[u] = null; });
   data.forEach(r => {
     const donVi = String(r[COL.DON_VI] || "").trim();
     if (!(donVi in recByUnit)) return;
     if (utils.formatDateISO(r[COL.NGAY_TON_KHO]) === ngayISO) recByUnit[donVi] = r;
   });
-  REPORT_UNIT_ORDER.forEach(u => {
+  donViBaoCao.forEach(u => {
     if (recByUnit[u]) { effectiveByUnit[u] = recByUnit[u]; return; }
     if (mode === "full") {
       const fallback = findLatestChitietBeforeDate_(data, u, ngayISO);
@@ -4447,7 +4473,7 @@ function getTonkhoDamgoReport(ngayISO, mode) {
   const get = (u, col) => { const r = effectiveByUnit[u]; return r ? utils.parseNum(r[col]) : 0; };
 
   // --- Mục NHÀ MÁY - bảng 1: MT/BDMT theo nguồn nhập, Grand Total = SUM ---
-  const table1 = REPORT_UNIT_ORDER.map(u => ({
+  const table1 = donViBaoCao.map(u => ({
     donVi: u,
     hoaNhonMT: get(u, COL.HOA_NHON_MT), queSonMT: get(u, COL.QUE_SON_MT),
     daiHiepMT: get(u, COL.DAI_HIEP_MT), hakqnMT: get(u, COL.HAKQN_MT),
@@ -4472,7 +4498,7 @@ function getTonkhoDamgoReport(ngayISO, mode) {
   // CÙNG LỖI với mục O ở Kho xuất hàng): bản cũ lấy AVERAGE độ ẩm/độ khô
   // TB trên CẢ 4 đơn vị kể cả đơn vị không có sản lượng ngày đó (Cộng
   // MT=0), kéo lệch số trung bình.
-  const table2 = REPORT_UNIT_ORDER.map(u => ({
+  const table2 = donViBaoCao.map(u => ({
     donVi: u,
     doAmHN: get(u, COL.DO_AM_HN), doAmQS: get(u, COL.DO_AM_QS),
     doAmDH: get(u, COL.DO_AM_DH), doAmQC: get(u, COL.DO_AM_QC),
@@ -4493,7 +4519,7 @@ function getTonkhoDamgoReport(ngayISO, mode) {
   // cũ lấy AVERAGE cả những đơn vị không hề có hàng ở Kho Tiên Sa hôm đó
   // (MT=0, do đơn vị đó không xuất qua kho này) - độ ẩm/độ khô của các
   // dòng "không tồn" đó thường là 0 hoặc rác, kéo lệch số trung bình.
-  const table3 = REPORT_UNIT_ORDER.map(u => ({
+  const table3 = donViBaoCao.map(u => ({
     donVi: u,
     tienSaMT: get(u, COL.TIEN_SA_MT), tienSaBDMT: get(u, COL.TIEN_SA_BDMT),
     doAmTienSa: get(u, COL.DO_AM_TIEN_SA), doKhoTienSa: get(u, COL.DO_KHO_TIEN_SA)
@@ -4508,7 +4534,7 @@ function getTonkhoDamgoReport(ngayISO, mode) {
   // --- Mục KHO XUẤT HÀNG - "Kho Dung Quất" (v2026.8.4, mục H): CHỨC
   // NĂNG VÀ CÁCH TÍNH GIỐNG HỆT "Kho Tiên Sa" ở trên (MT/BDMT = SUM, % =
   // AVERAGE chỉ trên đơn vị có tồn, xem mục O) - chỉ khác nguồn cột dữ liệu.
-  const table3b = REPORT_UNIT_ORDER.map(u => ({
+  const table3b = donViBaoCao.map(u => ({
     donVi: u,
     dungQuatMT: get(u, COL.DUNG_QUAT_MT), dungQuatBDMT: get(u, COL.DUNG_QUAT_BDMT),
     doAmDungQuat: get(u, COL.DO_AM_DUNG_QUAT), doKhoDungQuat: get(u, COL.DO_KHO_DUNG_QUAT)
@@ -4521,7 +4547,7 @@ function getTonkhoDamgoReport(ngayISO, mode) {
   };
 
   // --- Mục ĐỊNH MỨC SX: số lượng = SUM, Định mức (%) = AVERAGE ---
-  const table4 = REPORT_UNIT_ORDER.map(u => ({
+  const table4 = donViBaoCao.map(u => ({
     donVi: u,
     tonDauKy: get(u, COL.TON_DAU_NGAY), tonCK: get(u, COL.TON_CK),
     muonTra: get(u, COL.MUON_TRA), clDoAm: get(u, COL.DIEU_CHINH),
@@ -4534,7 +4560,7 @@ function getTonkhoDamgoReport(ngayISO, mode) {
     nhapTrongKy: sum_(table4.map(r => r.nhapTrongKy)), dinhMuc: avg_(table4.map(r => r.dinhMuc))
   };
 
-  const missingUnits = REPORT_UNIT_ORDER.filter(u => !recByUnit[u]);
+  const missingUnits = donViBaoCao.filter(u => !recByUnit[u]);
   // Chi tiết từng đơn vị thiếu báo cáo đúng ngày (mục L) - dùng cho cả 2
   // chế độ hiển thị: usedDate có giá trị khi mode="full" VÀ tìm được
   // bản ghi thay thế gần nhất trước đó; null nếu chưa từng có dữ liệu
@@ -4604,9 +4630,11 @@ function getTonkhoDamgoReport(ngayISO, mode) {
 // ============================================================
 
 function LUU_TELEGRAM_BOT_TOKEN(token) {
+  yeuCauAdmin_();
   PropertiesService.getScriptProperties().setProperty("TELEGRAM_BOT_TOKEN", String(token || "").trim());
 }
 function LUU_TELEGRAM_CHAT_ID(chatId) {
+  yeuCauAdmin_();
   PropertiesService.getScriptProperties().setProperty("TELEGRAM_CHAT_ID", String(chatId || "").trim());
 }
 
@@ -4615,6 +4643,7 @@ function LUU_TELEGRAM_CHAT_ID(chatId) {
  * CHƯA từng được lấy qua getUpdates lần nào trước đó) - xem bước 2+4 ở
  * hướng dẫn phía trên. */
 function TU_DONG_LAY_CHAT_ID_TELEGRAM() {
+  yeuCauAdmin_();
   const token = PropertiesService.getScriptProperties().getProperty("TELEGRAM_BOT_TOKEN");
   if (!token) { Logger.log('Chưa lưu TELEGRAM_BOT_TOKEN - xem bước 3 ở hướng dẫn mục M.'); return; }
   const json = JSON.parse(UrlFetchApp.fetch("https://api.telegram.org/bot" + token + "/getUpdates", { muteHttpExceptions: true }).getContentText());
@@ -5088,6 +5117,7 @@ function taoAnhBaoCaoTrangChu_(stats) {
  * M/mục T. `fileId` lấy từ URL file Slides mẫu, đoạn giữa "/d/" và
  * "/edit": https://docs.google.com/presentation/d/ĐOẠN_NÀY/edit */
 function LUU_TEMPLATE_SLIDE_ID(fileId) {
+  yeuCauAdmin_();
   PropertiesService.getScriptProperties().setProperty("TEMPLATE_SLIDE_ID", String(fileId || "").trim());
 }
 
@@ -5177,6 +5207,7 @@ function addDataTable_(slide, CF, x, y, w, cols, units, total) {
  * file ảnh xem thử này trong Drive sau khi kiểm tra xong (hàm chỉ tự
  * xóa file Slides TẠM dùng để dựng ảnh, không tự xóa ảnh xem thử này). */
 function XEM_THU_ANH_BAO_CAO_TRANG_CHU() {
+  yeuCauAdmin_();
   const stats = getDashboardStats();
   const blob = taoAnhBaoCaoTrangChu_(stats);
   const file = DriveApp.createFile(blob);
@@ -5262,6 +5293,7 @@ function BAO_CAO_TON_KHO_TELEGRAM_HANG_NGAY_() {
  * nhật" vì đây là gửi thử thủ công) - dùng để kiểm tra cấu hình/định
  * dạng ảnh báo cáo trước khi tin vào lịch tự động (bước 6 ở hướng dẫn). */
 function GUI_BAO_CAO_TON_KHO_TELEGRAM_NGAY() {
+  yeuCauAdmin_();
   guiBaoCaoTrangChuTelegram_();
 }
 
@@ -5294,6 +5326,7 @@ function guiBaoCaoTelegramTuWebApp(ngayISO) {
  * gửi trùng 2 lần/ngày - CŨNG DÙNG hàm này để chuyển lịch cũ (15h) sang
  * giờ mới (16h, mục S). */
 function BAT_LICH_BAO_CAO_TON_KHO_TELEGRAM() {
+  yeuCauAdmin_();
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === "BAO_CAO_TON_KHO_TELEGRAM_HANG_NGAY_") ScriptApp.deleteTrigger(t);
   });
@@ -5307,6 +5340,7 @@ function BAT_LICH_BAO_CAO_TON_KHO_TELEGRAM() {
 
 /** Tắt lịch gửi báo cáo tự động (nếu cần tạm dừng, không cần xóa code). */
 function TAT_LICH_BAO_CAO_TON_KHO_TELEGRAM() {
+  yeuCauAdmin_();
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === "BAO_CAO_TON_KHO_TELEGRAM_HANG_NGAY_") ScriptApp.deleteTrigger(t);
   });
@@ -5382,6 +5416,7 @@ function getOrCreateNVKStagingSheet_() {
  * cho ĐÚNG (Đơn vị, Ngày) của từng dòng - lấy thẳng từ sổ NghiepVuKho,
  * không suy đoán. */
 function NANG_CAP_NVKSTAGING_THEM_NHAPTRONGKY() {
+  yeuCauAdmin_();
   const ss = SpreadsheetApp.getActive();
   const sh = ss.getSheetByName(CFG.SHEET_NVK_STAGING);
   if (!sh) { getOrCreateNVKStagingSheet_(); return "✅ Sheet ChitietKho_NVK chưa tồn tại - đã tạo mới đúng cấu trúc mới (13 cột, có Nhập trong kỳ MT)."; }

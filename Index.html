@@ -1365,6 +1365,17 @@ function updateCanDoiBDMTThucTePreview_(){
   const mt = parseFormattedNumber_(mtEl.value);
   const doAm = parseFormattedNumber_(doAmEl.value);
   if (isNaN(mt) || isNaN(doAm)) { out.value = ''; return; }
+  const PA = state.prefillApp;
+  const dv = (document.getElementById('f-donVi')||{}).value;
+  const ng = (document.getElementById('f-ngayTonKho')||{}).value;
+  if (PA && PA.candoiCo && PA.donVi === dv && PA.ngayTonKho === ng && PA.candoiBDMTThucTe !== undefined && PA.candoiBDMTThucTe !== null && PA.candoiBDMTThucTe !== '') {
+    const mtUnchanged = Math.abs(mt - Math.round(Number(PA.candoiMTThucTe) * 100) / 100) < 1e-9;
+    const doAmUnchanged = Math.abs(doAm - Math.round(Number(PA.candoiDoAm) * 100) / 100) < 1e-9;
+    if (mtUnchanged && doAmUnchanged) {
+      out.value = Number(PA.candoiBDMTThucTe).toLocaleString('vi-VN', {minimumFractionDigits:2, maximumFractionDigits:2});
+      return;
+    }
+  }
   const doKhoFrac = (100 - doAm) / 100;
   out.value = (mt * doKhoFrac).toLocaleString('vi-VN', {minimumFractionDigits:2, maximumFractionDigits:2});
 }
@@ -1510,10 +1521,13 @@ function fillCreateFormFromExisting_(existing){
 function collectCreateForm_(){
   const g = id => { const el = document.getElementById(id); return el ? el.value : ''; };
   const n = getNumFieldValue_;
-  // Số lấy từ phần mềm kho (độ ẩm / MT thực tế cân đối) có độ chính xác cao hơn phần HIỂN THỊ 2 chữ số của ô: nếu người dùng KHÔNG sửa ô thì gửi lại
-  // đúng số gốc, tránh Web App tự tính lại BDMT thực tế lệch (vd 3.000 MT → ~90 kg khô). Người dùng gõ số khác thì dùng số đã gõ.
+  // Số lấy từ phần mềm kho (độ ẩm / MT thực tế / BDMT thực tế cân đối) có độ chính xác float cao hơn phần HIỂN THỊ 2 chữ số của ô:
+  // nếu người dùng KHÔNG sửa ô thì gửi lại đúng số gốc, tránh Web App tự tính lại BDMT thực tế lệch (vd 3.000 MT → ~90 kg khô).
   const PA = state.prefillApp, giuGoc = !!(PA && PA.candoiCo && PA.donVi === g('f-donVi') && PA.ngayTonKho === g('f-ngayTonKho'));
   const nGoc = (id, goc) => { const x = n(id); if (!giuGoc || x === '' || goc === undefined || goc === null) return x; return Math.abs(Number(x) - Math.round(Number(goc) * 100) / 100) < 1e-9 ? String(goc) : x; };
+  const mtUnchanged = (giuGoc && PA.candoiMTThucTe !== undefined && Math.abs(Number(n('f-candoiMTThucTe')) - Math.round(Number(PA.candoiMTThucTe) * 100) / 100) < 1e-9);
+  const doAmUnchanged = (giuGoc && PA.candoiDoAm !== undefined && Math.abs(Number(n('f-candoiDoAm')) - Math.round(Number(PA.candoiDoAm) * 100) / 100) < 1e-9);
+  const candoiBDMTThucTe = (mtUnchanged && doAmUnchanged && PA && PA.candoiBDMTThucTe !== undefined && PA.candoiBDMTThucTe !== null && PA.candoiBDMTThucTe !== '') ? PA.candoiBDMTThucTe : '';
   return {
     donVi: g('f-donVi'), ngayTonKho: g('f-ngayTonKho'), tonDauNgay: n('f-tonDauNgay'),
     hoaNhonMT: n('f-hoaNhonMT'), hoaNhonBDMT: n('f-hoaNhonBDMT'),
@@ -1527,6 +1541,7 @@ function collectCreateForm_(){
     thoiDiemVetBai: g('f-thoiDiem'), klUocTinhConLai: n('f-klUocTinh'), chenhLechVetBai: n('f-chenhLech'),
     candoiCo: document.getElementById('f-candoiCo').checked,
     candoiKho: g('f-candoiKho'), candoiDoAm: nGoc('f-candoiDoAm', PA && PA.candoiDoAm), candoiMTThucTe: nGoc('f-candoiMTThucTe', PA && PA.candoiMTThucTe),
+    candoiBDMTThucTe: candoiBDMTThucTe,
     // Mục BE: cân đối do phần mềm kho gửi sang (đã tất toán bằng CDXB/KQL trong phần mềm)
     candoiNguon: (state.prefillApp && state.prefillApp.candoiCo && state.prefillApp.donVi === g('f-donVi') && state.prefillApp.ngayTonKho === g('f-ngayTonKho')) ? 'app_kho' : '',
     candoiGhiChuApp: (state.prefillApp && state.prefillApp.candoiGhiChuApp) || '',
@@ -1537,6 +1552,7 @@ function collectCreateForm_(){
     loVetBaiApp: (state.prefillApp && state.prefillApp.loVetBaiApp) || ''
   };
 }
+const collectCreateData = collectCreateForm_;
 
 // Các trường khối lượng vật lý (MT/BDMT) không thể âm - KHÁC với "Điều
 // chỉnh"/"Mượn-trả" (được phép âm/dương tùy trường hợp, xem
@@ -2276,7 +2292,7 @@ function renderDoiChieuAppReportTable(){
 
   if (kpiWrap) {
     kpiWrap.innerHTML = `
-      <div class="grid cols-4" style="gap:12px;margin-bottom:12px">
+      <div class="grid cols-5" style="gap:12px;margin-bottom:12px">
         <div style="background:var(--paper-2);padding:12px;border-radius:8px;border:1px solid var(--line)">
           <div class="muted" style="font-size:11px;font-weight:700">TỔNG LẦN GỬI TỪ APP</div>
           <div style="font-size:20px;font-weight:700;margin-top:4px">${res.rows.length} lượt</div>
@@ -2290,6 +2306,10 @@ function renderDoiChieuAppReportTable(){
           <div style="font-size:20px;font-weight:700;margin-top:4px">${fmtNum(res.total.tongMTThucTeXB)} MT</div>
         </div>
         <div style="background:var(--paper-2);padding:12px;border-radius:8px;border:1px solid var(--line)">
+          <div class="muted" style="font-size:11px;font-weight:700">BDMT THỰC TẾ APP</div>
+          <div style="font-size:20px;font-weight:700;margin-top:4px;color:#0D47A1">${fmtNum(res.total.tongBDMTThucTeXB || 0)} BDMT</div>
+        </div>
+        <div style="background:var(--paper-2);padding:12px;border-radius:8px;border:1px solid var(--line)">
           <div class="muted" style="font-size:11px;font-weight:700">CHÊNH LỆCH KHÔ BDMT</div>
           <div style="font-size:20px;font-weight:700;margin-top:4px;color:var(--forest)">${fmtNum(res.total.tongChenhBDMT)} BDMT</div>
         </div>
@@ -2300,7 +2320,8 @@ function renderDoiChieuAppReportTable(){
       <th>Ngày</th><th>Đơn vị</th><th>Bản App</th><th class="num">Số phiếu</th>
       <th class="num">Tồn đầu App</th><th class="num">Đầu kỳ Web</th><th class="num">Lệch tồn đầu</th>
       <th class="num">CL độ ẩm</th><th class="num">Nhập gỗ</th><th class="num">Mượn trả</th>
-      <th>Kho xuất</th><th class="num">MT thực tế</th><th class="num">Độ ẩm %</th><th class="num">BDMT thực tế</th><th class="num">Chênh BDMT</th>
+      <th>Kho xuất</th><th class="num">MT thực tế</th><th class="num">Độ ẩm %</th>
+      <th class="num">BDMT thực tế (App)</th><th class="num">BDMT kho (Web)</th><th class="num">Chênh BDMT</th>
       <th>Phiếu CDXB/KQL</th>
       <th>Lô vét bãi</th><th class="num">KL còn lại</th><th class="num">Chênh vét bãi</th>
       <th>Trạng thái đối chiếu</th>
@@ -2314,7 +2335,8 @@ function renderDoiChieuAppReportTable(){
       <td>${esc(r.candoiKho || '—')}</td>
       <td class="num">${r.mtThucTeXB ? fmtNum(r.mtThucTeXB) : '—'}</td>
       <td class="num">${r.doAmXB ? fmtPctPlain_(r.doAmXB) : '—'}</td>
-      <td class="num">${r.bdmtThucTeXB ? fmtNum(r.bdmtThucTeXB) : '—'}</td>
+      <td class="num" style="font-weight:600;color:#0D47A1">${r.bdmtThucTeXB ? fmtNum(r.bdmtThucTeXB) : '—'}</td>
+      <td class="num">${r.bdmtKhoXB ? fmtNum(r.bdmtKhoXB) : '—'}</td>
       <td class="num" style="font-weight:600;color:${r.chenhBDMT<0?'var(--danger)':'var(--forest)'}">${r.chenhBDMT ? (r.chenhBDMT>0?'+':'')+fmtNum(r.chenhBDMT) : '—'}</td>
       <td style="font-size:12px">${esc(r.soPhieuTatToan || '—')}</td>
       <td>${esc(r.loVetBai || (r.kiemKeVetBai==='Có'?'Có':'—'))}</td>
@@ -2327,7 +2349,9 @@ function renderDoiChieuAppReportTable(){
       <td class="num" style="font-weight:700">${fmtNum(res.total.tongLechTonDau)}</td>
       <td colspan="4"></td>
       <td class="num" style="font-weight:700">${fmtNum(res.total.tongMTThucTeXB)}</td>
-      <td colspan="2"></td>
+      <td></td>
+      <td class="num" style="font-weight:700;color:#0D47A1">${fmtNum(res.total.tongBDMTThucTeXB || 0)}</td>
+      <td class="num" style="font-weight:700">${fmtNum(res.total.tongBDMTKhoXB || 0)}</td>
       <td class="num" style="font-weight:700">${fmtNum(res.total.tongChenhBDMT)}</td>
       <td colspan="5"></td></tr></tfoot>
     </table></div>`;
@@ -2827,7 +2851,7 @@ function apDungPrefillTuApp_(){
   state.createData.ngayTonKho = P.ngayTonKho;
   Object.keys(PREFILL_FIELDS_).forEach(k => { if (P[k] !== undefined) state.createData[k] = P[k]; });
   if (P.kiemKeVetBai) Object.assign(state.createData, { kiemKeVetBai: true, thoiDiemVetBai: P.thoiDiemVetBai || '', klUocTinhConLai: P.klUocTinhConLai ?? '', chenhLechVetBai: P.chenhLechVetBai ?? '' });
-  if (P.candoiCo) Object.assign(state.createData, { candoiCo: true, candoiKho: P.candoiKho, candoiDoAm: P.candoiDoAm ?? '', candoiMTThucTe: P.candoiMTThucTe ?? '' });
+  if (P.candoiCo) Object.assign(state.createData, { candoiCo: true, candoiKho: P.candoiKho, candoiDoAm: P.candoiDoAm ?? '', candoiMTThucTe: P.candoiMTThucTe ?? '', candoiBDMTThucTe: P.candoiBDMTThucTe ?? '' });
   goTo('create'); // renderCreate tự gọi checkExistingForCreate -> apDungPrefillNeuKhop_
 }
 const PREFILL_FIELDS_ = { hoaNhonMT:'f-hoaNhonMT', hoaNhonBDMT:'f-hoaNhonBDMT', queSonMT:'f-queSonMT', queSonBDMT:'f-queSonBDMT',
@@ -2902,6 +2926,18 @@ function capNhatKhoiDoiChieuTucThiApp_(){
   const lechTonDau = tonDauApp !== null && tonDauWeb !== '' ? (Number(tonDauWeb) - tonDauApp) : null;
   const isLech = lechTonDau !== null && Math.abs(lechTonDau) > 0.01;
 
+  // Lấy số liệu BDMT kho từ Web form để đối chiếu
+  let bdmtKhoWeb = null;
+  if (P.candoiCo) {
+    const ids = P.candoiKho === 'Kho Tiên Sa' ? 'f-tienSaBDMT' : (P.candoiKho === 'Kho Dung Quất' ? 'f-dungQuatBDMT' : null);
+    if (ids) {
+      const v = getNumFieldValue_(ids);
+      if (v !== '') bdmtKhoWeb = Number(v);
+    }
+  }
+  const bdmtThucTeApp = (P.candoiBDMTThucTe !== undefined && P.candoiBDMTThucTe !== '' && P.candoiBDMTThucTe !== null) ? Number(P.candoiBDMTThucTe) : null;
+  const chenhBDMT = (bdmtThucTeApp !== null && bdmtKhoWeb !== null) ? (bdmtThucTeApp - bdmtKhoWeb) : null;
+
   wrap.innerHTML = `
     <div style="background:#F0F7FF;border:1.5px solid #1E88E5;border-radius:8px;padding:12px 14px;margin-bottom:14px">
       <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #BBDEFB;padding-bottom:8px;margin-bottom:10px">
@@ -2939,6 +2975,12 @@ function capNhatKhoiDoiChieuTucThiApp_(){
             ${P.candoiCo ? `
               <div>Kho xuất: <b>${esc(P.candoiKho || '–')}</b></div>
               <div>KL thực tế: <b>${fmtNum(P.candoiMTThucTe)} MT</b> (Độ ẩm: <b>${fmtNum(P.candoiDoAm)}%</b>)</div>
+              <div>BDMT thực tế (App): <b style="color:#0D47A1">${bdmtThucTeApp !== null ? fmtNum(bdmtThucTeApp) + ' BDMT' : '–'}</b></div>
+              ${bdmtKhoWeb !== null ? `<div>BDMT kho (Web): <b>${fmtNum(bdmtKhoWeb)} BDMT</b></div>` : ''}
+              ${chenhBDMT !== null ? `
+                <div style="font-weight:600;color:${chenhBDMT < 0 ? '#C0533E' : '#2E7D32'}">
+                  Chênh lệch khô: ${(chenhBDMT > 0 ? '+' : '') + fmtNum(chenhBDMT)} BDMT
+                </div>` : ''}
               <div style="color:#1565C0;font-size:11px" title="${esc(P.candoiGhiChuApp || '')}">
                 ${P.candoiGhiChuApp ? esc(P.candoiGhiChuApp) : 'Đã tất toán CDXB trong App Kho'}
               </div>

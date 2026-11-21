@@ -1527,12 +1527,12 @@ function layPrefillTuThamSo_(p) {
   ["hoaNhonMT", "hoaNhonBDMT", "queSonMT", "queSonBDMT", "daiHiepMT", "daiHiepBDMT",
    "hakqnMT", "hakqnBDMT", "tienSaMT", "tienSaBDMT", "dungQuatMT", "dungQuatBDMT",
    "dieuChinh", "muonTra", "nhapGo", "tonDauNgayApp", "soPhieuApp",
-   "klUocTinhConLai", "chenhLechVetBai", "candoiDoAm", "candoiMTThucTe"].forEach(function (k) {
+   "klUocTinhConLai", "chenhLechVetBai", "candoiDoAm", "candoiMTThucTe", "candoiBDMTThucTe"].forEach(function (k) {
     if (p[k] === undefined || p[k] === "") return;
     const n = Number(p[k]);
-    // Độ ẩm cân đối và MT thực tế giữ 6 chữ số thập phân (phần mềm kho gửi đủ độ chính xác): Web App tự tính lại BDMT thực tế = MT × (100 − độ ẩm)/100,
-    // làm tròn 2 số sẽ lệch tới ~MT × 0,00005 (VD 3.000 MT → 90 kg khô) so với báo cáo xuất bán của phần mềm kho. Các trường còn lại vẫn làm tròn 2 số.
-    const q = (k === "candoiDoAm" || k === "candoiMTThucTe") ? 1000000 : 100;
+    // Độ ẩm cân đối, MT thực tế và BDMT thực tế giữ 6 chữ số thập phân (phần mềm kho gửi float chính xác cao):
+    // Web App dùng trực tiếp candoiBDMTThucTe từ App hoặc tính lại = MT × (100 − độ ẩm)/100, triệt tiêu hoàn toàn sai số làm tròn.
+    const q = (k === "candoiDoAm" || k === "candoiMTThucTe" || k === "candoiBDMTThucTe") ? 1000000 : 100;
     if (isFinite(n)) out[k] = Math.round(n * q) / q;
   });
   // Kiểm kê vét bãi + Cân đối BDMT xuất hàng (mục BE, bổ sung): chỉ nhận
@@ -1548,7 +1548,7 @@ function layPrefillTuThamSo_(p) {
     out.candoiCo = true;
     out.candoiKho = String(p.candoiKho);
     if (p.candoiGhiChuApp) out.candoiGhiChuApp = String(p.candoiGhiChuApp).replace(/[<>&"'`\\]/g, " ").slice(0, 300);
-  } else { delete out.candoiDoAm; delete out.candoiMTThucTe; }
+  } else { delete out.candoiDoAm; delete out.candoiMTThucTe; delete out.candoiBDMTThucTe; }
   if (p.phienBanApp) out.phienBanApp = String(p.phienBanApp).replace(/[^0-9A-Za-z._ -]/g, "").slice(0, 20);
   return JSON.stringify(out)
     .replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026")
@@ -2125,7 +2125,7 @@ function getOrCreateCanDoiBDMTSheet_() {
  * thị popup kết quả, hoặc { error: "..." } nếu thiếu số liệu không tính
  * được (KHÔNG throw - lỗi này không nên làm hỏng việc lưu báo cáo chính
  * đã thành công trước đó). */
-function computeCanDoiBDMT_(sh, newRowIndex, kho, mtKho, bdmtKho, doAmCanDoi, mtThucTe, donVi, ngayTonKho, email) {
+function computeCanDoiBDMT_(sh, newRowIndex, kho, mtKho, bdmtKho, doAmCanDoi, mtThucTe, donVi, ngayTonKho, email, bdmtThucTeTuApp) {
   if (!mtKho) {
     return { error: `Chưa có số liệu "MT kho" cho "${kho}" ở đơn vị/ngày đang nộp - vui lòng nhập ở tab "Kho Tiên Sa & Dung Quất" trước khi tất toán Cân đối BDMT xuất hàng.` };
   }
@@ -2137,7 +2137,12 @@ function computeCanDoiBDMT_(sh, newRowIndex, kho, mtKho, bdmtKho, doAmCanDoi, mt
   const doKhoKhoPct = bdmtKho / mtKho * 100;
   const doAmKhoPct = 100 - doKhoKhoPct;
   const doKhoCanDoi = 100 - doAmCanDoi;
-  const klThucTeBDMT = mtThucTe * (doKhoCanDoi / 100);
+  // Hỗ trợ bdmtThucTeTuApp: nếu phần mềm App Kho gửi kèm candoiBDMTThucTe (> 0) thì dùng trực tiếp
+  // làm klThucTeBDMT, triệt tiêu hoàn toàn sai số làm tròn thập phân giữa App và Web App.
+  const bdmtAppNum = Number(bdmtThucTeTuApp);
+  const klThucTeBDMT = (isFinite(bdmtAppNum) && bdmtAppNum > 0)
+    ? bdmtAppNum
+    : (mtThucTe * (doKhoCanDoi / 100));
   const doKhoTBNhaMayPct = doKhoTBNhaMayFrac * 100;
 
   const dieuChinhBDMT = klThucTeBDMT - bdmtKho;
@@ -2152,7 +2157,8 @@ function computeCanDoiBDMT_(sh, newRowIndex, kho, mtKho, bdmtKho, doAmCanDoi, mt
     doAmCanDoi, doKhoCanDoi, mtThucTe, klThucTeBDMT, doKhoTBNhaMayPct,
     dieuChinhBDMT, dieuChinhMT,
     dienGiaiBDMT: dienGiai(dieuChinhBDMT, "BDMT"),
-    dienGiaiMT: dienGiai(dieuChinhMT, "MT")
+    dienGiaiMT: dienGiai(dieuChinhMT, "MT"),
+    bdmtThucTeTuApp: (isFinite(bdmtAppNum) && bdmtAppNum > 0) ? bdmtAppNum : null
   };
 }
 
@@ -2691,10 +2697,14 @@ function submitInventoryEntry(payload) {
       const kho = String(payload.candoiKho).trim();
       const mtKho = kho === "Kho Tiên Sa" ? row[COL.TIEN_SA_MT] : row[COL.DUNG_QUAT_MT];
       const bdmtKho = kho === "Kho Tiên Sa" ? row[COL.TIEN_SA_BDMT] : row[COL.DUNG_QUAT_BDMT];
+      const bdmtThucTeTuApp = (payload.candoiBDMTThucTe !== undefined && payload.candoiBDMTThucTe !== "" && payload.candoiBDMTThucTe !== null)
+        ? utils.parseNum(payload.candoiBDMTThucTe)
+        : null;
       candoiResult = computeCanDoiBDMT_(
         sh, newRowIndex, kho, mtKho, bdmtKho,
         utils.parseNum(payload.candoiDoAm), utils.parseNum(payload.candoiMTThucTe),
-        donVi, ngayTonKho, email
+        donVi, ngayTonKho, email,
+        bdmtThucTeTuApp
       );
       // Mục BE (bổ sung): cân đối gửi từ phần mềm Kho dăm keo HAK - phần
       // chênh lệch đã được tất toán bằng phiếu CDXB/KQL trong phần mềm.
@@ -2745,7 +2755,9 @@ function submitInventoryEntry(payload) {
           candoiKho: payload.candoiKho || "",
           candoiMTThucTe: utils.parseNum(payload.candoiMTThucTe),
           candoiDoAm: utils.parseNum(payload.candoiDoAm),
-          candoiBDMTThucTe: candoiResult ? candoiResult.klThucTeBDMT : 0,
+          candoiBDMTThucTe: (payload.candoiBDMTThucTe !== undefined && payload.candoiBDMTThucTe !== "" && payload.candoiBDMTThucTe !== null)
+            ? utils.parseNum(payload.candoiBDMTThucTe)
+            : (candoiResult ? candoiResult.klThucTeBDMT : 0),
           candoiBDMTKho: candoiResult ? candoiResult.bdmtKho : 0,
           dieuChinhBDMT: candoiResult ? candoiResult.dieuChinhBDMT : 0,
           dieuChinhMT: candoiResult ? candoiResult.dieuChinhMT : 0,
@@ -4359,7 +4371,16 @@ function logDoiChieuApp_(r) {
   const sh = getOrCreateDoiChieuAppSheet_();
   const ngayISO = r.ngayTonKho instanceof Date ? utils.formatDateISO(r.ngayTonKho) : String(r.ngayTonKho || "");
   const lechTonDau = (Number(r.tonDauNgayApp) || 0) - (Number(r.tonDauWeb) || 0);
-  const trangThaiDoiChieu = Math.abs(lechTonDau) < 0.01 ? "✅ Khớp hoàn toàn" : ("⚠️ Lệch tồn đầu: " + (lechTonDau > 0 ? "+" : "") + utils.parseNum(lechTonDau).toFixed(2) + " MT");
+  let trangThaiDoiChieu = "";
+  if (Math.abs(lechTonDau) < 0.01) {
+    if (r.candoiCo && r.candoiBDMTThucTe) {
+      trangThaiDoiChieu = "✅ Khớp đầu kỳ & Cân đối (" + utils.parseNum(r.candoiBDMTThucTe).toFixed(2) + " BDMT)";
+    } else {
+      trangThaiDoiChieu = "✅ Khớp hoàn toàn";
+    }
+  } else {
+    trangThaiDoiChieu = "⚠️ Lệch tồn đầu: " + (lechTonDau > 0 ? "+" : "") + utils.parseNum(lechTonDau).toFixed(2) + " MT";
+  }
   const rawJson = r.rawJson || (r.rawPayload ? JSON.stringify(r.rawPayload) : "");
 
   const rowValues = [
@@ -4510,6 +4531,8 @@ function getDoiChieuAppReport(donViFilter, fDate, tDate) {
       soDong: rows.length,
       tongLechTonDau: sum_(rows.map(function (r) { return r.lechTonDau; })),
       tongMTThucTeXB: sum_(rows.map(function (r) { return r.mtThucTeXB; })),
+      tongBDMTThucTeXB: sum_(rows.map(function (r) { return r.bdmtThucTeXB; })),
+      tongBDMTKhoXB: sum_(rows.map(function (r) { return r.bdmtKhoXB; })),
       tongChenhBDMT: sum_(rows.map(function (r) { return r.chenhBDMT; })),
       tongChenhMT: sum_(rows.map(function (r) { return r.chenhMT; }))
     },

@@ -2103,9 +2103,17 @@ function getOrCreateCanDoiBDMTSheet_() {
       "Ngày cân đối", "Kho", "MT kho", "BDMT kho", "Độ khô kho (%)", "Độ ẩm kho (%)",
       "Độ ẩm cân đối (%)", "Độ khô cân đối (%)", "Khối lượng thực tế MT", "Khối lượng thực tế BDMT",
       "Độ khô TB Kho Nhà máy (%)", "Điều chỉnh BDMT", "Diễn giải BDMT", "Điều chỉnh MT", "Diễn giải MT",
-      "Đơn vị nhập", "Email", "Thời gian ghi"
+      "Đơn vị nhập", "Email", "Thời gian ghi", "Tất toán App", "Ghi chú App", "Nguồn"
     ]);
-    sh.getRange(1, 1, 1, 18).setFontWeight("bold").setBackground("#d9d9d9");
+    sh.getRange(1, 1, 1, 21).setFontWeight("bold").setBackground("#d9d9d9");
+  } else {
+    if (sh.getLastColumn() < 21) {
+      const extraHeaders = ["Tất toán App", "Ghi chú App", "Nguồn"];
+      const startCol = Math.max(sh.getLastColumn() + 1, 19);
+      for (let c = startCol; c <= 21; c++) {
+        sh.getRange(1, c).setValue(extraHeaders[c - 19]).setFontWeight("bold").setBackground("#d9d9d9");
+      }
+    }
   }
   return sh;
 }
@@ -2166,11 +2174,15 @@ function computeCanDoiBDMT_(sh, newRowIndex, kho, mtKho, bdmtKho, doAmCanDoi, mt
  * chính là dòng duy nhất đó). */
 function logCanDoiBDMT_(r) {
   const sh = getOrCreateCanDoiBDMTSheet_();
+  const daTatToan = (r.daTatToanApp || r.nguon === "app_kho" || /Đã tất toán/i.test(r.dienGiaiMT || "")) ? "Có" : "Không";
+  const ghiChuApp = r.ghiChuApp || "";
+  const nguon = r.nguon || (daTatToan === "Có" ? "app_kho" : "web");
   const rowValues = [
     r.ngayCanDoi, r.kho, r.mtKho, r.bdmtKho, r.doKhoKhoPct, r.doAmKhoPct,
     r.doAmCanDoi, r.doKhoCanDoi, r.mtThucTe, r.klThucTeBDMT, r.doKhoTBNhaMayPct,
     r.dieuChinhBDMT, r.dienGiaiBDMT, r.dieuChinhMT, r.dienGiaiMT,
-    r.donVi, r.email, new Date()
+    r.donVi, r.email, new Date(),
+    daTatToan, ghiChuApp, nguon
   ];
   const lastRow = sh.getLastRow();
   let existingRow = -1;
@@ -2215,7 +2227,8 @@ function layCanDoiBDMTDungNgayMoiDonVi_(donViNgayISOMap) {
   const sh = getOrCreateCanDoiBDMTSheet_();
   const lastRow = sh.getLastRow();
   if (lastRow < 2) return result;
-  const data = sh.getRange(2, 1, lastRow - 1, 18).getValues();
+  const lastCol = Math.max(sh.getLastColumn(), 18);
+  const data = sh.getRange(2, 1, lastRow - 1, lastCol).getValues();
   const bestTime = {};
   data.forEach(function (r) {
     const donVi = String(r[15] || "").trim(); // P Đơn vị nhập
@@ -2237,7 +2250,8 @@ function layCanDoiBDMTDungNgayMoiDonVi_(donViNgayISOMap) {
       dienGiaiBDMT: String(r[12] || ""),    // M
       dieuChinhMT: utils.parseNum(r[13]),   // N
       dienGiaiMT: String(r[14] || ""),      // O
-      thoiGianGhi: thoiGianGhi instanceof Date ? utils.formatDate(thoiGianGhi) : ""
+      thoiGianGhi: thoiGianGhi instanceof Date ? utils.formatDate(thoiGianGhi) : "",
+      daTatToanApp: (r.length >= 19 && String(r[18]).trim() === "Có") || /Đã tất toán/i.test(String(r[12] || "") + String(r[14] || ""))
     };
   });
   return result;
@@ -2688,8 +2702,11 @@ function submitInventoryEntry(payload) {
       // BDMT và Dashboard hiển thị đối soát đúng thực tế (không bị gán = 0).
       // tongDieuChinhMTCanDoiDungNgay_ sẽ nhận diện dòng đã tất toán để KHÔNG
       // trừ trùng lặp vào Tồn đầu kỳ dự kiến ngày sau.
-      if (!candoiResult.error && payload.candoiNguon === "app_kho") {
+      if (!candoiResult.error && (payload.candoiNguon === "app_kho" || payload.nguon === "app_kho")) {
         const ghiChu = String(payload.candoiGhiChuApp || "").slice(0, 300);
+        candoiResult.daTatToanApp = true;
+        candoiResult.nguon = "app_kho";
+        candoiResult.ghiChuApp = ghiChu;
         const dg = "Đã tất toán trong phần mềm Kho dăm keo HAK" + (ghiChu ? " (" + ghiChu + ")" : "") + " - đã tất toán bằng CDXB/KQL, không trừ trùng vào Tồn đầu kỳ.";
         candoiResult.dienGiaiBDMT = dg;
         candoiResult.dienGiaiMT = dg;
@@ -2697,14 +2714,23 @@ function submitInventoryEntry(payload) {
       if (!candoiResult.error) logCanDoiBDMT_(candoiResult);
     }
 
-    // Lưu vết đối chiếu thông tin App Kho gửi lên nếu có nguồn từ phần mềm kho
-    if (payload.prefillNguon === "app_kho" || payload.candoiNguon === "app_kho" || payload.soPhieuApp !== undefined) {
+    // Lưu vết snapshot đối chiếu thông tin App Kho gửi lên nếu có nguồn từ phần mềm kho
+    const isFromApp = payload.prefillNguon === "app_kho" ||
+                      payload.candoiNguon === "app_kho" ||
+                      payload.nguon === "app_kho" ||
+                      payload.tonDauNgayApp !== undefined ||
+                      payload.soPhieuApp !== undefined ||
+                      payload.phienBanApp !== undefined ||
+                      payload.loVetBaiApp !== undefined ||
+                      payload.loVetBai !== undefined ||
+                      payload.appSnapshot;
+    if (isFromApp) {
       try {
         logDoiChieuApp_({
           email: email, donVi: donVi, ngayTonKho: ngayTonKho,
-          phienBanApp: payload.phienBanApp || "",
-          soPhieuApp: payload.soPhieuApp || "",
-          tonDauNgayApp: payload.tonDauNgayApp !== undefined ? utils.parseNum(payload.tonDauNgayApp) : utils.parseNum(payload.tonDauNgay),
+          phienBanApp: payload.phienBanApp || (payload.appSnapshot && payload.appSnapshot.phienBanApp) || "",
+          soPhieuApp: payload.soPhieuApp !== undefined ? payload.soPhieuApp : (payload.appSnapshot && payload.appSnapshot.soPhieuApp !== undefined ? payload.appSnapshot.soPhieuApp : ""),
+          tonDauNgayApp: payload.tonDauNgayApp !== undefined ? utils.parseNum(payload.tonDauNgayApp) : (payload.appSnapshot && payload.appSnapshot.tonDauNgayApp !== undefined ? utils.parseNum(payload.appSnapshot.tonDauNgayApp) : utils.parseNum(payload.tonDauNgay)),
           tonDauWeb: dauKyInfo ? dauKyInfo.tonCuoiKyDuKien : utils.parseNum(payload.tonDauNgay),
           congMT: utils.parseNum(row[COL.CONG_MT]),
           congBDMT: utils.parseNum(row[COL.CONG_BDMT]),
@@ -2723,13 +2749,14 @@ function submitInventoryEntry(payload) {
           candoiBDMTKho: candoiResult ? candoiResult.bdmtKho : 0,
           dieuChinhBDMT: candoiResult ? candoiResult.dieuChinhBDMT : 0,
           dieuChinhMT: candoiResult ? candoiResult.dieuChinhMT : 0,
-          candoiGhiChuApp: payload.candoiGhiChuApp || "",
+          candoiGhiChuApp: payload.candoiGhiChuApp || (payload.appSnapshot && payload.appSnapshot.candoiGhiChuApp) || "",
           kiemKeVetBai: !!payload.kiemKeVetBai,
-          thoiDiemVetBai: payload.thoiDiemVetBai || "",
-          loVetBaiApp: payload.loVetBaiApp || "",
-          klUocTinhConLai: utils.parseNum(payload.klUocTinhConLai),
-          chenhLechVetBai: utils.parseNum(payload.chenhLechVetBai),
-          trangThaiDuyet: row[COL.TRANG_THAI_DUYET] || "Đã duyệt"
+          thoiDiemVetBai: payload.thoiDiemVetBai || (payload.appSnapshot && payload.appSnapshot.thoiDiemVetBai) || "",
+          loVetBaiApp: payload.loVetBaiApp || payload.loVetBai || (payload.appSnapshot && (payload.appSnapshot.loVetBaiApp || payload.appSnapshot.loVetBai)) || "",
+          klUocTinhConLai: utils.parseNum(payload.klUocTinhConLai !== undefined ? payload.klUocTinhConLai : (payload.appSnapshot && payload.appSnapshot.klUocTinhConLai)),
+          chenhLechVetBai: utils.parseNum(payload.chenhLechVetBai !== undefined ? payload.chenhLechVetBai : (payload.appSnapshot && payload.appSnapshot.chenhLechVetBai)),
+          trangThaiDuyet: row[COL.TRANG_THAI_DUYET] || "Đã duyệt",
+          rawPayload: payload
         });
       } catch (eDoiChieu) {
         Logger.log("Lỗi ghi DoiChieuAppKho: " + eDoiChieu.toString());
@@ -3313,29 +3340,52 @@ function ngayCanDoiToISO_(v) {
   return yyyy + "-" + String(MM).padStart(2, "0") + "-" + String(dd).padStart(2, "0");
 }
 
+/** Lấy thông tin Điều chỉnh MT chi tiết của các lần Cân đối BDMT xuất hàng
+ * ĐÚNG ngayISO đang xét. Trả về:
+ * - tongDieuChinhMT: tổng số chênh lệch thực tế (MT) giữ nguyên giá trị thật để hiển thị đối soát
+ * - dieuChinhMTTerm: số hạng thực sự áp dụng vào công thức tính "Đầu kỳ dự kiến". Nếu đã tất toán từ App Kho,
+ *   term = 0 để KHÔNG trừ trùng lặp vào tồn đầu kỳ vì App Kho đã kết chuyển số tồn cuối kỳ gồm bút toán này rồi.
+ * - daTatToanApp: boolean đánh dấu có lần tất toán nào từ App Kho trong ngày hay không. */
+function thongTinDieuChinhMTCanDoiDungNgay_(donVi, ngayISO) {
+  donVi = String(donVi || "").trim();
+  if (!donVi || !ngayISO) return { tongDieuChinhMT: 0, dieuChinhMTTerm: 0, daTatToanApp: false };
+  const sh = getOrCreateCanDoiBDMTSheet_();
+  const lastRow = sh.getLastRow();
+  if (lastRow < 2) return { tongDieuChinhMT: 0, dieuChinhMTTerm: 0, daTatToanApp: false };
+  const lastCol = Math.max(sh.getLastColumn(), 18);
+  const data = sh.getRange(2, 1, lastRow - 1, lastCol).getValues();
+  let tongDieuChinhMT = 0;
+  let dieuChinhMTTerm = 0;
+  let daTatToanApp = false;
+  data.forEach(r => {
+    if (String(r[15] || "").trim() !== donVi) return; // cột P "Đơn vị nhập"
+    if (ngayCanDoiToISO_(r[0]) !== ngayISO) return;    // cột A "Ngày cân đối"
+    const val = utils.parseNum(r[13]);                 // cột N "Điều chỉnh MT"
+    tongDieuChinhMT += val;
+    const dg = String(r[14] || "") + " " + String(r[12] || "");
+    const isApp = (r.length >= 19 && (String(r[18]).trim() === "Có" || String(r[18]).trim() === "app_kho")) ||
+                  (r.length >= 21 && String(r[20]).trim() === "app_kho") ||
+                  /Đã tất toán trong phần mềm Kho|Đã tất toán trong App Kho|CDXB\/KQL/i.test(dg);
+    if (isApp) {
+      daTatToanApp = true;
+      // Đã tất toán từ App Kho: số tồn CK gửi lên ĐÃ GỒM bút toán điều chỉnh này rồi.
+      // KHÔNG trừ trùng lặp vào Tồn đầu kỳ dự kiến ngày sau -> term = 0.
+    } else {
+      dieuChinhMTTerm += (val > 0 ? -val : val);
+    }
+  });
+  return { tongDieuChinhMT, dieuChinhMTTerm, daTatToanApp };
+}
+
 /** Tổng "Điều chỉnh MT" (sheet CanDoiBDMT, mục K) của 1 Đơn vị - CHỈ
  * TÍNH các dòng có "Ngày cân đối" TRÙNG ĐÚNG ngayISO đang xét (mục AD,
  * v2026.8.18 - THEO YÊU CẦU MỚI, đã xác nhận với người dùng: KHÔNG
  * "mang sang" từ lần cân đối cũ hơn nếu đúng ngày đang xét không có cân
  * đối nào - khi đó coi Điều chỉnh MT = 0). CỘNG DỒN nếu có nhiều dòng
  * cùng ngày (VD cân đối cả Kho Tiên Sa lẫn Kho Dung Quất trong cùng 1
- * lần nộp báo cáo). */
+ * lần nộp báo cáo). GIỮ NGUYÊN giá trị số thực tế (không gán = 0). */
 function tongDieuChinhMTCanDoiDungNgay_(donVi, ngayISO) {
-  donVi = String(donVi || "").trim();
-  if (!donVi || !ngayISO) return 0;
-  const sh = getOrCreateCanDoiBDMTSheet_();
-  const lastRow = sh.getLastRow();
-  if (lastRow < 2) return 0;
-  const data = sh.getRange(2, 1, lastRow - 1, 18).getValues();
-  let tong = 0;
-  data.forEach(r => {
-    if (String(r[15] || "").trim() !== donVi) return; // cột P "Đơn vị nhập"
-    if (ngayCanDoiToISO_(r[0]) !== ngayISO) return;    // cột A "Ngày cân đối"
-    const dg = String(r[14] || "");                    // cột O "Diễn giải MT"
-    if (/Đã tất toán trong phần mềm Kho/i.test(dg)) return; // Bỏ qua không cộng/trừ vào đầu kỳ dự kiến vì App đã trừ trong tồn rồi!
-    tong += utils.parseNum(r[13]);                      // cột N "Điều chỉnh MT"
-  });
-  return tong;
+  return thongTinDieuChinhMTCanDoiDungNgay_(donVi, ngayISO).tongDieuChinhMT;
 }
 
 /** Tổng "Khối lượng thực tế MT" (sheet CanDoiBDMT, mục K - ô nhập tay ở
@@ -3416,16 +3466,12 @@ function timTonCuoiKyTruoc_(donVi, ngayISO) {
   if (!bestRow) return null;
   const tonCK = utils.parseNum(bestRow[COL.TON_CK]);
   const khoiLuongThucTeMT = tongKhoiLuongThucTeMTCanDoiDungNgay_(donVi, bestISO);
-  const dieuChinhMT = tongDieuChinhMTCanDoiDungNgay_(donVi, bestISO);
+  const cdInfo = thongTinDieuChinhMTCanDoiDungNgay_(donVi, bestISO);
+  const dieuChinhMT = cdInfo.tongDieuChinhMT;
+  const dieuChinhMTTerm = cdInfo.dieuChinhMTTerm;
   // mục BD (v2026.9.3): "Mượn/trả" KHÔNG còn trừ vào Đầu kỳ dự kiến (xem
   // ghi chú hàm ở trên) - CHỈ giữ lại để hiển thị tham khảo ở "Test Kho".
   const muonTra = utils.parseNum(bestRow[COL.MUON_TRA]);
-  // mục AX (v2026.8.24), THEO YÊU CẦU MỚI ("lượng MT cần xuất thêm thì
-  // phải trừ ra", đã hỏi lại và xác nhận qua AskUserQuestion): Điều
-  // chỉnh MT > 0 (kho thực tế nhiều hơn sổ sách - hiểu là "cần xuất
-  // thêm") thì TRỪ khoản đó thay vì CỘNG; Điều chỉnh MT <= 0 thì vẫn
-  // CỘNG như cũ (không đổi so với mục AT).
-  const dieuChinhMTTerm = dieuChinhMT > 0 ? -dieuChinhMT : dieuChinhMT;
   return {
     ngayISO: bestISO,
     ngayDisplay: utils.formatDate(new Date(bestISO)),
@@ -3433,6 +3479,7 @@ function timTonCuoiKyTruoc_(donVi, ngayISO) {
     khoiLuongThucTeMT,
     dieuChinhMT,
     dieuChinhMTTerm,
+    daTatToanApp: cdInfo.daTatToanApp,
     muonTra,
     tonCuoiKyDuKien: tonCK - khoiLuongThucTeMT + dieuChinhMTTerm
   };
@@ -3483,6 +3530,7 @@ function getKiemTraDauKyReport(donViFilter, fDate, tDate) {
       // mục AX: khoản Điều chỉnh MT THỰC SỰ dùng trong công thức (đã áp
       // dụng dấu +/− tùy Điều chỉnh MT dương/âm - xem timTonCuoiKyTruoc_).
       dieuChinhMTTerm: info.dieuChinhMTTerm,
+      daTatToanApp: !!info.daTatToanApp,
       // mục BD (v2026.9.3): "Mượn/trả" KHÔNG còn tính vào Đầu kỳ dự kiến
       // - chỉ hiện THAM KHẢO (xem ghi chú timTonCuoiKyTruoc_).
       muonTraTruoc: info.muonTra,

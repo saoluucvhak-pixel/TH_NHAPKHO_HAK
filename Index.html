@@ -714,12 +714,24 @@ function renderDashboard(){
     if (!cdList.length) {
       cdWrap.innerHTML = '<div class="empty"><div class="ic">📭</div>Chưa có dữ liệu đơn vị nào.</div>';
     } else {
+      const normKho = k => /dung\s*qu[aá]t/i.test(k) ? 'Kho Dung Quất' : /ti[eê]n\s*sa/i.test(k) ? 'Kho Tiên Sa' : (k || 'Khác');
       const cdByKho = { 'Kho Tiên Sa': { mt: 0, bdmt: 0 }, 'Kho Dung Quất': { mt: 0, bdmt: 0 } };
       const cdChuaCanDoi = [];
+      const cdChiTiet = [];
       cdList.forEach(c => {
-        if (c.coCanDoi && cdByKho[c.kho]) {
-          cdByKho[c.kho].mt += Number(c.dieuChinhMT) || 0;
-          cdByKho[c.kho].bdmt += Number(c.dieuChinhBDMT) || 0;
+        if (c.coCanDoi) {
+          const k = normKho(c.kho);
+          if (!cdByKho[k]) cdByKho[k] = { mt: 0, bdmt: 0 };
+          const dMT = Number(c.dieuChinhMT) || 0;
+          const dBDMT = Number(c.dieuChinhBDMT) || 0;
+          cdByKho[k].mt += dMT;
+          cdByKho[k].bdmt += dBDMT;
+          cdChiTiet.push({
+            donVi: c.donVi,
+            kho: c.kho,
+            mt: dMT,
+            bdmt: dBDMT
+          });
         } else if (!c.coCanDoi) {
           cdChuaCanDoi.push(c.donVi);
         }
@@ -729,6 +741,10 @@ function renderDashboard(){
           <div class="uname">Cân đối kho xuất hàng (cộng tổng ${cdList.length} đơn vị)</div>
           <div class="urow" style="align-items:flex-start;gap:10px"><span style="white-space:nowrap">Kho Tiên Sa</span><b>MT ${fmtNum(cdByKho['Kho Tiên Sa'].mt)} / BDMT ${fmtNum(cdByKho['Kho Tiên Sa'].bdmt)}</b></div>
           <div class="urow" style="align-items:flex-start;gap:10px"><span style="white-space:nowrap">Kho Dung Quất</span><b>MT ${fmtNum(cdByKho['Kho Dung Quất'].mt)} / BDMT ${fmtNum(cdByKho['Kho Dung Quất'].bdmt)}</b></div>
+          ${cdChiTiet.length ? `
+            <div style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--line);font-size:11.5px">
+              ${cdChiTiet.map(d => `<div class="urow" style="align-items:flex-start;gap:6px;color:var(--text-sub)"><span>• ${esc(d.donVi)} (${esc(d.kho)})</span><b>MT ${fmtNum(d.mt)} / BDMT ${fmtNum(d.bdmt)}</b></div>`).join('')}
+            </div>` : ''}
           ${cdChuaCanDoi.length ? `<div class="urow" style="align-items:flex-start;gap:10px"><span class="badge pending dot">Chưa cân đối xuất hàng</span><b>${esc(cdChuaCanDoi.join(', '))}</b></div>` : ''}
         </div>`;
     }
@@ -1109,6 +1125,7 @@ function renderCreate(){
         <div class="field"><label>Ngày nhập tồn kho *</label><input type="date" id="f-ngayTonKho" value="${esc(d.ngayTonKho)}"></div>
       </div>
       <div id="create-mode-banner"></div>
+      <div id="create-doichieu-app-wrap"></div>
       <div class="field" style="max-width:280px"><label>Tồn kho đầu ngày (MT)</label><input type="text" inputmode="decimal" class="num-fmt" id="f-tonDauNgay" value="${esc(d.tonDauNgay)}"></div>
     </div>
 
@@ -1238,6 +1255,7 @@ function renderCreate(){
   updateCanDoiBDMTThucTePreview_();
   document.getElementById('f-donVi').addEventListener('change', checkExistingForCreate);
   document.getElementById('f-ngayTonKho').addEventListener('change', checkExistingForCreate);
+  document.getElementById('f-tonDauNgay').addEventListener('input', capNhatKhoiDoiChieuTucThiApp_);
   document.getElementById('create-child-tabbar').addEventListener('click', e => {
     const el = e.target.closest('.child-tab');
     if (el) switchCreateChildTab(el.dataset.ctab);
@@ -2643,6 +2661,22 @@ function exportReportToExcel(){
     sheetNames = ['Nha may (MT-BDMT)', 'Do am', 'Kho Tien Sa', 'Kho Dung Quat', 'Dinh muc'];
     const modeSuffix = state.tonkhoDamgoMode === 'full' ? 'DayDuSoLieu' : 'ThucTe';
     fileNamePrefix = `BaoCao_TonkhoDamgo_${state.tonkhoDamgoDate || ''}_${modeSuffix}`;
+  } else if (state.reportTab === 'doichieuapp') {
+    wrap = document.getElementById('dca-wrap');
+    sheetNames = ['DoiChieu_AppKho'];
+    const f = (document.getElementById('dca-from')||{}).value || '';
+    const t = (document.getElementById('dca-to')||{}).value || '';
+    fileNamePrefix = `DoiChieu_AppKho_${f}_${t}`;
+  } else if (state.reportTab === 'candoibdmt') {
+    wrap = document.getElementById('cd-wrap');
+    sheetNames = ['CanDoiBDMT'];
+    const f = (document.getElementById('cd-from')||{}).value || '';
+    const t = (document.getElementById('cd-to')||{}).value || '';
+    fileNamePrefix = `CanDoiBDMT_${f}_${t}`;
+  } else if (state.reportTab === 'somuontra') {
+    wrap = document.getElementById('mt-wrap');
+    sheetNames = ['SoMuonTra'];
+    fileNamePrefix = `SoMuonTra_${todayISO_()}`;
   } else {
     wrap = document.getElementById('report-wrap');
     sheetNames = ['Tong quan', 'Kho Nha may', 'Kho Xuat hang', 'Chi tiet theo Nha may'];
@@ -2656,7 +2690,13 @@ function exportReportToExcel(){
 }
 
 function exportReportToPdf(){
-  const wrap = document.getElementById(state.reportTab === 'tonkhodamgo' ? 'tkd-wrap' : 'report-wrap');
+  const wrap = document.getElementById(
+    state.reportTab === 'tonkhodamgo' ? 'tkd-wrap' :
+    state.reportTab === 'doichieuapp' ? 'dca-wrap' :
+    state.reportTab === 'candoibdmt' ? 'cd-wrap' :
+    state.reportTab === 'testkho' ? 'tk-wrap' :
+    state.reportTab === 'somuontra' ? 'mt-wrap' : 'report-wrap'
+  );
   if (!wrap || !wrap.querySelector('table')) { toast('Chưa có dữ liệu báo cáo để xuất - vui lòng bấm "Xem báo cáo" trước.', 'warn'); return; }
   document.body.classList.add('printing-report');
   const cleanup = () => document.body.classList.remove('printing-report');
@@ -2828,6 +2868,7 @@ function apDungPrefillNeuKhop_(){
   updateCanDoiKhoPreview_();
   updateCanDoiBDMTThucTePreview_();
   updateCreateChildTabIndicators_();
+  capNhatKhoiDoiChieuTucThiApp_();
   const banner = document.getElementById('create-mode-banner');
   if (banner && !banner.querySelector('.prefill-app-note')) {
     const tonDauWeb = getNumFieldValue_('f-tonDauNgay');
@@ -2843,6 +2884,91 @@ function apDungPrefillNeuKhop_(){
       ${extra.length ? `<div style="font-size:12px;margin-top:4px">Đã điền tự động: <b>${esc(extra.join(', '))}</b>${P.loVetBaiApp ? ' · Lô vét bãi: <b>' + esc(P.loVetBaiApp) + '</b>' : ''}. Kiểm tra lại các tab rồi bấm Lưu/Cập nhật.</div>` : ''}
     </div>`);
   }
+}
+
+/** Thẻ/khối Đối chiếu tức thì trên màn hình 'Nhập Tồn Kho' (create) khi nhận dữ liệu từ App */
+function capNhatKhoiDoiChieuTucThiApp_(){
+  const wrap = document.getElementById('create-doichieu-app-wrap');
+  if (!wrap) return;
+  const P = state.prefillApp;
+  const dv = (document.getElementById('f-donVi')||{}).value;
+  const ng = (document.getElementById('f-ngayTonKho')||{}).value;
+  if (!P || P.donVi !== dv || P.ngayTonKho !== ng) {
+    wrap.innerHTML = '';
+    return;
+  }
+  const tonDauWeb = getNumFieldValue_('f-tonDauNgay');
+  const tonDauApp = P.tonDauNgayApp !== undefined ? Number(P.tonDauNgayApp) : null;
+  const lechTonDau = tonDauApp !== null && tonDauWeb !== '' ? (Number(tonDauWeb) - tonDauApp) : null;
+  const isLech = lechTonDau !== null && Math.abs(lechTonDau) > 0.01;
+
+  wrap.innerHTML = `
+    <div style="background:#F0F7FF;border:1.5px solid #1E88E5;border-radius:8px;padding:12px 14px;margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #BBDEFB;padding-bottom:8px;margin-bottom:10px">
+        <div style="font-weight:700;color:#0D47A1;font-size:13.5px;display:flex;align-items:center;gap:6px">
+          <span>🔄</span> ĐỐI CHIẾU TỨC THÌ VỚI DỮ LIỆU APP KHO
+          <span class="badge ${isLech?'pending':'ready'}" style="font-size:11px">${isLech ? '⚠️ Lệch tồn đầu: ' + (lechTonDau>0?'+':'') + fmtNum(lechTonDau) + ' MT' : '✅ Khớp số liệu đầu kỳ'}</span>
+        </div>
+        <div style="font-size:12px;color:#546E7A">
+          Bản App: <b>${esc(P.phienBanApp || 'v3.x')}</b> ${P.soPhieuApp !== undefined ? `(${fmtNum(P.soPhieuApp)} phiếu)` : ''}
+        </div>
+      </div>
+      <div class="grid cols-3" style="gap:10px">
+        <!-- 1. Tồn kho đầu ngày -->
+        <div style="background:#fff;border:1px solid #BBDEFB;border-radius:6px;padding:8px 10px">
+          <div style="font-weight:600;color:#0D47A1;font-size:12px;margin-bottom:4px;display:flex;justify-content:space-between">
+            <span>1. Tồn kho đầu ngày</span>
+            ${tonDauApp === null ? '<span class="muted">--</span>' : (isLech ? '<span class="badge pending" style="font-size:10px">Lệch</span>' : '<span class="badge ready" style="font-size:10px">Khớp</span>')}
+          </div>
+          <div style="font-size:12px;line-height:1.6">
+            <div>App Kho: <b>${tonDauApp !== null ? fmtNum(tonDauApp) + ' MT' : '–'}</b></div>
+            <div>Đầu kỳ Web: <b>${tonDauWeb !== '' ? fmtNum(tonDauWeb) + ' MT' : '–'}</b></div>
+            <div style="font-weight:600;color:${isLech ? '#C0533E' : '#2E7D32'}">
+              Chênh lệch: ${lechTonDau !== null ? (lechTonDau > 0 ? '+' : '') + fmtNum(lechTonDau) + ' MT' : '–'}
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Cân đối BDMT xuất bán -->
+        <div style="background:#fff;border:1px solid #BBDEFB;border-radius:6px;padding:8px 10px">
+          <div style="font-weight:600;color:#0D47A1;font-size:12px;margin-bottom:4px;display:flex;justify-content:space-between">
+            <span>2. Cân đối BDMT xuất bán</span>
+            ${P.candoiCo ? '<span class="badge ready" style="font-size:10px">Có phát sinh</span>' : '<span class="badge" style="font-size:10px;background:#eceff1;color:#546E7A">Không</span>'}
+          </div>
+          <div style="font-size:12px;line-height:1.6">
+            ${P.candoiCo ? `
+              <div>Kho xuất: <b>${esc(P.candoiKho || '–')}</b></div>
+              <div>KL thực tế: <b>${fmtNum(P.candoiMTThucTe)} MT</b> (Độ ẩm: <b>${fmtNum(P.candoiDoAm)}%</b>)</div>
+              <div style="color:#1565C0;font-size:11px" title="${esc(P.candoiGhiChuApp || '')}">
+                ${P.candoiGhiChuApp ? esc(P.candoiGhiChuApp) : 'Đã tất toán CDXB trong App Kho'}
+              </div>
+            ` : `
+              <div class="muted">Không có nghiệp vụ cân đối xuất hàng.</div>
+            `}
+          </div>
+        </div>
+
+        <!-- 3. Vét bãi đóng lô -->
+        <div style="background:#fff;border:1px solid #BBDEFB;border-radius:6px;padding:8px 10px">
+          <div style="font-weight:600;color:#0D47A1;font-size:12px;margin-bottom:4px;display:flex;justify-content:space-between">
+            <span>3. Vét bãi đóng lô</span>
+            ${P.kiemKeVetBai ? '<span class="badge pending" style="font-size:10px">Có vét bãi</span>' : '<span class="badge" style="font-size:10px;background:#eceff1;color:#546E7A">Không</span>'}
+          </div>
+          <div style="font-size:12px;line-height:1.6">
+            ${P.kiemKeVetBai ? `
+              <div>Thời điểm: <b>${esc(P.thoiDiemVetBai || '–')}</b> ${P.loVetBaiApp ? `(Lô: <b>${esc(P.loVetBaiApp)}</b>)` : ''}</div>
+              <div>Ước tính còn lại: <b>${fmtNum(P.klUocTinhConLai)} MT</b></div>
+              <div style="font-weight:600;color:#C0533E">Lệch vét bãi: <b>${fmtNum(P.chenhLechVetBai)} MT</b></div>
+            ` : `
+              <div class="muted">Không có kiểm kê vét bãi / đóng lô.</div>
+            `}
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:8px;font-size:11.5px;color:#546E7A">
+        💡 <i>Số liệu được đồng bộ từ phần mềm Kho dăm keo HAK. Vui lòng rà soát kỹ 3 mục đối chiếu trên trước khi bấm <b>Lưu báo cáo</b>.</i>
+      </div>
+    </div>`;
 }
 </script>
 </body>

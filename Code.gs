@@ -1384,6 +1384,8 @@ const CFG = {
   // mục AY đầu file: sheet RIÊNG lưu TỪNG giao dịch mượn/trả (khác với
   // cột MUON_TRA gộp theo ngày trong Form Responses 1/Chitiettonkho).
   SHEET_SOMUONTRA: "SoMuonTra",
+  // Sheet lưu vết và đối chiếu thông tin từ phần mềm Kho dăm keo HAK gửi sang
+  SHEET_DOICHIEUAPP: "DoiChieuAppKho",
   // Danh sách đơn vị báo cáo (đã thấy trong dữ liệu thực tế) - có thể
   // thêm/bớt tại đây nếu công ty mở thêm đơn vị mới.
   UNITS: ["HAK (Bà Nà)", "CNHAK (QS)", "Đại Hiệp (Đại Lộc)", "HAKQN (QS Trung)"],
@@ -1540,6 +1542,7 @@ function layPrefillTuThamSo_(p) {
     out.kiemKeVetBai = true;
     const tdv = String(p.thoiDiemVetBai || "").trim();
     if (/^\d{4}-\d{2}-\d{2}$/.test(tdv)) out.thoiDiemVetBai = tdv;
+    if (p.loVetBaiApp) out.loVetBaiApp = String(p.loVetBaiApp).replace(/[<>&"'`\\]/g, " ").slice(0, 100);
   } else { delete out.klUocTinhConLai; delete out.chenhLechVetBai; }
   if (p.candoiCo === "1" && CFG.KHO_XUAT_HANG.indexOf(String(p.candoiKho || "")) !== -1) {
     out.candoiCo = true;
@@ -2680,21 +2683,57 @@ function submitInventoryEntry(payload) {
         donVi, ngayTonKho, email
       );
       // Mục BE (bổ sung): cân đối gửi từ phần mềm Kho dăm keo HAK - phần
-      // chênh lệch đã được tất toán bằng phiếu CDXB/KQL trong phần mềm
-      // (số tồn Kho Nhà máy/Kho xuất hàng gửi lên ĐÃ GỒM bút toán đó), nên
-      // GHI Điều chỉnh MT/BDMT = 0 để Đầu kỳ dự kiến ngày sau CHỈ trừ
-      // "Khối lượng thực tế MT" (lượng đã xuất bán), không trừ/cộng lần 2.
+      // chênh lệch đã được tất toán bằng phiếu CDXB/KQL trong phần mềm.
+      // GIỮ NGUYÊN số chênh lệch thực tế dieuChinhBDMT/MT để báo cáo Cân đối
+      // BDMT và Dashboard hiển thị đối soát đúng thực tế (không bị gán = 0).
+      // tongDieuChinhMTCanDoiDungNgay_ sẽ nhận diện dòng đã tất toán để KHÔNG
+      // trừ trùng lặp vào Tồn đầu kỳ dự kiến ngày sau.
       if (!candoiResult.error && payload.candoiNguon === "app_kho") {
         const ghiChu = String(payload.candoiGhiChuApp || "").slice(0, 300);
-        candoiResult.dieuChinhBDMTTinhLai = candoiResult.dieuChinhBDMT;
-        candoiResult.dieuChinhMTTinhLai = candoiResult.dieuChinhMT;
-        candoiResult.dieuChinhBDMT = 0;
-        candoiResult.dieuChinhMT = 0;
-        const dg = "Đã tất toán trong phần mềm Kho dăm keo HAK" + (ghiChu ? " (" + ghiChu + ")" : "") + " - không điều chỉnh thêm trên Web App.";
+        const dg = "Đã tất toán trong phần mềm Kho dăm keo HAK" + (ghiChu ? " (" + ghiChu + ")" : "") + " - đã tất toán bằng CDXB/KQL, không trừ trùng vào Tồn đầu kỳ.";
         candoiResult.dienGiaiBDMT = dg;
         candoiResult.dienGiaiMT = dg;
       }
       if (!candoiResult.error) logCanDoiBDMT_(candoiResult);
+    }
+
+    // Lưu vết đối chiếu thông tin App Kho gửi lên nếu có nguồn từ phần mềm kho
+    if (payload.prefillNguon === "app_kho" || payload.candoiNguon === "app_kho" || payload.soPhieuApp !== undefined) {
+      try {
+        logDoiChieuApp_({
+          email: email, donVi: donVi, ngayTonKho: ngayTonKho,
+          phienBanApp: payload.phienBanApp || "",
+          soPhieuApp: payload.soPhieuApp || "",
+          tonDauNgayApp: payload.tonDauNgayApp !== undefined ? utils.parseNum(payload.tonDauNgayApp) : utils.parseNum(payload.tonDauNgay),
+          tonDauWeb: dauKyInfo ? dauKyInfo.tonCuoiKyDuKien : utils.parseNum(payload.tonDauNgay),
+          congMT: utils.parseNum(row[COL.CONG_MT]),
+          congBDMT: utils.parseNum(row[COL.CONG_BDMT]),
+          tienSaMT: utils.parseNum(row[COL.TIEN_SA_MT]),
+          tienSaBDMT: utils.parseNum(row[COL.TIEN_SA_BDMT]),
+          dungQuatMT: utils.parseNum(row[COL.DUNG_QUAT_MT]),
+          dungQuatBDMT: utils.parseNum(row[COL.DUNG_QUAT_BDMT]),
+          nhapGo: utils.parseNum(payload.nhapGo),
+          muonTra: utils.parseNum(payload.muonTra),
+          dieuChinh: utils.parseNum(payload.dieuChinh),
+          candoiCo: !!payload.candoiCo,
+          candoiKho: payload.candoiKho || "",
+          candoiMTThucTe: utils.parseNum(payload.candoiMTThucTe),
+          candoiDoAm: utils.parseNum(payload.candoiDoAm),
+          candoiBDMTThucTe: candoiResult ? candoiResult.klThucTeBDMT : 0,
+          candoiBDMTKho: candoiResult ? candoiResult.bdmtKho : 0,
+          dieuChinhBDMT: candoiResult ? candoiResult.dieuChinhBDMT : 0,
+          dieuChinhMT: candoiResult ? candoiResult.dieuChinhMT : 0,
+          candoiGhiChuApp: payload.candoiGhiChuApp || "",
+          kiemKeVetBai: !!payload.kiemKeVetBai,
+          thoiDiemVetBai: payload.thoiDiemVetBai || "",
+          loVetBaiApp: payload.loVetBaiApp || "",
+          klUocTinhConLai: utils.parseNum(payload.klUocTinhConLai),
+          chenhLechVetBai: utils.parseNum(payload.chenhLechVetBai),
+          trangThaiDuyet: row[COL.TRANG_THAI_DUYET] || "Đã duyệt"
+        });
+      } catch (eDoiChieu) {
+        Logger.log("Lỗi ghi DoiChieuAppKho: " + eDoiChieu.toString());
+      }
     }
 
     let msg = duplicateUnitDate
@@ -3292,6 +3331,8 @@ function tongDieuChinhMTCanDoiDungNgay_(donVi, ngayISO) {
   data.forEach(r => {
     if (String(r[15] || "").trim() !== donVi) return; // cột P "Đơn vị nhập"
     if (ngayCanDoiToISO_(r[0]) !== ngayISO) return;    // cột A "Ngày cân đối"
+    const dg = String(r[14] || "");                    // cột O "Diễn giải MT"
+    if (/Đã tất toán trong phần mềm Kho/i.test(dg)) return; // Bỏ qua không cộng/trừ vào đầu kỳ dự kiến vì App đã trừ trong tồn rồi!
     tong += utils.parseNum(r[13]);                      // cột N "Điều chỉnh MT"
   });
   return tong;
@@ -4225,6 +4266,135 @@ function getCanDoiBDMTReport(donViFilter, fDate, tDate) {
     total: {
       dieuChinhMT: sum_(rows.map(function (r) { return r.dieuChinhMT; })),
       dieuChinhBDMT: sum_(rows.map(function (r) { return r.dieuChinhBDMT; }))
+    },
+    soDong: rows.length
+  };
+}
+
+// ============================================================
+// HỆ THỐNG ĐỐI CHIẾU SỐ LIỆU PHẦN MỀM KHO & WEB APP (DoiChieuAppKho)
+// ============================================================
+function getOrCreateDoiChieuAppSheet_() {
+  const ss = SpreadsheetApp.getActive();
+  let sh = ss.getSheetByName(CFG.SHEET_DOICHIEUAPP || "DoiChieuAppKho");
+  if (!sh) {
+    sh = ss.insertSheet(CFG.SHEET_DOICHIEUAPP || "DoiChieuAppKho");
+    const headers = [
+      "Thời gian nhận", "Email", "Đơn vị", "Ngày tồn kho", "Bản App", "Số phiếu App",
+      "Tồn đầu App", "Đầu kỳ Web", "Lệch tồn đầu",
+      "Cộng MT Nhà máy", "Cộng BDMT Nhà máy", "Tiên Sa MT", "Tiên Sa BDMT", "Dung Quất MT", "Dung Quất BDMT",
+      "Nhập gỗ", "Mượn trả", "CL độ ẩm (Điều chỉnh)",
+      "Cân đối kho", "MT thực tế xuất", "Độ ẩm cân đối (%)", "BDMT thực tế xuất", "BDMT kho", "Chênh lệch BDMT", "Chênh lệch quy đổi MT", "Phiếu tất toán CDXB/KQL",
+      "Kiểm kê vét bãi", "Thời điểm vét bãi", "Mã lô đóng", "KL còn lại", "Chênh lệch vét bãi",
+      "Trạng thái đối chiếu", "Trạng thái duyệt"
+    ];
+    sh.appendRow(headers);
+    sh.getRange(1, 1, 1, headers.length).setFontWeight("bold").setBackground("#2F5233").setFontColor("#FFFFFF");
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+function logDoiChieuApp_(r) {
+  const sh = getOrCreateDoiChieuAppSheet_();
+  const ngayISO = r.ngayTonKho instanceof Date ? utils.formatDateISO(r.ngayTonKho) : String(r.ngayTonKho || "");
+  const lechTonDau = (Number(r.tonDauNgayApp) || 0) - (Number(r.tonDauWeb) || 0);
+  const trangThaiDoiChieu = Math.abs(lechTonDau) < 0.01 ? "✅ Khớp hoàn toàn" : ("⚠️ Lệch tồn đầu: " + (lechTonDau > 0 ? "+" : "") + utils.parseNum(lechTonDau).toFixed(2) + " MT");
+
+  const rowValues = [
+    new Date(), r.email || "", r.donVi || "", ngayISO, r.phienBanApp || "", r.soPhieuApp || "",
+    r.tonDauNgayApp, r.tonDauWeb, Math.round(lechTonDau * 100) / 100,
+    r.congMT, r.congBDMT, r.tienSaMT, r.tienSaBDMT, r.dungQuatMT, r.dungQuatBDMT,
+    r.nhapGo, r.muonTra, r.dieuChinh,
+    r.candoiCo ? r.candoiKho : "", r.candoiCo ? r.candoiMTThucTe : "", r.candoiCo ? r.candoiDoAm : "",
+    r.candoiCo ? r.candoiBDMTThucTe : "", r.candoiCo ? r.candoiBDMTKho : "",
+    r.candoiCo ? r.dieuChinhBDMT : "", r.candoiCo ? r.dieuChinhMT : "", r.candoiCo ? r.candoiGhiChuApp : "",
+    r.kiemKeVetBai ? "Có" : "", r.kiemKeVetBai ? r.thoiDiemVetBai : "", r.kiemKeVetBai ? r.loVetBaiApp : "",
+    r.kiemKeVetBai ? r.klUocTinhConLai : "", r.kiemKeVetBai ? r.chenhLechVetBai : "",
+    trangThaiDoiChieu, r.trangThaiDuyet || ""
+  ];
+
+  const lastRow = sh.getLastRow();
+  let existingRow = -1;
+  if (lastRow >= 2) {
+    const data = sh.getRange(2, 1, lastRow - 1, 4).getValues();
+    for (let i = 0; i < data.length; i++) {
+      const rowDonVi = String(data[i][2] || "").trim();
+      const rowNgay = String(data[i][3] || "").trim();
+      if (rowDonVi === r.donVi && rowNgay === ngayISO) {
+        existingRow = i + 2;
+        break;
+      }
+    }
+  }
+  if (existingRow > 0) {
+    sh.getRange(existingRow, 1, 1, rowValues.length).setValues([rowValues]);
+  } else {
+    sh.appendRow(rowValues);
+  }
+}
+
+function getDoiChieuAppReport(donViFilter, fDate, tDate) {
+  const sh = getOrCreateDoiChieuAppSheet_();
+  const lastRow = sh.getLastRow();
+  if (lastRow < 2) return { rows: [], total: { soDong: 0, tongLechTonDau: 0, tongMTThucTeXB: 0, tongChenhBDMT: 0 }, soDong: 0 };
+
+  const allowedUnits = donViChoPhepCuaToi_(utils.normEmail(getCurrentUserEmail_()));
+  const data = sh.getRange(2, 1, lastRow - 1, 33).getValues();
+  let rows = data.map(function (r) {
+    return {
+      thoiGianNhan: r[0] instanceof Date ? utils.formatDate(r[0]) + " " + Utilities.formatDate(r[0], "GMT+7", "HH:mm:ss") : String(r[0] || ""),
+      email: String(r[1] || ""),
+      donVi: String(r[2] || "").trim(),
+      ngayTonKho: String(r[3] || ""),
+      phienBanApp: String(r[4] || ""),
+      soPhieuApp: utils.parseNum(r[5]),
+      tonDauApp: utils.parseNum(r[6]),
+      tonDauWeb: utils.parseNum(r[7]),
+      lechTonDau: utils.parseNum(r[8]),
+      congMT: utils.parseNum(r[9]),
+      congBDMT: utils.parseNum(r[10]),
+      tienSaMT: utils.parseNum(r[11]),
+      tienSaBDMT: utils.parseNum(r[12]),
+      dungQuatMT: utils.parseNum(r[13]),
+      dungQuatBDMT: utils.parseNum(r[14]),
+      nhapGo: utils.parseNum(r[15]),
+      muonTra: utils.parseNum(r[16]),
+      clDoAm: utils.parseNum(r[17]),
+      candoiKho: String(r[18] || ""),
+      mtThucTeXB: utils.parseNum(r[19]),
+      doAmXB: utils.parseNum(r[20]),
+      bdmtThucTeXB: utils.parseNum(r[21]),
+      bdmtKhoXB: utils.parseNum(r[22]),
+      chenhBDMT: utils.parseNum(r[23]),
+      chenhMT: utils.parseNum(r[24]),
+      soPhieuTatToan: String(r[25] || ""),
+      kiemKeVetBai: String(r[26] || ""),
+      thoiDiemVetBai: String(r[27] || ""),
+      loVetBai: String(r[28] || ""),
+      klConLaiVetBai: utils.parseNum(r[29]),
+      chenhLechVetBai: utils.parseNum(r[30]),
+      trangThaiDoiChieu: String(r[31] || ""),
+      trangThaiDuyet: String(r[32] || "")
+    };
+  });
+
+  if (allowedUnits) rows = rows.filter(function (r) { return allowedUnits.includes(r.donVi); });
+  if (donViFilter) rows = rows.filter(function (r) { return r.donVi === donViFilter; });
+  if (fDate) rows = rows.filter(function (r) { return r.ngayTonKho >= fDate; });
+  if (tDate) rows = rows.filter(function (r) { return r.ngayTonKho <= tDate; });
+
+  rows.sort(function (a, b) {
+    return (b.ngayTonKho || "").localeCompare(a.ngayTonKho || "") || a.donVi.localeCompare(b.donVi);
+  });
+
+  return {
+    rows: rows,
+    total: {
+      soDong: rows.length,
+      tongLechTonDau: sum_(rows.map(function (r) { return r.lechTonDau; })),
+      tongMTThucTeXB: sum_(rows.map(function (r) { return r.mtThucTeXB; })),
+      tongChenhBDMT: sum_(rows.map(function (r) { return r.chenhBDMT; }))
     },
     soDong: rows.length
   };

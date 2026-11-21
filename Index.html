@@ -1511,7 +1511,12 @@ function collectCreateForm_(){
     candoiKho: g('f-candoiKho'), candoiDoAm: nGoc('f-candoiDoAm', PA && PA.candoiDoAm), candoiMTThucTe: nGoc('f-candoiMTThucTe', PA && PA.candoiMTThucTe),
     // Mục BE: cân đối do phần mềm kho gửi sang (đã tất toán bằng CDXB/KQL trong phần mềm)
     candoiNguon: (state.prefillApp && state.prefillApp.candoiCo && state.prefillApp.donVi === g('f-donVi') && state.prefillApp.ngayTonKho === g('f-ngayTonKho')) ? 'app_kho' : '',
-    candoiGhiChuApp: (state.prefillApp && state.prefillApp.candoiGhiChuApp) || ''
+    candoiGhiChuApp: (state.prefillApp && state.prefillApp.candoiGhiChuApp) || '',
+    prefillNguon: (state.prefillApp && state.prefillApp.donVi === g('f-donVi') && state.prefillApp.ngayTonKho === g('f-ngayTonKho')) ? 'app_kho' : '',
+    tonDauNgayApp: (state.prefillApp && state.prefillApp.tonDauNgayApp !== undefined) ? state.prefillApp.tonDauNgayApp : '',
+    soPhieuApp: (state.prefillApp && state.prefillApp.soPhieuApp !== undefined) ? state.prefillApp.soPhieuApp : '',
+    phienBanApp: (state.prefillApp && state.prefillApp.phienBanApp) || '',
+    loVetBaiApp: (state.prefillApp && state.prefillApp.loVetBaiApp) || ''
   };
 }
 
@@ -1859,6 +1864,7 @@ function renderReport(){
       <button class="btn sm report-tab-btn ${state.reportTab==='candoibdmt'?'primary':''}" data-tab="candoibdmt" onclick="switchReportTab('candoibdmt')">⚖️ Cân đối BDMT xuất hàng</button>
       <button class="btn sm report-tab-btn ${state.reportTab==='testkho'?'primary':''}" data-tab="testkho" onclick="switchReportTab('testkho')">🔎 Kiểm tra đầu kỳ</button>
       <button class="btn sm report-tab-btn ${state.reportTab==='somuontra'?'primary':''}" data-tab="somuontra" onclick="switchReportTab('somuontra')">🧾 Sổ Mượn Trả</button>
+      <button class="btn sm report-tab-btn ${state.reportTab==='doichieuapp'?'primary':''}" data-tab="doichieuapp" onclick="switchReportTab('doichieuapp')">🔍 Đối chiếu App Kho</button>
     </div>
 
     <div id="report-period-section" class="${state.reportTab==='period'?'':'hidden'}">
@@ -1981,6 +1987,25 @@ function renderReport(){
       <div class="card" id="mt-summary-wrap"><div class="empty"><div class="ic">💰</div>Bấm "Xem báo cáo" để xem Dư nợ lũy kế.</div></div>
       <div class="card" id="mt-summary-doituong-wrap"></div>
       <div class="card" id="mt-wrap"></div>
+    </div>
+
+    <div id="report-doichieuapp-section" class="${state.reportTab==='doichieuapp'?'':'hidden'}">
+      <div class="card no-print">
+        <div class="grid cols-4">
+          <div class="field"><label>Đơn vị</label>
+            <select id="dca-donVi"><option value="" ${defaultDonVi?'':'selected'}>-- Tất cả --</option>${unitOptions.map(u=>`<option value="${esc(u)}" ${u===defaultDonVi?'selected':''}>${esc(u)}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label>Từ ngày</label><input type="date" id="dca-from"></div>
+          <div class="field"><label>Đến ngày</label><input type="date" id="dca-to" value="${toISO(today)}"></div>
+          <div class="field" style="display:flex;align-items:flex-end;gap:8px">
+            <button class="btn primary" onclick="loadDoiChieuAppReport()">🔍 Xem đối chiếu</button>
+            <button class="btn" onclick="xuatExcelDoiChieuApp_()">📥 Xuất Excel</button>
+          </div>
+        </div>
+        <div class="hint-text">Đối chiếu dữ liệu gốc từ <b>phần mềm máy tính (App Kho)</b> gửi lên với số liệu ghi nhận trên Web App (Tồn đầu ngày, CL độ ẩm, Cân đối BDMT xuất bán, Vét bãi đóng lô).</div>
+      </div>
+      <div class="card" id="dca-kpi-wrap"></div>
+      <div class="card" id="dca-wrap"><div class="empty"><div class="ic">🔍</div>Bấm "Xem đối chiếu" để tải bảng đối chiếu số liệu App Kho.</div></div>
     </div>`;
 
   if (!state.units.length) call('getUnitList', [], null).then(list => { state.units = list; });
@@ -2000,19 +2025,12 @@ function switchReportTab(tab){
   document.getElementById('report-candoibdmt-section').classList.toggle('hidden', tab!=='candoibdmt');
   document.getElementById('report-testkho-section').classList.toggle('hidden', tab!=='testkho');
   document.getElementById('report-somuontra-section').classList.toggle('hidden', tab!=='somuontra');
+  document.getElementById('report-doichieuapp-section').classList.toggle('hidden', tab!=='doichieuapp');
   document.querySelectorAll('.report-tab-btn').forEach(b => b.classList.toggle('primary', b.dataset.tab===tab));
-  // SỬA LỖI (mục R, v2026.8.17): trước đây CHỈ tải lại báo cáo nếu chưa
-  // từng tải trong phiên làm việc (!state.tonkhoDamgoReport) - nên nếu
-  // người dùng đã xem báo cáo 1 lần, rồi qua Lịch Sử sửa số liệu ngày đó,
-  // rồi bấm lại tab này, vẫn hiện bản CŨ đã cache thay vì lấy lại dữ liệu
-  // mới từ Chitiettonkho. LUÔN tải lại mỗi khi vào tab này để đảm bảo
-  // luôn đúng dữ liệu mới nhất (chi phí gọi lại rất nhẹ - chỉ 1 ngày).
   if (tab === 'tonkhodamgo') loadTonkhoDamgoReport();
-  // mục AS: tab mới "Cân đối BDMT xuất hàng" - LUÔN tải lại mỗi khi vào
-  // tab (cùng lý do như trên), chi phí nhẹ vì chỉ đọc 1 sheet log riêng.
   if (tab === 'candoibdmt') loadCanDoiBDMTReport();
-  // mục AZ: tab mới "Sổ Mượn Trả" - LUÔN tải lại (cùng lý do trên).
   if (tab === 'somuontra') loadSoMuonTraReport();
+  if (tab === 'doichieuapp') loadDoiChieuAppReport();
 }
 
 /** Đổi chế độ hiển thị "Theo thực tế" / "Đầy đủ số liệu" cho báo cáo
@@ -2210,6 +2228,97 @@ function renderCanDoiBDMTReportTable(){
       <td class="num">${fmtNum(res.total.dieuChinhMT)}</td><td class="num">${fmtNum(res.total.dieuChinhBDMT)}</td>
       <td></td><td></td></tr></tfoot>
     </table></div>`;
+}
+
+/* ------------------------------------------------------------
+ * BÁO CÁO "ĐỐI CHIẾU APP KHO & WEB APP"
+ * ------------------------------------------------------------ */
+function loadDoiChieuAppReport(){
+  const donVi = (document.getElementById('dca-donVi')||{}).value || '';
+  const f = (document.getElementById('dca-from')||{}).value || '';
+  const t = (document.getElementById('dca-to')||{}).value || '';
+  call('getDoiChieuAppReport', [donVi, f, t], 'Đang tải dữ liệu đối chiếu App Kho...').then(res => {
+    state.doiChieuAppReport = res;
+    renderDoiChieuAppReportTable();
+  });
+}
+
+function renderDoiChieuAppReportTable(){
+  const kpiWrap = document.getElementById('dca-kpi-wrap');
+  const wrap = document.getElementById('dca-wrap');
+  const res = state.doiChieuAppReport;
+  if (!res || !res.rows.length) {
+    if (kpiWrap) kpiWrap.innerHTML = '';
+    wrap.innerHTML = '<div class="empty"><div class="ic">📭</div>Chưa có dữ liệu gửi từ App Kho khớp bộ lọc này.</div>';
+    return;
+  }
+
+  const khopCount = res.rows.filter(r => Math.abs(r.lechTonDau) < 0.01).length;
+  const lechCount = res.rows.length - khopCount;
+
+  if (kpiWrap) {
+    kpiWrap.innerHTML = `
+      <div class="grid cols-4" style="gap:12px;margin-bottom:12px">
+        <div style="background:var(--paper-2);padding:12px;border-radius:8px;border:1px solid var(--line)">
+          <div class="muted" style="font-size:11px;font-weight:700">TỔNG LẦN GỬI TỪ APP</div>
+          <div style="font-size:20px;font-weight:700;margin-top:4px">${res.rows.length} lượt</div>
+        </div>
+        <div style="background:var(--paper-2);padding:12px;border-radius:8px;border:1px solid var(--line)">
+          <div class="muted" style="font-size:11px;font-weight:700">TỶ LỆ KHỚP ĐẦU KỲ</div>
+          <div style="font-size:20px;font-weight:700;margin-top:4px;color:${lechCount ? 'var(--danger)' : 'var(--forest)'}">${khopCount} / ${res.rows.length} (${Math.round(khopCount/res.rows.length*100)}%)</div>
+        </div>
+        <div style="background:var(--paper-2);padding:12px;border-radius:8px;border:1px solid var(--line)">
+          <div class="muted" style="font-size:11px;font-weight:700">XUẤT BÁN THỰC TẾ</div>
+          <div style="font-size:20px;font-weight:700;margin-top:4px">${fmtNum(res.total.tongMTThucTeXB)} MT</div>
+        </div>
+        <div style="background:var(--paper-2);padding:12px;border-radius:8px;border:1px solid var(--line)">
+          <div class="muted" style="font-size:11px;font-weight:700">CHÊNH LỆCH KHÔ BDMT</div>
+          <div style="font-size:20px;font-weight:700;margin-top:4px;color:var(--forest)">${fmtNum(res.total.tongChenhBDMT)} BDMT</div>
+        </div>
+      </div>`;
+  }
+
+  wrap.innerHTML = `<div style="overflow-x:auto"><table id="tbl-doichieuapp"><thead><tr>
+      <th>Ngày</th><th>Đơn vị</th><th>Bản App</th><th class="num">Số phiếu</th>
+      <th class="num">Tồn đầu App</th><th class="num">Đầu kỳ Web</th><th class="num">Lệch tồn đầu</th>
+      <th class="num">CL độ ẩm</th><th class="num">Nhập gỗ</th><th class="num">Mượn trả</th>
+      <th>Kho xuất</th><th class="num">MT thực tế</th><th class="num">Độ ẩm %</th><th class="num">BDMT thực tế</th><th class="num">Chênh BDMT</th>
+      <th>Phiếu CDXB/KQL</th>
+      <th>Lô vét bãi</th><th class="num">KL còn lại</th><th class="num">Chênh vét bãi</th>
+      <th>Trạng thái đối chiếu</th>
+    </tr></thead><tbody>
+    ${res.rows.map(r => `<tr>
+      <td>${esc(r.ngayTonKho)}</td><td>${esc(r.donVi)}</td>
+      <td>${esc(r.phienBanApp || '—')}</td><td class="num">${r.soPhieuApp ? fmtNum(r.soPhieuApp) : '—'}</td>
+      <td class="num">${fmtNum(r.tonDauApp)}</td><td class="num">${fmtNum(r.tonDauWeb)}</td>
+      <td class="num" style="font-weight:700;color:${Math.abs(r.lechTonDau)>=0.01?'var(--danger)':'var(--forest)'}">${Math.abs(r.lechTonDau)>=0.01 ? (r.lechTonDau>0?'+':'')+fmtNum(r.lechTonDau) : '0,00'}</td>
+      <td class="num">${fmtNum(r.clDoAm)}</td><td class="num">${fmtNum(r.nhapGo)}</td><td class="num">${fmtNum(r.muonTra)}</td>
+      <td>${esc(r.candoiKho || '—')}</td>
+      <td class="num">${r.mtThucTeXB ? fmtNum(r.mtThucTeXB) : '—'}</td>
+      <td class="num">${r.doAmXB ? fmtPctPlain_(r.doAmXB) : '—'}</td>
+      <td class="num">${r.bdmtThucTeXB ? fmtNum(r.bdmtThucTeXB) : '—'}</td>
+      <td class="num" style="font-weight:600;color:${r.chenhBDMT<0?'var(--danger)':'var(--forest)'}">${r.chenhBDMT ? (r.chenhBDMT>0?'+':'')+fmtNum(r.chenhBDMT) : '—'}</td>
+      <td style="font-size:12px">${esc(r.soPhieuTatToan || '—')}</td>
+      <td>${esc(r.loVetBai || (r.kiemKeVetBai==='Có'?'Có':'—'))}</td>
+      <td class="num">${r.klConLaiVetBai ? fmtNum(r.klConLaiVetBai) : '—'}</td>
+      <td class="num">${r.chenhLechVetBai ? (r.chenhLechVetBai>0?'+':'')+fmtNum(r.chenhLechVetBai) : '—'}</td>
+      <td><span class="badge ${Math.abs(r.lechTonDau)<0.01?'approved':'pending'}">${esc(r.trangThaiDoiChieu)}</span></td>
+    </tr>`).join('')}
+    </tbody>
+    <tfoot><tr><td colspan="6" style="text-align:right">TỔNG CỘNG (${res.soDong} bản ghi)</td>
+      <td class="num" style="font-weight:700">${fmtNum(res.total.tongLechTonDau)}</td>
+      <td colspan="4"></td>
+      <td class="num" style="font-weight:700">${fmtNum(res.total.tongMTThucTeXB)}</td>
+      <td colspan="2"></td>
+      <td class="num" style="font-weight:700">${fmtNum(res.total.tongChenhBDMT)}</td>
+      <td colspan="5"></td></tr></tfoot>
+    </table></div>`;
+}
+
+function xuatExcelDoiChieuApp_(){
+  const tbl = document.getElementById('tbl-doichieuapp');
+  if (!tbl) { toast('Chưa có bảng đối chiếu để xuất Excel.', 'warn'); return; }
+  xuatBangHtmlThanhExcel_([tbl], ['DoiChieu_AppKho'], 'DoiChieu_AppKho_HAK');
 }
 
 /* ------------------------------------------------------------
@@ -2712,7 +2821,7 @@ function apDungPrefillNeuKhop_(){
     const chk = document.getElementById('f-candoiCo');
     if (chk) { chk.checked = true; document.getElementById('candoi-fields').classList.remove('hidden'); }
     setV('f-candoiKho', P.candoiKho); setV('f-candoiDoAm', P.candoiDoAm); setV('f-candoiMTThucTe', P.candoiMTThucTe);
-    extra.push('Cân đối BDMT xuất hàng (' + P.candoiKho + ' – đã tất toán trong phần mềm kho, Web App ghi Điều chỉnh = 0)');
+    extra.push('Cân đối BDMT xuất hàng (' + P.candoiKho + ' – đã tất toán CDXB trong phần mềm kho)');
   }
   attachNumberFormatting_();
   updateCanDoiDoKho_();
@@ -2723,10 +2832,16 @@ function apDungPrefillNeuKhop_(){
   if (banner && !banner.querySelector('.prefill-app-note')) {
     const tonDauWeb = getNumFieldValue_('f-tonDauNgay');
     const lechTonDau = P.tonDauNgayApp !== undefined && tonDauWeb !== '' && Math.abs(Number(tonDauWeb) - P.tonDauNgayApp) > 0.01;
-    banner.insertAdjacentHTML('beforeend', `<div class="hint-text prefill-app-note" style="background:#E8F0FB;color:#1F4E8C;padding:10px 12px;border-radius:8px;margin:0 0 14px 0">
-      📥 Đã điền sẵn ${n} ô từ <b>phần mềm Kho dăm keo HAK</b>${P.phienBanApp ? ' (bản ' + esc(P.phienBanApp) + ')' : ''} cho ngày ${esc(P.ngayTonKho)}${P.soPhieuApp !== undefined ? ' – ' + fmtNum(P.soPhieuApp) + ' phiếu trong ngày' : ''}.
-      ${extra.length ? 'Đã tick sẵn: <b>' + esc(extra.join(', ')) + '</b>. ' : ''}Kiểm tra lại từng tab rồi bấm Lưu/Cập nhật – số liệu CHƯA được lưu cho tới khi bạn bấm nút.
-      ${P.tonDauNgayApp !== undefined ? `<br>Tồn kho đầu ngày theo phần mềm kho: <b>${fmtNum(P.tonDauNgayApp)}</b> MT${lechTonDau ? ` – <b>khác</b> số đang điền (${fmtNum(tonDauWeb)} MT), kiểm tra trước khi lưu.` : tonDauWeb === '' ? '.' : ' (khớp).'}` : ''}</div>`);
+    banner.insertAdjacentHTML('beforeend', `<div class="hint-text prefill-app-note" style="background:#E8F0FB;color:#1F4E8C;padding:12px 14px;border-radius:8px;margin:0 0 14px 0;border:1px solid #B8D5E5">
+      <div style="font-weight:700;font-size:14px;margin-bottom:6px">📥 SỐ LIỆU ĐIỀN SẴN TỪ PHẦN MỀM KHO DĂM KEO HAK ${P.phienBanApp ? '(v' + esc(P.phienBanApp) + ')' : ''}</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;margin-bottom:6px;font-size:12.5px">
+        <div><b>Số phiếu trong ngày:</b> ${P.soPhieuApp !== undefined ? fmtNum(P.soPhieuApp) + ' phiếu' : '—'}</div>
+        <div><b>Tồn đầu ngày App:</b> ${P.tonDauNgayApp !== undefined ? fmtNum(P.tonDauNgayApp) + ' MT' : '—'}</div>
+        <div><b>Đầu kỳ Web:</b> ${tonDauWeb !== '' ? fmtNum(tonDauWeb) + ' MT' : '—'}</div>
+        <div><b>Đối soát đầu kỳ:</b> ${lechTonDau ? `<span style="color:#C0533E;font-weight:700">⚠️ Lệch ${fmtNum(Math.abs(Number(tonDauWeb) - P.tonDauNgayApp))} MT</span>` : '<span style="color:#2E7D32;font-weight:700">✅ Khớp 100%</span>'}</div>
+      </div>
+      ${extra.length ? `<div style="font-size:12px;margin-top:4px">Đã điền tự động: <b>${esc(extra.join(', '))}</b>${P.loVetBaiApp ? ' · Lô vét bãi: <b>' + esc(P.loVetBaiApp) + '</b>' : ''}. Kiểm tra lại các tab rồi bấm Lưu/Cập nhật.</div>` : ''}
+    </div>`);
   }
 }
 </script>

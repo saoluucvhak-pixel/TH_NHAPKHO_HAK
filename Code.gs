@@ -4052,8 +4052,10 @@ function DAM_BAO_COT_TRANG_THAI_DUYET() {
   });
   getOrCreatePhanQuyenSheet_();
   getOrCreateDieuKienDuyetSheet_();
+  getOrCreateCanDoiBDMTSheet_();
+  getOrCreateDoiChieuAppSheet_();
   SpreadsheetApp.flush();
-  return "✅ Đã thêm cột 'Trạng thái duyệt' + 'Lý do chờ duyệt' (nếu chưa có) vào Form Responses 1 + Chitiettonkho, và tạo sẵn 2 sheet PhanQuyen/DieuKienDuyet.";
+  return "✅ Đã thêm cột 'Trạng thái duyệt' + 'Lý do chờ duyệt' (nếu chưa có) vào Form Responses 1 + Chitiettonkho, và tạo sẵn các sheet PhanQuyen, DieuKienDuyet, CanDoiBDMT, DoiChieuAppKho.";
 }
 
 /** CHẠY 1 LẦN NẾU CẦN (Apps Script Editor > chọn hàm này > Run) - NÂNG
@@ -4279,7 +4281,8 @@ function getCanDoiBDMTReport(donViFilter, fDate, tDate) {
   if (lastRow < 2) return { rows: [], total: { dieuChinhMT: 0, dieuChinhBDMT: 0 }, soDong: 0 };
 
   const allowedUnits = donViChoPhepCuaToi_(utils.normEmail(getCurrentUserEmail_()));
-  const data = sh.getRange(2, 1, lastRow - 1, 18).getValues();
+  const lastCol = Math.max(sh.getLastColumn(), 18);
+  const data = sh.getRange(2, 1, lastRow - 1, lastCol).getValues();
   let rows = data.map(function (r) {
     const ngayISO = ngayCanDoiToISO_(r[0]);
     return {
@@ -4296,7 +4299,10 @@ function getCanDoiBDMTReport(donViFilter, fDate, tDate) {
       donVi: String(r[15] || "").trim(), email: String(r[16] || ""),
       thoiGianGhi: r[17] instanceof Date
         ? (utils.formatDate(r[17]) + " " + Utilities.formatDate(r[17], "GMT+7", "HH:mm:ss"))
-        : String(r[17] || "")
+        : String(r[17] || ""),
+      daTatToanApp: (r.length >= 19 && String(r[18]).trim() === "Có") || /Đã tất toán/i.test(String(r[12] || "") + String(r[14] || "")),
+      ghiChuApp: r.length >= 20 ? String(r[19] || "") : "",
+      nguon: r.length >= 21 ? String(r[20] || "") : ""
     };
   });
 
@@ -4325,20 +4331,26 @@ function getCanDoiBDMTReport(donViFilter, fDate, tDate) {
 function getOrCreateDoiChieuAppSheet_() {
   const ss = SpreadsheetApp.getActive();
   let sh = ss.getSheetByName(CFG.SHEET_DOICHIEUAPP || "DoiChieuAppKho");
+  const headers = [
+    "Thời gian nhận", "Email", "Đơn vị", "Ngày tồn kho", "Bản App", "Số phiếu App",
+    "Tồn đầu App", "Đầu kỳ Web", "Lệch tồn đầu",
+    "Cộng MT Nhà máy", "Cộng BDMT Nhà máy", "Tiên Sa MT", "Tiên Sa BDMT", "Dung Quất MT", "Dung Quất BDMT",
+    "Nhập gỗ", "Mượn trả", "CL độ ẩm (Điều chỉnh)",
+    "Cân đối kho", "MT thực tế xuất", "Độ ẩm cân đối (%)", "BDMT thực tế xuất", "BDMT kho", "Chênh lệch BDMT", "Chênh lệch quy đổi MT", "Phiếu tất toán CDXB/KQL",
+    "Kiểm kê vét bãi", "Thời điểm vét bãi", "Mã lô đóng", "KL còn lại", "Chênh lệch vét bãi",
+    "Trạng thái đối chiếu", "Trạng thái duyệt", "Snapshot Raw JSON"
+  ];
   if (!sh) {
     sh = ss.insertSheet(CFG.SHEET_DOICHIEUAPP || "DoiChieuAppKho");
-    const headers = [
-      "Thời gian nhận", "Email", "Đơn vị", "Ngày tồn kho", "Bản App", "Số phiếu App",
-      "Tồn đầu App", "Đầu kỳ Web", "Lệch tồn đầu",
-      "Cộng MT Nhà máy", "Cộng BDMT Nhà máy", "Tiên Sa MT", "Tiên Sa BDMT", "Dung Quất MT", "Dung Quất BDMT",
-      "Nhập gỗ", "Mượn trả", "CL độ ẩm (Điều chỉnh)",
-      "Cân đối kho", "MT thực tế xuất", "Độ ẩm cân đối (%)", "BDMT thực tế xuất", "BDMT kho", "Chênh lệch BDMT", "Chênh lệch quy đổi MT", "Phiếu tất toán CDXB/KQL",
-      "Kiểm kê vét bãi", "Thời điểm vét bãi", "Mã lô đóng", "KL còn lại", "Chênh lệch vét bãi",
-      "Trạng thái đối chiếu", "Trạng thái duyệt"
-    ];
     sh.appendRow(headers);
     sh.getRange(1, 1, 1, headers.length).setFontWeight("bold").setBackground("#2F5233").setFontColor("#FFFFFF");
     sh.setFrozenRows(1);
+  } else {
+    if (sh.getLastColumn() < headers.length) {
+      for (let c = sh.getLastColumn() + 1; c <= headers.length; c++) {
+        sh.getRange(1, c).setValue(headers[c - 1]).setFontWeight("bold").setBackground("#2F5233").setFontColor("#FFFFFF");
+      }
+    }
   }
   return sh;
 }
@@ -4348,10 +4360,11 @@ function logDoiChieuApp_(r) {
   const ngayISO = r.ngayTonKho instanceof Date ? utils.formatDateISO(r.ngayTonKho) : String(r.ngayTonKho || "");
   const lechTonDau = (Number(r.tonDauNgayApp) || 0) - (Number(r.tonDauWeb) || 0);
   const trangThaiDoiChieu = Math.abs(lechTonDau) < 0.01 ? "✅ Khớp hoàn toàn" : ("⚠️ Lệch tồn đầu: " + (lechTonDau > 0 ? "+" : "") + utils.parseNum(lechTonDau).toFixed(2) + " MT");
+  const rawJson = r.rawJson || (r.rawPayload ? JSON.stringify(r.rawPayload) : "");
 
   const rowValues = [
-    new Date(), r.email || "", r.donVi || "", ngayISO, r.phienBanApp || "", r.soPhieuApp || "",
-    r.tonDauNgayApp, r.tonDauWeb, Math.round(lechTonDau * 100) / 100,
+    new Date(), r.email || "", r.donVi || "", ngayISO, r.phienBanApp || "", r.soPhieuApp !== undefined ? r.soPhieuApp : "",
+    r.tonDauNgayApp !== undefined ? r.tonDauNgayApp : "", r.tonDauWeb !== undefined ? r.tonDauWeb : "", Math.round(lechTonDau * 100) / 100,
     r.congMT, r.congBDMT, r.tienSaMT, r.tienSaBDMT, r.dungQuatMT, r.dungQuatBDMT,
     r.nhapGo, r.muonTra, r.dieuChinh,
     r.candoiCo ? r.candoiKho : "", r.candoiCo ? r.candoiMTThucTe : "", r.candoiCo ? r.candoiDoAm : "",
@@ -4359,7 +4372,8 @@ function logDoiChieuApp_(r) {
     r.candoiCo ? r.dieuChinhBDMT : "", r.candoiCo ? r.dieuChinhMT : "", r.candoiCo ? r.candoiGhiChuApp : "",
     r.kiemKeVetBai ? "Có" : "", r.kiemKeVetBai ? r.thoiDiemVetBai : "", r.kiemKeVetBai ? r.loVetBaiApp : "",
     r.kiemKeVetBai ? r.klUocTinhConLai : "", r.kiemKeVetBai ? r.chenhLechVetBai : "",
-    trangThaiDoiChieu, r.trangThaiDuyet || ""
+    trangThaiDoiChieu, r.trangThaiDuyet || "",
+    rawJson
   ];
 
   const lastRow = sh.getLastRow();
@@ -4382,14 +4396,67 @@ function logDoiChieuApp_(r) {
   }
 }
 
+/** API công khai để lưu snapshot đối chiếu từ Web App hoặc bên ngoài nếu cần */
+function luuDoiChieuAppSnapshot(payload) {
+  try {
+    if (!payload) return { success: false, message: "Không có dữ liệu snapshot." };
+    const email = utils.normEmail(payload.overrideEmail || getCurrentUserEmail_());
+    const donVi = String(payload.donVi || "").trim();
+    if (!donVi) return { success: false, message: "Thiếu Đơn vị." };
+    const ngayTonKho = payload.ngayTonKho;
+    if (!ngayTonKho) return { success: false, message: "Thiếu Ngày tồn kho." };
+    logDoiChieuApp_({
+      email: email,
+      donVi: donVi,
+      ngayTonKho: ngayTonKho,
+      phienBanApp: payload.phienBanApp || "",
+      soPhieuApp: payload.soPhieuApp !== undefined ? payload.soPhieuApp : "",
+      tonDauNgayApp: payload.tonDauNgayApp !== undefined ? utils.parseNum(payload.tonDauNgayApp) : "",
+      tonDauWeb: payload.tonDauWeb !== undefined ? utils.parseNum(payload.tonDauWeb) : utils.parseNum(payload.tonDauNgay),
+      congMT: utils.parseNum(payload.congMT),
+      congBDMT: utils.parseNum(payload.congBDMT),
+      tienSaMT: utils.parseNum(payload.tienSaMT),
+      tienSaBDMT: utils.parseNum(payload.tienSaBDMT),
+      dungQuatMT: utils.parseNum(payload.dungQuatMT),
+      dungQuatBDMT: utils.parseNum(payload.dungQuatBDMT),
+      nhapGo: utils.parseNum(payload.nhapGo),
+      muonTra: utils.parseNum(payload.muonTra),
+      dieuChinh: utils.parseNum(payload.dieuChinh),
+      candoiCo: !!payload.candoiCo,
+      candoiKho: payload.candoiKho || "",
+      candoiMTThucTe: utils.parseNum(payload.candoiMTThucTe),
+      candoiDoAm: utils.parseNum(payload.candoiDoAm),
+      candoiBDMTThucTe: utils.parseNum(payload.candoiBDMTThucTe),
+      candoiBDMTKho: utils.parseNum(payload.candoiBDMTKho),
+      dieuChinhBDMT: utils.parseNum(payload.dieuChinhBDMT),
+      dieuChinhMT: utils.parseNum(payload.dieuChinhMT),
+      candoiGhiChuApp: payload.candoiGhiChuApp || "",
+      kiemKeVetBai: !!payload.kiemKeVetBai,
+      thoiDiemVetBai: payload.thoiDiemVetBai || "",
+      loVetBaiApp: payload.loVetBaiApp || payload.loVetBai || "",
+      klUocTinhConLai: utils.parseNum(payload.klUocTinhConLai),
+      chenhLechVetBai: utils.parseNum(payload.chenhLechVetBai),
+      trangThaiDuyet: payload.trangThaiDuyet || "Đã duyệt",
+      rawPayload: payload
+    });
+    return { success: true, message: "✅ Đã lưu snapshot đối chiếu App Kho." };
+  } catch (err) {
+    return { success: false, message: "❌ Lỗi: " + err.toString() };
+  }
+}
+
 function getDoiChieuAppReport(donViFilter, fDate, tDate) {
   const sh = getOrCreateDoiChieuAppSheet_();
   const lastRow = sh.getLastRow();
-  if (lastRow < 2) return { rows: [], total: { soDong: 0, tongLechTonDau: 0, tongMTThucTeXB: 0, tongChenhBDMT: 0 }, soDong: 0 };
+  if (lastRow < 2) return { rows: [], total: { soDong: 0, tongLechTonDau: 0, tongMTThucTeXB: 0, tongChenhBDMT: 0, tongChenhMT: 0 }, soDong: 0 };
 
   const allowedUnits = donViChoPhepCuaToi_(utils.normEmail(getCurrentUserEmail_()));
-  const data = sh.getRange(2, 1, lastRow - 1, 33).getValues();
+  const lastCol = Math.max(sh.getLastColumn(), 33);
+  const data = sh.getRange(2, 1, lastRow - 1, lastCol).getValues();
   let rows = data.map(function (r) {
+    const rawJsonStr = r.length >= 34 ? String(r[33] || "") : "";
+    let rawObj = null;
+    try { if (rawJsonStr) rawObj = JSON.parse(rawJsonStr); } catch (e) {}
     return {
       thoiGianNhan: r[0] instanceof Date ? utils.formatDate(r[0]) + " " + Utilities.formatDate(r[0], "GMT+7", "HH:mm:ss") : String(r[0] || ""),
       email: String(r[1] || ""),
@@ -4423,7 +4490,8 @@ function getDoiChieuAppReport(donViFilter, fDate, tDate) {
       klConLaiVetBai: utils.parseNum(r[29]),
       chenhLechVetBai: utils.parseNum(r[30]),
       trangThaiDoiChieu: String(r[31] || ""),
-      trangThaiDuyet: String(r[32] || "")
+      trangThaiDuyet: String(r[32] || ""),
+      rawObj: rawObj
     };
   });
 
@@ -4442,7 +4510,8 @@ function getDoiChieuAppReport(donViFilter, fDate, tDate) {
       soDong: rows.length,
       tongLechTonDau: sum_(rows.map(function (r) { return r.lechTonDau; })),
       tongMTThucTeXB: sum_(rows.map(function (r) { return r.mtThucTeXB; })),
-      tongChenhBDMT: sum_(rows.map(function (r) { return r.chenhBDMT; }))
+      tongChenhBDMT: sum_(rows.map(function (r) { return r.chenhBDMT; })),
+      tongChenhMT: sum_(rows.map(function (r) { return r.chenhMT; }))
     },
     soDong: rows.length
   };

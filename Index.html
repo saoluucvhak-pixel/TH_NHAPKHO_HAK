@@ -211,7 +211,13 @@
        * trong hộp thoại In, người dùng vẫn có thể tự đổi lại nếu muốn. */
       @page { size: landscape; margin: 10mm; }
     }
-  </style>
+    /* Lịch sử: bảng rộng cuộn ngang trong khung (không làm cả trang tràn); ô gọn hơn để vừa màn 1366 */
+  #history-wrap{overflow-x:auto;max-width:100%}
+  #history-wrap th,#history-wrap td{padding:8px 7px}
+  #history-wrap td.num,#history-wrap th.num{white-space:nowrap}
+  #history-wrap .nop-luc{white-space:nowrap;line-height:1.25}
+  #history-wrap .nop-luc small{display:block;color:var(--ink-soft,#6b7280)}
+</style>
 </head>
 <body>
 
@@ -1710,6 +1716,10 @@ function trangThaiDuyetBadge_(r){
 }
 
 /** Mục BG: nhãn "bản thứ mấy" + bản mới nhất / cũ hơn - để người duyệt biết bản nào cần duyệt khi cùng (Đơn vị+Ngày) có nhiều lần nộp. */
+function nopLucHtml_(r){ // "22/11/2026" + giờ ở dòng dưới: cột gọn, vẫn đủ để phân biệt các lần nộp
+  const t = String(r.thoiGianNop || r.timestamp || ''), p = t.split(' ');
+  return p.length > 1 ? esc(p[0]) + '<small>' + esc(p[1]) + '</small>' : esc(t);
+}
 function banMoiNhatBadge_(r){
   if (!r.soBan || r.soBan < 2) return '<span class="muted">1/1</span>';
   const t = r.banThu + '/' + r.soBan + ' ';
@@ -1728,41 +1738,61 @@ function renderHistoryTable(){
       <th class="num">Tồn đầu (MT)</th><th class="num">Cộng MT</th><th class="num">Cộng BDMT</th><th class="num">Tồn CK (MT)</th><th class="num">Độ ẩm</th><th></th>
     </tr></thead><tbody>
     ${list.map(r => `<tr>
-      <td>${esc(r.ngayTonKho)}</td><td>${esc(r.donVi)}</td><td>${esc(r.email)}</td>
-      <td style="white-space:nowrap">${esc(r.thoiGianNop || r.timestamp)}</td>
+      <td>${esc(r.ngayTonKho)}</td><td>${esc(r.donVi)}</td><td title="${esc(r.email)}">${esc(String(r.email || '').split('@')[0])}</td>
+      <td class="nop-luc">${nopLucHtml_(r)}</td>
       <td style="white-space:nowrap">${banMoiNhatBadge_(r)}</td>
-      <td style="min-width:200px">${trangThaiDuyetBadge_(r)}${(r.lyDoChoDuyet && (r.trangThaiDuyet==='Chờ duyệt'||r.trangThaiDuyet==='Từ chối')) ? `<div class="hint-text" style="margin-top:4px;max-width:260px">${esc(r.lyDoChoDuyet)}</div>` : ''}
-        ${(state.isAdmin && r.trangThaiDuyet === 'Chờ duyệt') ? `<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;align-items:center">${r.coBanMoiHonConHieuLuc ? `
-          <span class="hint-text" title="Duyệt bản mới nhất (nộp lúc ${esc(r.thoiGianBanMoiHon)}). Bản này chỉ có thể Từ chối để dọn.">⛔ Đã có bản mới hơn</span>
-          <button class="btn sm danger" onclick="duyetBaoCaoLichSu(${r.rowIndex}, false)">❌ Từ chối</button>` : `
-          <button class="btn sm accent" onclick="duyetBaoCaoLichSu(${r.rowIndex}, true)">✅ Duyệt bản mới nhất</button>
-          <button class="btn sm danger" onclick="duyetBaoCaoLichSu(${r.rowIndex}, false)">❌ Từ chối</button>`}</div>` : ''}</td>
+      <td>${trangThaiDuyetBadge_(r)}${(r.lyDoChoDuyet && (r.trangThaiDuyet==='Chờ duyệt'||r.trangThaiDuyet==='Từ chối')) ? `<div class="hint-text" style="margin-top:4px;max-width:260px">${esc(r.lyDoChoDuyet)}</div>` : ''}</td>
       <td class="num">${fmtNum(r.tonDauNgay)}</td><td class="num">${fmtNum(r.congMT)}</td><td class="num">${fmtNum(r.congBDMT)}</td>
       <td class="num">${fmtNum(r.tonCK)}</td><td class="num">${fmtPct(r.doAm)}</td>
-      <td style="white-space:nowrap">
-        <button class="btn sm ghost" onclick="viewHistoryDetail(${r.rowIndex})">Xem</button>
+      <td><div style="display:flex;flex-wrap:wrap;gap:4px;max-width:150px">
+        ${(state.isAdmin && r.trangThaiDuyet === 'Chờ duyệt')
+          ? `<button class="btn sm accent" onclick="viewHistoryDetail(${r.rowIndex})" title="Mở màn duyệt chi tiết">🔍 Xem &amp; duyệt</button>`
+          : `<button class="btn sm ghost" onclick="viewHistoryDetail(${r.rowIndex})">Xem</button>`}
         <button class="btn sm ghost admin-only ${state.isAdmin?'':'hidden'}" onclick="editHistoryEntry(${r.rowIndex})">Sửa</button>
         <button class="btn sm danger admin-only ${state.isAdmin?'':'hidden'}" onclick="confirmDeleteHistory(${r.rowIndex})">Xóa</button>
-      </td>
+      </div></td>
     </tr>`).join('')}
     </tbody></table>`;
 }
 
 function viewHistoryDetail(rowIndex){
-  call('getEntryDetail', [rowIndex], 'Đang tải chi tiết...').then(r => {
+  const meta = (state.historyList || []).find(x => x.rowIndex === rowIndex) || {};
+  call('getEntryDetail', [rowIndex], 'Đang tải chi tiết...').then(async r => {
     if (!r) { toast('Không tìm thấy dữ liệu.', 'err'); return; }
+    const choDuyet = r.trangThaiDuyet === 'Chờ duyệt', duyetDuoc = state.isAdmin && choDuyet;
+    // Màn duyệt chi tiết: so với bản ĐANG là chính thức (Chitiettonkho) của cùng (Đơn vị + Ngày) để người duyệt thấy số liệu đổi gì
+    let cur = null;
+    if (choDuyet) { try { cur = await call('getExistingEntryForKey', [r.donVi, r.ngayTonKhoISO], null); } catch (e) { cur = null; } }
+    const dong = (ten, a, b, f) => { const x = Number(a), y = Number(b); const co = cur && isFinite(y), d = co && isFinite(x) ? x - y : null;
+      return `<tr><td>${ten}</td><td class="num">${f(a)}</td><td class="num">${co ? f(b) : '<span class="muted">—</span>'}</td><td class="num ${d && Math.abs(d) > 0.0005 ? 'neg' : ''}">${d == null ? '' : (d > 0 ? '+' : '') + f(d)}</td></tr>`; };
+    const soSanh = choDuyet ? `
+      <div class="section-title">So với bản đang chính thức (Chitiettonkho)</div>
+      ${cur ? '' : '<div class="hint-text" style="margin-bottom:6px">Chưa có bản chính thức nào cho (Đơn vị + Ngày) này – bản này sẽ là bản đầu tiên nếu được duyệt.</div>'}
+      <table class="g compact"><thead><tr><th></th><th class="num">Bản này</th><th class="num">Đang chính thức</th><th class="num">Chênh</th></tr></thead><tbody>
+        ${dong('Tồn kho đầu ngày (MT)', r.tonDauNgay, cur && cur.tonDauNgay, fmtNum)}${dong('Cộng MT', r.congMT, cur && cur.congMT, fmtNum)}${dong('Cộng BDMT', r.congBDMT, cur && cur.congBDMT, fmtNum)}
+        ${dong('Tồn kho cuối kỳ (MT)', r.tonCK, cur && cur.tonCK, fmtNum)}${dong('Độ ẩm', r.doAm, cur && cur.doAm, fmtPct)}</tbody></table>` : '';
+    const phienBan = (meta.soBan > 1) ? `<div class="msg ${meta.laBanMoiNhat ? 'ok' : 'warn'}" style="margin-bottom:10px">Bản <b>${meta.banThu}/${meta.soBan}</b> của (Đơn vị + Ngày) này, nộp lúc <b>${esc(meta.thoiGianNop || r.timestamp)}</b>. ${meta.laBanMoiNhat ? '🆕 Đây là <b>bản mới nhất</b>.' : `⛔ Đã có bản nộp mới hơn (lúc <b>${esc(meta.thoiGianBanMoiHon)}</b>) – hãy duyệt bản mới nhất.`}</div>` : '';
+    const foot = duyetDuoc
+      ? `<button class="btn ghost" onclick="closeModal()">Đóng</button>
+         <button class="btn danger" onclick="duyetTuChiTiet_(${rowIndex}, false)">❌ Từ chối</button>
+         <button class="btn accent" ${meta.coBanMoiHonConHieuLuc ? 'disabled title="Đã có bản nộp mới hơn – duyệt bản mới nhất"' : ''} onclick="duyetTuChiTiet_(${rowIndex}, true)">✅ Duyệt bản này</button>`
+      : `<button class="btn ghost" onclick="closeModal()">Đóng</button>`;
     openModal(`
-      <div class="modal-head"><h3>Chi tiết báo cáo - ${esc(r.donVi)}</h3><button class="x" onclick="closeModal()">&times;</button></div>
+      <div class="modal-head"><h3>${duyetDuoc ? 'Duyệt báo cáo' : 'Chi tiết báo cáo'} - ${esc(r.donVi)}</h3><button class="x" onclick="closeModal()">&times;</button></div>
       <div class="modal-body">
+        ${phienBan}
+        ${choDuyet && r.lyDoChoDuyet ? `<div class="msg warn" style="margin-bottom:10px"><b>⏳ Lý do chờ duyệt:</b> ${esc(r.lyDoChoDuyet)}</div>` : ''}
+        ${soSanh}
+        <div class="section-title">Số liệu báo cáo</div>
         <div class="kv"><span class="k">Ngày tồn kho</span><span class="v">${esc(r.ngayTonKho)}</span></div>
         <div class="kv"><span class="k">Người nộp</span><span class="v">${esc(r.email)}</span></div>
-        <div class="kv"><span class="k">Thời gian nộp</span><span class="v">${esc(r.timestamp)}</span></div>
+        <div class="kv"><span class="k">Thời gian nộp</span><span class="v">${esc(meta.thoiGianNop || r.timestamp)}</span></div>
         <div class="kv"><span class="k">Trạng thái duyệt</span><span class="v">${
           r.trangThaiDuyet === 'Chờ duyệt' ? '⏳ Chờ duyệt' :
           r.trangThaiDuyet === 'Đã duyệt' ? '✅ Đã duyệt' :
           r.trangThaiDuyet === 'Từ chối' ? '❌ Từ chối' : '✅ Bình thường'
         }</span></div>
-        ${r.lyDoChoDuyet ? `<div class="kv"><span class="k">Lý do</span><span class="v">${esc(r.lyDoChoDuyet)}</span></div>` : ''}
+        ${(!choDuyet && r.lyDoChoDuyet) ? `<div class="kv"><span class="k">Lý do</span><span class="v">${esc(r.lyDoChoDuyet)}</span></div>` : ''}
         <div class="kv"><span class="k">Tồn kho đầu ngày</span><span class="v mono">${fmtNum(r.tonDauNgay)} MT</span></div>
         <div class="kv"><span class="k">Hòa Nhơn</span><span class="v mono">${fmtNum(r.hoaNhonMT)} MT / ${fmtNum(r.hoaNhonBDMT)} BDMT</span></div>
         <div class="kv"><span class="k">Quế Sơn</span><span class="v mono">${fmtNum(r.queSonMT)} MT / ${fmtNum(r.queSonBDMT)} BDMT</span></div>
@@ -1778,9 +1808,16 @@ function viewHistoryDetail(rowIndex){
         <div class="kv"><span class="k">Độ ẩm (tự tính)</span><span class="v mono">${fmtPct(r.doAm)}</span></div>
         <div class="kv"><span class="k">Tồn kho cuối kỳ (tự tính)</span><span class="v mono">${fmtNum(r.tonCK)} MT</span></div>
       </div>
-      <div class="modal-foot"><button class="btn ghost" onclick="closeModal()">Đóng</button></div>
+      <div class="modal-foot">${foot}</div>
     `);
   });
+}
+
+/** Duyệt / Từ chối ngay trong màn duyệt chi tiết (sau khi đã xem số liệu). Máy chủ vẫn kiểm: chỉ Admin, bản đang Chờ duyệt, không duyệt bản đã có bản mới hơn. */
+function duyetTuChiTiet_(rowIndex, chapNhan){
+  const hanhDong = chapNhan ? 'DUYỆT' : 'TỪ CHỐI';
+  if (!confirm(`${hanhDong} báo cáo này?` + (chapNhan ? '' : '\nNgười nộp sẽ cần nộp lại báo cáo khác.'))) return;
+  call('duyetBaoCao', [rowIndex, chapNhan], 'Đang xử lý...').then(res => handleResult(res, () => { closeModal(); loadHistory(); loadSoLuongChoDuyet(); }));
 }
 
 function editHistoryEntry(rowIndex){

@@ -3786,6 +3786,23 @@ function getSoLuongChoDuyet() {
   return count;
 }
 
+/** Mục BG (duyệt biết bản nào mới nhất): các lần nộp của CÙNG khóa (Đơn vị+Ngày tồn kho) xếp theo thời gian nộp tăng dần
+ * (hòa thì theo thứ tự dòng). "Bản mới nhất" tính trên TẤT CẢ các lần nộp (kể cả Chờ duyệt / Từ chối) - khác với
+ * isLatest (bản đang là chính thức trong Chitiettonkho, không bao giờ là bản Chờ duyệt). */
+function dsPhienBanTheoKhoa_(data) {
+  const m = new Map();
+  data.forEach(function (r, i) {
+    if (utils.isBlank(r[COL.DON_VI])) return;
+    const key = String(r[COL.DON_VI]).trim() + "|" + utils.formatDateISO(r[COL.NGAY_TON_KHO]);
+    const ts = r[COL.TIMESTAMP] instanceof Date ? r[COL.TIMESTAMP].getTime() : 0;
+    if (!m.has(key)) m.set(key, []);
+    m.get(key).push({ ts: ts, i: i });
+  });
+  m.forEach(function (a) { a.sort(function (x, y) { return (x.ts - y.ts) || (x.i - y.i); }); });
+  return m;
+}
+const fmtThoiGianNop_ = ts => (ts > 0 ? Utilities.formatDate(new Date(ts), "GMT+7", "dd/MM/yyyy HH:mm:ss") : "");
+
 function getHistoryList(filters) {
   filters = filters || {};
   const { data, headerRow } = readAllData_();
@@ -3833,14 +3850,25 @@ function getHistoryList(filters) {
 
   // rowIndex ở đây là index trong mảng data (0-based, không tính header) -
   // cần cộng lại header+1 để ra đúng dòng thật trên sheet khi cần Sửa/Xóa.
+  const pbMap = dsPhienBanTheoKhoa_(data); // mục BG: thứ tự các lần nộp của từng khóa (tính trên toàn bộ dữ liệu, không theo bộ lọc)
   return items
     .map(x => {
       const key = String(x.r[COL.DON_VI] || "").trim() + "|" + utils.formatDateISO(x.r[COL.NGAY_TON_KHO]);
       const rowTs = x.r[COL.TIMESTAMP] instanceof Date ? x.r[COL.TIMESTAMP].getTime() : 0;
       const isLatest = chMap.has(key) && chMap.get(key) === rowTs;
-      return rowToHistoryItem_(x.r, x.rowIndex + headerRow + 1, isLatest);
+      const it = rowToHistoryItem_(x.r, x.rowIndex + headerRow + 1, isLatest);
+      const ds = pbMap.get(key) || [], pos = ds.findIndex(e => e.i === x.rowIndex), moiHon = pos >= 0 ? ds.slice(pos + 1) : [];
+      it.tsNop = rowTs;
+      it.thoiGianNop = fmtThoiGianNop_(rowTs);
+      it.banThu = pos + 1;                       // bản thứ mấy trong các lần nộp của khóa (1 = cũ nhất)
+      it.soBan = ds.length;
+      it.laBanMoiNhat = pos >= 0 && moiHon.length === 0;
+      it.thoiGianBanMoiHon = moiHon.length ? fmtThoiGianNop_(moiHon[moiHon.length - 1].ts) : "";
+      // có bản nộp sau mà chưa bị Từ chối → bản này không còn là bản cần duyệt (duyệt bản mới nhất)
+      it.coBanMoiHonConHieuLuc = moiHon.some(e => String(data[e.i][COL.TRANG_THAI_DUYET] || "") !== "Từ chối");
+      return it;
     })
-    .sort((a, b) => b.ngayTonKhoISO.localeCompare(a.ngayTonKhoISO));
+    .sort((a, b) => b.ngayTonKhoISO.localeCompare(a.ngayTonKhoISO) || ((b.tsNop || 0) - (a.tsNop || 0)));
 }
 
 function getEntryDetail(rowIndex) {
@@ -4001,6 +4029,16 @@ function duyetBaoCao(rowIndex, chapNhan) {
     const donVi = String(r[COL.DON_VI] || "").trim();
     const ngayISO = utils.formatDateISO(r[COL.NGAY_TON_KHO]);
     const ngayDisplay = utils.formatDate(r[COL.NGAY_TON_KHO]);
+    // Mục BG: KHÔNG cho DUYỆT một bản đã có bản nộp mới hơn (còn hiệu lực) - duyệt nhầm bản cũ sẽ đưa số liệu cũ vào Chitiettonkho
+    // cho tới khi bản mới được duyệt. TỪ CHỐI bản cũ vẫn được (dọn bản đã bị thay thế).
+    if (chapNhan) {
+      const all = readAllData_(), hr = findHeaderRow_(sh), pos0 = rowIndex - hr - 1;
+      const ds = dsPhienBanTheoKhoa_(all.data).get(donVi + "|" + ngayISO) || [], at = ds.findIndex(e => e.i === pos0);
+      const moiHon = at >= 0 ? ds.slice(at + 1).filter(e => String(all.data[e.i][COL.TRANG_THAI_DUYET] || "") !== "Từ chối") : [];
+      if (moiHon.length) {
+        return { success: false, message: "❌ Không duyệt được bản này: \"" + donVi + "\" ngày " + ngayDisplay + " đã có bản nộp MỚI HƠN (lúc " + fmtThoiGianNop_(moiHon[moiHon.length - 1].ts) + "). Hãy duyệt bản mới nhất; nếu bản này đã bị thay thế, bấm Từ chối để dọn." };
+      }
+    }
     // Mục AD (v2026.8.18): đọc lại lý do đã ghi lúc nộp (COL.LY_DO_CHO_DUYET)
     // thay vì hardcode "lệch đầu kỳ" như trước - vì 1 dòng có thể bị Chờ
     // duyệt do lệch đầu kỳ, lệch định mức, hoặc cả 2.

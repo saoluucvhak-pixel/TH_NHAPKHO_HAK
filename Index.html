@@ -154,7 +154,7 @@
     .modal-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--line);}
     .modal-head h3{margin:0;font-size:16px;}
     .modal-head .x{cursor:pointer;font-size:18px;color:var(--ink-soft);background:none;border:none;}
-    .modal-body{padding:20px;max-height:65vh;overflow:auto;}
+    .modal-body{padding:20px;max-height:68vh;overflow:auto;}
     .modal-foot{padding:14px 20px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px;}
 
     .kv{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px dashed var(--line);font-size:13px;}
@@ -211,7 +211,53 @@
        * trong hộp thoại In, người dùng vẫn có thể tự đổi lại nếu muốn. */
       @page { size: landscape; margin: 10mm; }
     }
-  </style>
+    /* ===== Lịch sử + màn duyệt chi tiết (bố cục lại) ===== */
+  .hist-filter{display:flex;flex-wrap:wrap;gap:12px 14px;align-items:flex-end}
+  .hist-filter .field{margin:0;flex:1 1 170px;min-width:150px;max-width:260px}
+  .hist-filter .go{flex:0 0 auto}
+  .chip-toggle{display:inline-flex;align-items:center;gap:8px;margin-left:auto;padding:8px 14px;border:1px solid var(--line);border-radius:999px;background:#fff;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--ink-soft);user-select:none;transition:background .15s,border-color .15s}
+  .chip-toggle input{margin:0;accent-color:var(--timber)}
+  .chip-toggle.on{background:var(--timber-light);border-color:var(--timber);color:var(--timber)}
+  .hist-legend{margin-top:12px;font-size:12px;color:var(--ink-soft)}
+  .hist-legend summary{cursor:pointer;font-weight:600;color:var(--ink-soft)}
+  .hist-legend ul{margin:8px 0 0 18px;padding:0;line-height:1.55}
+  #history-wrap{overflow-x:auto;max-width:100%;padding:6px 6px 10px}
+  #history-wrap table{width:100%;border-collapse:separate;border-spacing:0}
+  #history-wrap thead th{position:sticky;top:0;background:var(--paper);padding:10px 7px;white-space:nowrap;font-size:10.5px;letter-spacing:.02em}
+  #history-wrap tbody td{padding:10px 7px;vertical-align:middle}
+  #history-wrap td.num{font-size:12.5px}
+  #history-wrap td.num,#history-wrap th.num{white-space:nowrap;text-align:right}
+  #history-wrap tbody tr:hover td{background:#FCFAF5}
+  #history-wrap tr.row-pending td:first-child{box-shadow:inset 3px 0 0 var(--timber)}
+  #history-wrap tr.row-old td{opacity:.7}
+  #history-wrap .cell-2{line-height:1.3;min-width:104px}
+  #history-wrap .cell-2 b{display:block;font-weight:600}
+  #history-wrap .cell-2 small{display:block;color:var(--ink-soft);font-size:11.5px;white-space:nowrap}
+  #history-wrap .reason{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:190px;margin-top:4px;font-size:11.5px;color:var(--ink-soft)}
+  #history-wrap .act{display:flex;gap:3px;align-items:center;justify-content:flex-end}
+  #history-wrap .btn.icon{padding:5px 6px;min-width:28px}
+  #history-wrap .ban{white-space:nowrap;font-size:12.5px}
+  #history-wrap .badge,#history-wrap .act .btn{white-space:nowrap}
+  .rv-note{padding:9px 12px;border-radius:8px;font-size:12.5px;margin-bottom:12px;line-height:1.45;border:1px solid var(--line);background:var(--paper)}
+  .rv-note.ok{background:var(--moss-light);border-color:#BFD5C6;color:var(--moss)}
+  .rv-note.warn{background:var(--timber-light);border-color:#E6CBA6;color:#8A4F1B}
+  /* màn duyệt chi tiết */
+  .rv-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}
+  .rv-cell{background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:9px 12px;min-width:0}
+  .rv-cell small{display:block;font-size:10.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px}
+  .rv-cell b{font-size:13.5px;overflow-wrap:anywhere}
+  .rv-cols{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:14px;align-items:start}
+  .rv-box{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:12px}
+  .rv-title{font-size:11.5px;font-weight:700;color:var(--timber);text-transform:uppercase;letter-spacing:.05em;margin:0 0 8px}
+  .rv-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+  .rv-tbl th{font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);font-weight:700;text-align:right;padding:4px 6px;border-bottom:1px solid var(--line)}
+  .rv-tbl th:first-child,.rv-tbl td:first-child{text-align:left}
+  .rv-tbl td{padding:6px 6px;border-bottom:1px dashed var(--line);text-align:right}
+  .rv-tbl tr:last-child td{border-bottom:none}
+  .rv-kv{display:grid;grid-template-columns:1fr auto;gap:6px 12px;font-size:12.5px}
+  .rv-kv span:nth-child(odd){color:var(--ink-soft)} .rv-kv span:nth-child(even){font-weight:600;text-align:right}
+  @media (max-width:760px){.rv-strip{grid-template-columns:repeat(2,minmax(0,1fr))}.rv-cols{grid-template-columns:1fr}.hist-filter .chip-toggle{margin-left:0}}
+</style>
 </head>
 <body>
 
@@ -527,7 +573,7 @@ function call(fnName, args, loadingMsg){
 }
 
 function openModal(html){ document.getElementById('modal').innerHTML = html; document.getElementById('modal-bg').classList.add('show'); }
-function closeModal(){ document.getElementById('modal-bg').classList.remove('show'); }
+function closeModal(){ document.getElementById('modal-bg').classList.remove('show'); document.getElementById('modal').style.maxWidth = ''; }
 document.getElementById('modal-bg').addEventListener('click', e => { if(e.target.id==='modal-bg') closeModal(); });
 
 /* ============================================================
@@ -1656,18 +1702,23 @@ function renderHistory(){
   const c = document.getElementById('content');
   c.innerHTML = `
     <div class="card">
-      <div class="grid cols-4">
+      <div class="hist-filter">
         <div class="field"><label>Đơn vị</label>
           <select id="h-donVi"><option value="" ${defaultDonVi?'':'selected'}>-- Tất cả --</option>${unitOptions.map(u=>`<option value="${esc(u)}" ${u===defaultDonVi?'selected':''}>${esc(u)}</option>`).join('')}</select>
         </div>
         <div class="field"><label>Từ ngày</label><input type="date" id="h-from" value="${todayISO_()}"></div>
         <div class="field"><label>Đến ngày</label><input type="date" id="h-to" value="${todayISO_()}"></div>
-        <div class="field" style="display:flex;align-items:flex-end"><button class="btn primary" onclick="loadHistory()">🔍 Lọc</button></div>
+        <button class="btn primary go" onclick="loadHistory()">🔍 Lọc</button>
+        <label class="chip-toggle ${state.historyChiChoDuyet?'on':''}" id="h-choDuyet-chip" title="Bật: chỉ hiện báo cáo Chờ duyệt, bỏ qua khoảng ngày">
+          <input type="checkbox" id="h-choDuyet" ${state.historyChiChoDuyet?'checked':''} onchange="toggleHistoryChoDuyet()"> 🔔 Chỉ báo cáo chờ duyệt
+        </label>
       </div>
-      <div style="margin-top:10px;display:flex;align-items:center;gap:8px">
-        <input type="checkbox" id="h-choDuyet" ${state.historyChiChoDuyet?'checked':''} onchange="toggleHistoryChoDuyet()">
-        <label style="margin:0" for="h-choDuyet">🔔 Chỉ hiện báo cáo "Chờ duyệt" (lệch đầu kỳ/lệch định mức, bỏ qua bộ lọc ngày ở trên) - đang MẶC ĐỊNH BẬT</label>
-      </div>
+      <details class="hist-legend"><summary>Chú thích trạng thái và cách duyệt</summary><ul>
+        <li><b>Đang áp dụng</b>: bản đang là số liệu chính thức trong Chitiettonkho cho (Đơn vị + Ngày). <b>Đã bị thay thế</b>: có lần nộp sau đó, chỉ còn giá trị tra soát.</li>
+        <li><b>Chờ duyệt</b>: báo cáo lệch đầu kỳ hoặc lệch định mức, chưa tính vào Chitiettonkho / Dashboard / Báo cáo cho tới khi Admin duyệt.</li>
+        <li><b>Bản n/m</b>: thứ tự các lần nộp cùng (Đơn vị + Ngày). Chỉ <b>bản mới nhất</b> được duyệt; bản cũ chỉ có thể từ chối để dọn.</li>
+        <li>Bấm <b>Xem &amp; duyệt</b> để mở màn duyệt chi tiết: xem số liệu, so với bản chính thức rồi mới Duyệt hoặc Từ chối.</li>
+      </ul></details>
     </div>
     <div class="card" id="history-wrap"><div class="empty"><div class="ic">⏳</div>Đang tải...</div></div>`;
 
@@ -1677,6 +1728,7 @@ function renderHistory(){
 
 function toggleHistoryChoDuyet(){
   state.historyChiChoDuyet = document.getElementById('h-choDuyet').checked;
+  const chip = document.getElementById('h-choDuyet-chip'); if (chip) chip.classList.toggle('on', state.historyChiChoDuyet);
   loadHistory();
 }
 
@@ -1709,65 +1761,109 @@ function trangThaiDuyetBadge_(r){
   return r.isLatest ? '<span class="badge ready dot">Đang áp dụng</span>' : '<span class="badge pending dot">Đã bị thay thế</span>';
 }
 
+/** Mục BG: nhãn "bản thứ mấy" + bản mới nhất / cũ hơn - để người duyệt biết bản nào cần duyệt khi cùng (Đơn vị+Ngày) có nhiều lần nộp. */
+function nopLucHtml_(r){ // "22/11/2026" + giờ ở dòng dưới: cột gọn, vẫn đủ để phân biệt các lần nộp
+  const t = String(r.thoiGianNop || r.timestamp || ''), p = t.split(' ');
+  return p.length > 1 ? esc(p[0]) + '<small>' + esc(p[1]) + '</small>' : esc(t);
+}
+function banMoiNhatBadge_(r){
+  if (!r.soBan || r.soBan < 2) return '<span class="muted">1/1</span>';
+  const t = r.banThu + '/' + r.soBan + ' ';
+  return t + (r.laBanMoiNhat
+    ? '<span class="badge ready dot">🆕 Mới nhất</span>'
+    : '<span class="badge pending dot" title="Có bản nộp mới hơn lúc ' + esc(r.thoiGianBanMoiHon) + '">Cũ hơn</span>');
+}
+
 function renderHistoryTable(){
   const wrap = document.getElementById('history-wrap');
   const list = state.historyList;
   if (!list.length) { wrap.innerHTML = '<div class="empty"><div class="ic">📭</div>Không có báo cáo nào khớp bộ lọc.</div>'; return; }
-  wrap.innerHTML = `<div class="hint-text" style="margin-bottom:10px">"Đang áp dụng" = bản ghi này hiện đang được dùng làm dữ liệu chính thức trong Chitiettonkho cho (Đơn vị+Ngày) của nó. "Đã bị thay thế" = có 1 lần nộp SAU đó cho cùng Đơn vị+Ngày, nên bản này chỉ còn giá trị tra soát. "Chờ duyệt" = báo cáo lệch đầu kỳ và/hoặc lệch định mức, CHƯA tính vào Chitiettonkho/Dashboard/Báo cáo cho tới khi Admin duyệt.</div>
-  <table><thead><tr>
-      <th>Ngày tồn kho</th><th>Đơn vị</th><th>Người nộp</th><th>Trạng thái</th>
+  const nguoi = e => String(e || '').split('@')[0];
+  wrap.innerHTML = `<table><thead><tr>
+      <th>Báo cáo</th><th>Người nộp</th><th>Bản</th><th>Trạng thái</th>
       <th class="num">Tồn đầu (MT)</th><th class="num">Cộng MT</th><th class="num">Cộng BDMT</th><th class="num">Tồn CK (MT)</th><th class="num">Độ ẩm</th><th></th>
     </tr></thead><tbody>
-    ${list.map(r => `<tr>
-      <td>${esc(r.ngayTonKho)}</td><td>${esc(r.donVi)}</td><td>${esc(r.email)}</td>
-      <td>${trangThaiDuyetBadge_(r)}${(r.lyDoChoDuyet && (r.trangThaiDuyet==='Chờ duyệt'||r.trangThaiDuyet==='Từ chối')) ? `<div class="hint-text" style="margin-top:4px;max-width:260px">${esc(r.lyDoChoDuyet)}</div>` : ''}</td>
-      <td class="num">${fmtNum(r.tonDauNgay)}</td><td class="num">${fmtNum(r.congMT)}</td><td class="num">${fmtNum(r.congBDMT)}</td>
-      <td class="num">${fmtNum(r.tonCK)}</td><td class="num">${fmtPct(r.doAm)}</td>
-      <td style="white-space:nowrap">
-        <button class="btn sm ghost" onclick="viewHistoryDetail(${r.rowIndex})">Xem</button>
-        <button class="btn sm ghost admin-only ${state.isAdmin?'':'hidden'}" onclick="editHistoryEntry(${r.rowIndex})">Sửa</button>
-        <button class="btn sm danger admin-only ${state.isAdmin?'':'hidden'}" onclick="confirmDeleteHistory(${r.rowIndex})">Xóa</button>
-        ${(state.isAdmin && r.trangThaiDuyet === 'Chờ duyệt') ? `
-        <button class="btn sm accent" onclick="duyetBaoCaoLichSu(${r.rowIndex}, true)">✅ Duyệt</button>
-        <button class="btn sm danger" onclick="duyetBaoCaoLichSu(${r.rowIndex}, false)">❌ Từ chối</button>` : ''}
-      </td>
-    </tr>`).join('')}
+    ${list.map(r => {
+      const cho = r.trangThaiDuyet === 'Chờ duyệt', cu = r.soBan > 1 && r.coBanMoiHonConHieuLuc && !cho;
+      return `<tr class="${cho ? 'row-pending' : ''} ${cu ? 'row-old' : ''}">
+      <td class="cell-2"><b>${esc(r.ngayTonKho)}</b><small title="${esc(r.donVi)}">${esc(r.donVi)}</small></td>
+      <td class="cell-2" title="${esc(r.email)}"><b>${esc(nguoi(r.email))}</b><small>${esc(r.thoiGianNop || r.timestamp)}</small></td>
+      <td class="ban">${banMoiNhatBadge_(r)}</td>
+      <td>${trangThaiDuyetBadge_(r)}${(r.lyDoChoDuyet && (cho || r.trangThaiDuyet==='Từ chối')) ? `<div class="reason" title="${esc(r.lyDoChoDuyet)}">${esc(r.lyDoChoDuyet)}</div>` : ''}</td>
+      <td class="num mono">${fmtNum(r.tonDauNgay)}</td><td class="num mono">${fmtNum(r.congMT)}</td><td class="num mono">${fmtNum(r.congBDMT)}</td>
+      <td class="num mono">${fmtNum(r.tonCK)}</td><td class="num mono">${fmtPct(r.doAm)}</td>
+      <td><div class="act">
+        ${(state.isAdmin && cho)
+          ? `<button class="btn sm accent" onclick="viewHistoryDetail(${r.rowIndex})" title="Mở màn duyệt chi tiết">🔍 Xem &amp; duyệt</button>`
+          : `<button class="btn sm ghost" onclick="viewHistoryDetail(${r.rowIndex})">Xem</button>`}
+        <button class="btn sm ghost icon admin-only ${state.isAdmin?'':'hidden'}" title="Sửa" onclick="editHistoryEntry(${r.rowIndex})">✏️</button>
+        <button class="btn sm danger icon admin-only ${state.isAdmin?'':'hidden'}" title="Xóa" onclick="confirmDeleteHistory(${r.rowIndex})">🗑️</button>
+      </div></td>
+    </tr>`; }).join('')}
     </tbody></table>`;
 }
 
 function viewHistoryDetail(rowIndex){
-  call('getEntryDetail', [rowIndex], 'Đang tải chi tiết...').then(r => {
+  const meta = (state.historyList || []).find(x => x.rowIndex === rowIndex) || {};
+  call('getEntryDetail', [rowIndex], 'Đang tải chi tiết...').then(async r => {
     if (!r) { toast('Không tìm thấy dữ liệu.', 'err'); return; }
+    const choDuyet = r.trangThaiDuyet === 'Chờ duyệt', duyetDuoc = state.isAdmin && choDuyet;
+    let cur = null; // bản ĐANG là chính thức (Chitiettonkho) của cùng (Đơn vị + Ngày) để so sánh
+    if (choDuyet) { try { cur = await call('getExistingEntryForKey', [r.donVi, r.ngayTonKhoISO], null); } catch (e) { cur = null; } }
+    const dk = (mt, bd) => { const m = Number(mt), b = Number(bd); return m > 0 && isFinite(b) ? fmtPct((1 - b / m)) : '<span class="muted">—</span>'; };
+    const so = (ten, a, b, f) => { const x = Number(a), y = Number(b), co = cur && isFinite(y), d = co && isFinite(x) ? x - y : null;
+      return `<tr><td>${ten}</td><td class="mono">${f(a)}</td><td class="mono">${co ? f(b) : '<span class="muted">—</span>'}</td><td class="mono ${d && Math.abs(d) > 0.0005 ? 'neg' : ''}">${d == null ? '' : (d > 0 ? '+' : '') + f(d)}</td></tr>`; };
+    const trangThai = r.trangThaiDuyet === 'Chờ duyệt' ? '<span class="badge pending dot">⏳ Chờ duyệt</span>' : r.trangThaiDuyet === 'Đã duyệt' ? '<span class="badge ready dot">✅ Đã duyệt</span>' : r.trangThaiDuyet === 'Từ chối' ? '<span class="badge danger dot">❌ Từ chối</span>' : '<span class="badge ready dot">✅ Bình thường</span>';
+    const kho = [['Hòa Nhơn', r.hoaNhonMT, r.hoaNhonBDMT], ['Quế Sơn', r.queSonMT, r.queSonBDMT], ['Đại Hiệp', r.daiHiepMT, r.daiHiepBDMT], ['HAKQN', r.hakqnMT, r.hakqnBDMT], ['Kho Tiên Sa', r.tienSaMT, r.tienSaBDMT], ['Kho Dung Quất', r.dungQuatMT, r.dungQuatBDMT]];
+    const banMsg = (meta.soBan > 1) ? `<div class="rv-note ${meta.laBanMoiNhat ? 'ok' : 'warn'}">Bản <b>${meta.banThu}/${meta.soBan}</b> của (Đơn vị + Ngày) này. ${meta.laBanMoiNhat ? '🆕 Đây là <b>bản mới nhất</b>.' : `⛔ Đã có bản nộp mới hơn (lúc <b>${esc(meta.thoiGianBanMoiHon)}</b>) – hãy duyệt bản mới nhất.`}</div>` : '';
+    const ketQua = `<div class="rv-box"><div class="rv-title">Kết quả tự tính</div><div class="rv-kv">
+        <span>Cộng MT</span><span class="mono">${fmtNum(r.congMT)}</span><span>Cộng BDMT</span><span class="mono">${fmtNum(r.congBDMT)}</span>
+        <span>Độ ẩm</span><span class="mono">${fmtPct(r.doAm)}</span><span>Tồn kho cuối kỳ (MT)</span><span class="mono">${fmtNum(r.tonCK)}</span></div></div>`;
+    const soSanh = choDuyet ? `<div class="rv-box"><div class="rv-title">So với bản đang chính thức</div>
+        ${cur ? '' : '<div class="hint-text" style="margin:0 0 8px">Chưa có bản chính thức cho (Đơn vị + Ngày) này – bản này sẽ là bản đầu tiên nếu được duyệt.</div>'}
+        <table class="rv-tbl"><thead><tr><th></th><th>Bản này</th><th>Chính thức</th><th>Chênh</th></tr></thead><tbody>
+          ${so('Tồn đầu (MT)', r.tonDauNgay, cur && cur.tonDauNgay, fmtNum)}${so('Cộng MT', r.congMT, cur && cur.congMT, fmtNum)}${so('Cộng BDMT', r.congBDMT, cur && cur.congBDMT, fmtNum)}
+          ${so('Tồn cuối (MT)', r.tonCK, cur && cur.tonCK, fmtNum)}${so('Độ ẩm', r.doAm, cur && cur.doAm, fmtPct)}</tbody></table></div>` + ketQua.replace('Kết quả tự tính', 'Kết quả tự tính (bản này)') : ketQua;
+    const foot = duyetDuoc
+      ? `<button class="btn ghost" onclick="closeModal()">Đóng</button>
+         <button class="btn danger" onclick="duyetTuChiTiet_(${rowIndex}, false)">❌ Từ chối</button>
+         <button class="btn accent" ${meta.coBanMoiHonConHieuLuc ? 'disabled title="Đã có bản nộp mới hơn – duyệt bản mới nhất"' : ''} onclick="duyetTuChiTiet_(${rowIndex}, true)">✅ Duyệt bản này</button>`
+      : `<button class="btn ghost" onclick="closeModal()">Đóng</button>`;
     openModal(`
-      <div class="modal-head"><h3>Chi tiết báo cáo - ${esc(r.donVi)}</h3><button class="x" onclick="closeModal()">&times;</button></div>
+      <div class="modal-head"><h3>${duyetDuoc ? 'Duyệt báo cáo' : 'Chi tiết báo cáo'} · ${esc(r.donVi)}</h3><button class="x" onclick="closeModal()">&times;</button></div>
       <div class="modal-body">
-        <div class="kv"><span class="k">Ngày tồn kho</span><span class="v">${esc(r.ngayTonKho)}</span></div>
-        <div class="kv"><span class="k">Người nộp</span><span class="v">${esc(r.email)}</span></div>
-        <div class="kv"><span class="k">Thời gian nộp</span><span class="v">${esc(r.timestamp)}</span></div>
-        <div class="kv"><span class="k">Trạng thái duyệt</span><span class="v">${
-          r.trangThaiDuyet === 'Chờ duyệt' ? '⏳ Chờ duyệt' :
-          r.trangThaiDuyet === 'Đã duyệt' ? '✅ Đã duyệt' :
-          r.trangThaiDuyet === 'Từ chối' ? '❌ Từ chối' : '✅ Bình thường'
-        }</span></div>
-        ${r.lyDoChoDuyet ? `<div class="kv"><span class="k">Lý do</span><span class="v">${esc(r.lyDoChoDuyet)}</span></div>` : ''}
-        <div class="kv"><span class="k">Tồn kho đầu ngày</span><span class="v mono">${fmtNum(r.tonDauNgay)} MT</span></div>
-        <div class="kv"><span class="k">Hòa Nhơn</span><span class="v mono">${fmtNum(r.hoaNhonMT)} MT / ${fmtNum(r.hoaNhonBDMT)} BDMT</span></div>
-        <div class="kv"><span class="k">Quế Sơn</span><span class="v mono">${fmtNum(r.queSonMT)} MT / ${fmtNum(r.queSonBDMT)} BDMT</span></div>
-        <div class="kv"><span class="k">Đại Hiệp</span><span class="v mono">${fmtNum(r.daiHiepMT)} MT / ${fmtNum(r.daiHiepBDMT)} BDMT</span></div>
-        <div class="kv"><span class="k">HAKQN</span><span class="v mono">${fmtNum(r.hakqnMT)} MT / ${fmtNum(r.hakqnBDMT)} BDMT</span></div>
-        <div class="kv"><span class="k">Kho Tiên Sa</span><span class="v mono">${fmtNum(r.tienSaMT)} MT / ${fmtNum(r.tienSaBDMT)} BDMT</span></div>
-        <div class="kv"><span class="k">Kho Dung Quất</span><span class="v mono">${fmtNum(r.dungQuatMT)} MT / ${fmtNum(r.dungQuatBDMT)} BDMT</span></div>
-        <div class="kv"><span class="k">Điều chỉnh</span><span class="v mono">${fmtNum(r.dieuChinh)}</span></div>
-        <div class="kv"><span class="k">Mượn/trả</span><span class="v mono">${fmtNum(r.muonTra)}</span></div>
-        <div class="kv"><span class="k">Nhập gỗ keo trong ngày</span><span class="v mono">${fmtNum(r.nhapGo)}</span></div>
-        <div class="kv"><span class="k">Kiểm kê vét bãi</span><span class="v">${esc(r.kiemKeVetBai)||'Không'}</span></div>
-        <div class="kv"><span class="k">Cộng MT / Cộng BDMT (tự tính)</span><span class="v mono">${fmtNum(r.congMT)} / ${fmtNum(r.congBDMT)}</span></div>
-        <div class="kv"><span class="k">Độ ẩm (tự tính)</span><span class="v mono">${fmtPct(r.doAm)}</span></div>
-        <div class="kv"><span class="k">Tồn kho cuối kỳ (tự tính)</span><span class="v mono">${fmtNum(r.tonCK)} MT</span></div>
+        <div class="rv-strip">
+          <div class="rv-cell"><small>Ngày tồn kho</small><b>${esc(r.ngayTonKho)}</b></div>
+          <div class="rv-cell"><small>Người nộp</small><b title="${esc(r.email)}">${esc(String(r.email || '').split('@')[0])}</b></div>
+          <div class="rv-cell"><small>Nộp lúc</small><b>${esc(meta.thoiGianNop || r.timestamp)}</b></div>
+          <div class="rv-cell"><small>Trạng thái</small>${trangThai}</div>
+        </div>
+        ${banMsg}
+        ${r.lyDoChoDuyet ? `<div class="rv-note ${choDuyet ? 'warn' : ''}"><b>${choDuyet ? '⏳ Lý do chờ duyệt' : 'Lý do'}:</b> ${esc(r.lyDoChoDuyet)}</div>` : ''}
+        <div class="rv-cols">
+          <div class="rv-box"><div class="rv-title">Số liệu theo kho</div>
+            <table class="rv-tbl"><thead><tr><th>Kho</th><th>MT</th><th>BDMT</th><th>Độ ẩm</th></tr></thead><tbody>
+              ${kho.map(([t, m, b]) => `<tr><td>${t}</td><td class="mono">${fmtNum(m)}</td><td class="mono">${fmtNum(b)}</td><td class="mono">${dk(m, b)}</td></tr>`).join('')}
+            </tbody></table>
+            <div class="rv-title" style="margin-top:14px">Khác</div>
+            <div class="rv-kv"><span>Tồn kho đầu ngày (MT)</span><span class="mono">${fmtNum(r.tonDauNgay)}</span><span>Điều chỉnh</span><span class="mono">${fmtNum(r.dieuChinh)}</span>
+              <span>Mượn/trả</span><span class="mono">${fmtNum(r.muonTra)}</span><span>Nhập gỗ keo trong ngày</span><span class="mono">${fmtNum(r.nhapGo)}</span>
+              <span>Kiểm kê vét bãi</span><span>${esc(r.kiemKeVetBai) || 'Không'}</span></div>
+          </div>
+          <div>${soSanh}</div>
+        </div>
       </div>
-      <div class="modal-foot"><button class="btn ghost" onclick="closeModal()">Đóng</button></div>
+      <div class="modal-foot">${foot}</div>
     `);
+    document.getElementById('modal').style.maxWidth = '820px';
   });
+}
+
+/** Duyệt / Từ chối ngay trong màn duyệt chi tiết (sau khi đã xem số liệu). Máy chủ vẫn kiểm: chỉ Admin, bản đang Chờ duyệt, không duyệt bản đã có bản mới hơn. */
+function duyetTuChiTiet_(rowIndex, chapNhan){
+  const hanhDong = chapNhan ? 'DUYỆT' : 'TỪ CHỐI';
+  if (!confirm(`${hanhDong} báo cáo này?` + (chapNhan ? '' : '\nNgười nộp sẽ cần nộp lại báo cáo khác.'))) return;
+  call('duyetBaoCao', [rowIndex, chapNhan], 'Đang xử lý...').then(res => handleResult(res, () => { closeModal(); loadHistory(); loadSoLuongChoDuyet(); }));
 }
 
 function editHistoryEntry(rowIndex){
